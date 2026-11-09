@@ -124,3 +124,28 @@ def test_08_reject_bad_configuration():
     with pytest.raises(ValueError):
         combine_source_interaction(p,[_g([1,0,0,0]),_g([0,1,0,0])],_g([1,0,0,0]),
                                    [_g([1,1,0,0])],temperature=0)
+
+
+def test_09_inactive_city_gets_no_weight_even_with_ema_and_uniform_floor():
+    _, p = _parameters()
+    sources = [_g([0, 1, 0, 0]), _g([0, 0, 0, 0]), _g([0, 0, 1, 0])]
+    _, meta = combine_source_interaction(
+        p, sources, _g([1, 0, 0, 0]), [_g([0, 1, 1, 0])],
+        previous_weights=[0.0, 1.0, 0.0], weight_ema=0.9,
+        uniform_mix=0.3,
+    )
+    assert meta['source_weights'][1] == pytest.approx(0.0, abs=1e-8)
+    assert sum(meta['source_weights']) == pytest.approx(1.0, abs=1e-6)
+    assert meta['source_weights'][0] > 0.0
+    assert meta['source_weights'][2] > 0.0
+
+
+def test_10_single_active_city_has_unit_weight():
+    _, p = _parameters()
+    sources = [_g([0, 1, 0, 0]), _g([0, 0, 0, 0]), _g([0, 0, 0, 0])]
+    out, meta = combine_source_interaction(
+        p, sources, _g([1, 0, 0, 0]), [_g([0, 1, 0, 0])],
+        previous_weights=[0.0, 0.5, 0.5], weight_ema=0.95,
+    )
+    assert meta['source_weights'] == pytest.approx([1.0, 0.0, 0.0])
+    assert torch.isfinite(out[0]).all()

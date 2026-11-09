@@ -121,6 +121,11 @@ def combine_source_interaction(
             prev = prev.clamp_min(0)
             prev = prev / prev.sum()
             weights = weight_ema*prev + (1-weight_ema)*weights
+    # A zero-gradient city has no usable direction. The uniform exploration
+    # floor and historical EMA must not allocate mass to an inactive source:
+    # otherwise active-city contributions are spuriously shrunk, and the
+    # reported weights no longer describe the actual reference mixture.
+    weights = weights.masked_fill(~valid, 0.0)
     weights = weights / weights.sum().clamp_min(eps)
 
     # Symmetric source-to-source conflict adjustment. This affects ONLY the
