@@ -124,20 +124,33 @@ class MTPBGradientAdapter:
             lam=self.cfg.fusion_lambda, mu_w=self.cfg.fusion_mu_w,
             return_source_only=True)
 
-        # First-order angle meta-objective; only a held-out *training* batch.
+        # Angle meta-gradient must remain connected to the rotation MLP.
+        # The fusion solver is deliberately non-differentiable: hold its
+        # nonnegative weights fixed and rebuild the weighted rotated vectors.
         angle_meta_loss = None
         if rotated_count and any(float(w) > 0 for w in fusion['weights']):
-            virtual = OrderedDict()
-            for (name, p), g_t, g_s in zip(named.items(), target_grad, source):
-                virtual[name] = p.detach() - self.cfg.angle_meta_step * (g_t + g_s)
+            differentiable_rotations = []
+            for g in source_grads:
+                rotated, _, _ = rotate_source_gradient(
+                    g, target_grad, principal, params, self.angle_controller,
+                    return_phi_tensor=True)
+                differentiable_rotations.append(rotated)
+            weights = [float(w) for w in fusion['weights']]
+            weighted = tuple(
+                self.cfg.fusion_lambda * sum(
+                    w * direction[i] for w, direction in zip(weights, differentiable_rotations))
+                for i in range(len(params)))
+            virtual = OrderedDict(
+                (name, p.detach() - self.cfg.angle_meta_step * (g_t + g_s))
+                for (name, p), g_t, g_s in zip(named.items(), target_grad, weighted))
             query_loss = self._loss(model, query_pair, overrides=virtual)
             angle_grads = torch.autograd.grad(
                 query_loss, tuple(self.angle_controller.parameters()),
                 allow_unused=True)
-            self.angle_optimizer.zero_grad(set_to_none=True)
-            for p, g in zip(self.angle_controller.parameters(), angle_grads):
-                p.grad = g
             if any(g is not None for g in angle_grads):
+                self.angle_optimizer.zero_grad(set_to_none=True)
+                for p, g in zip(self.angle_controller.parameters(), angle_grads):
+                    p.grad = g
                 self.angle_optimizer.step()
             angle_meta_loss = float(query_loss.detach())
 
