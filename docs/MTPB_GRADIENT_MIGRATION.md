@@ -122,3 +122,17 @@ especially check whether the original model's in-forward `torch.tensor`
 copies, buffer mutations, and `torch.func.functional_call` support
 preserve gradients. Compare native baseline and target-guided one-step
 parameter delta. Only then start the 50-epoch evaluation.
+
+## Upstream code compatibility finding (not a model novelty)
+
+In official `model/Meta_Models/reconstruction.py`,
+`BatchA_patch_gwnet` defines `gate_convs`, `residual_convs`, and
+`skip_convs` using `nn.Conv1d` with 2-D kernel tuples while applying them
+to [B,C,N,T] tensors. This causes a rank error on modern PyTorch. The
+runner applies `repair_mtpb_gwnet_convs()` **in both modes**: replace
+these with `nn.Conv2d` while copying original weights/biases identically.
+An isolated tensor-shape test passed locally; a full upstream model run has
+not been validated. Run `PYTHONPATH=src pytest -q tests/test_mtpb_upstream_compat.py`.
+
+This is a compatibility fix only. Do not attribute forecasting improvement
+to it, or compare repaired and unrepaired models as a gradient ablation.
