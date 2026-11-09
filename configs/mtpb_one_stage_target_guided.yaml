@@ -1,0 +1,21 @@
+# MTPB one-stage target-guided transfer, experimental
+upstream_repo: https://github.com/zhyliu00/MTPB
+upstream_commit: 5676a38a34bf3aebbd83cef3cb0d617a9a153b15
+model: official_MTPB_PatchFSL_GraphWaveNet
+sources: [chengdu_m, shenzhen, metr-la]
+target: pems-bay
+history_steps: 288
+prediction_steps: 36
+physical_step_minutes: 5
+chengdu_shenzhen_input_minutes: 10
+chengdu_shenzhen_interpolation: official_10_to_5_minutes
+target_training_days: 3
+source_meta_epochs: 50
+target_finetuning: false
+target_model_inner_adaptation: false
+target_label_use: guide_source_gradients_and_angle_only
+evaluation: direct_test_after_source_meta_training
+comparison: [native, target_guided]
+prebuilt_pattern_bank: required
+goal: avoid_target_second_stage_finetune
+status: unverified_real_traffic
