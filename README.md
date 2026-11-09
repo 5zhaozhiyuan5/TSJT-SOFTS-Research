@@ -29,10 +29,10 @@ See historical SOFTS notes in [legacy guide](README_SOFTS_%E6%BA%90%E5%9F%8E%E5%
 ## Experimental MTPB integration (unmerged)
 
 The newer, **experimental** MTPB integration is developed in branch
-\`iteration/mtpb-replace-meta-update-288x36\`. This branch keeps the author's
+`iteration/mtpb-replace-meta-update-288x36`. This branch keeps the author's
 full Pattern Bank + graph reconstruction + Graph WaveNet + long-term forecasting
 head and changes **one internal training component**: it replaces
-\`STRep.meta_train_revise\` with first-order, target-guided multi-source
+`STRep.meta_train_revise` with first-order, target-guided multi-source
 meta-gradients. This is NOT a post-hoc correction to native MTPB parameters.
 
 - Historic baseline on main: the previous TSJT 12-step Graph WaveNet workflow.
@@ -45,7 +45,7 @@ meta-gradients. This is NOT a post-hoc correction to native MTPB parameters.
 
 Read [replacement design and experiment protocol](docs/MTPB_INTEGRATED_META_REPLACEMENT.md).
 
-\`\`\`bash
+```bash
 PYTHONPATH=src pytest -q tests/test_mtpb_integrated_meta.py tests/test_mtpb_train_only_norm.py
 PYTHONPATH=src python scripts/run_mtpb_integrated.py --help
-\`\`\`
+```
