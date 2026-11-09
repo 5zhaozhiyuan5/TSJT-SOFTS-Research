@@ -24,3 +24,28 @@ python -m tsjt_pgrad.run --config configs/source_interaction_v2_smoke.yaml
 Graph WaveNet reference: Wu et al., IJCAI 2019, https://github.com/nnzhan/Graph-WaveNet . This node-count-agnostic implementation differs from the original fixed node-embedding adaptive adjacency.
 
 See historical SOFTS notes in [legacy guide](README_SOFTS_%E6%BA%90%E5%9F%8E%E5%B8%82%E4%BA%A4%E4%BA%92%E6%94%B9%E8%BF%9B.md).
+
+
+## Experimental MTPB integration (unmerged)
+
+The newer, **experimental** MTPB integration is developed in branch
+\`iteration/mtpb-replace-meta-update-288x36\`. This branch keeps the author's
+full Pattern Bank + graph reconstruction + Graph WaveNet + long-term forecasting
+head and changes **one internal training component**: it replaces
+\`STRep.meta_train_revise\` with first-order, target-guided multi-source
+meta-gradients. This is NOT a post-hoc correction to native MTPB parameters.
+
+- Historic baseline on main: the previous TSJT 12-step Graph WaveNet workflow.
+- Research branch: native MTPB 288-step history -> 36-step horizon.
+- Sources: METR-LA, Chengdu, Shenzhen; target: PEMS-BAY with only 3 days of
+  training supervision.
+- The official MTPB source/data/pattern bank is an external dependency
+  and must be obtained separately. No real four-city MAE/RMSE claim yet.
+- Original SOFTS code remains historical only.
+
+Read [replacement design and experiment protocol](docs/MTPB_INTEGRATED_META_REPLACEMENT.md).
+
+\`\`\`bash
+PYTHONPATH=src pytest -q tests/test_mtpb_integrated_meta.py tests/test_mtpb_train_only_norm.py
+PYTHONPATH=src python scripts/run_mtpb_integrated.py --help
+\`\`\`
