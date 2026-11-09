@@ -63,6 +63,9 @@ def main(argv=None):
     patch_cfg=dict(data_list='chengdu_shenzhen_metr',sim='cosine',K=10,
                    patch_encoder='pattern',base_dir=upstream,device=device)
     rep=STRep(data_args,task_args,model_args,patch_cfg,run_args)
+    from tsjt_pgrad.mtpb.upstream_compat import repair_mtpb_gwnet_convs
+    repaired=repair_mtpb_gwnet_convs(rep)
+    print(f'MTPB upstream GWN compatibility repair: {repaired} conv layers')
     adapter=None
     if args.mode=='target_guided':
         from tsjt_pgrad.mtpb.adapter import MTPBGradientAdapter,MTPBGradientConfig
