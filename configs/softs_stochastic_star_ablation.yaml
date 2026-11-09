@@ -43,6 +43,7 @@ data:
 model:
   factory: tsjt_pgrad.models.pgrad_model:TSJTPGrad
   kwargs:
+    backbone_type: softs
     input_dim: 3
     hidden_dim: 32
     heads: 4
