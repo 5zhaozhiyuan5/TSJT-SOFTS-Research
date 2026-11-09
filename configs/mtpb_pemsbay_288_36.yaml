@@ -1,0 +1,17 @@
+# Protocol reference; the runner loads the official upstream configs/config.yaml.
+upstream_repository: https://github.com/zhyliu00/MTPB
+upstream_commit: 5676a38a34bf3aebbd83cef3cb0d617a9a153b15
+backbone: official_mtpb_patchfsl_gwn_pattern_bank
+source_cities: [chengdu_m, shenzhen, metr-la]
+target_city: pems-bay
+target_train_days: 3
+history_steps: 288
+forecast_steps: 36
+source_meta_epochs: 50
+target_finetune_epochs: 300
+comparison_modes: [native, target_guided]
+notes:
+  - All predictions use the original MTPB model and its pattern/reconstruction branches.
+  - MTPB's included graph inputs are unchanged baseline data; graph topology is not a proposed innovation.
+  - The target guide is restricted to stage=target_maml first three days, never test.
+  - Real city MAE/RMSE not yet available; this config does not constitute an experiment.
