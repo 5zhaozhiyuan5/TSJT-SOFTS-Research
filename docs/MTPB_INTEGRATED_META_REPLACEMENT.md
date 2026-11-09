@@ -1,7 +1,7 @@
 # MTPB 有机融合 v2：替换源域元更新规则，不叠加外挂修正
 
 日期：2026-11-09；基线：研究仓库 main
-\`a4f72961cb26e8204b9b12587207c0998a0d04c9\`。
+`a4f72961cb26e8204b9b12587207c0998a0d04c9`。
 新算法位于独立 iteration 分支；未经过完整 MTPB 四城市运行，不宣称精度提升。
 
 ## 上游基线与实际替换位置
@@ -9,23 +9,23 @@
 MTPB (Zhanyu Liu, Guanjie Zheng, Yanwei Yu), ACM TKDD 19(4), 2025,
 DOI https://doi.org/10.1145/3727622 。
 官方仓库 https://github.com/zhyliu00/MTPB ，固定源码提交
-\`5676a38a34bf3aebbd83cef3cb0d617a9a153b15\` 。
+`5676a38a34bf3aebbd83cef3cb0d617a9a153b15` 。
 
-官方 \`model/Meta_Models/rep_model_final.py\` 中：
-- \`PatchFSL.forward\`：多尺度模式库检索、基于模式的图重建、GWN
+官方 `model/Meta_Models/rep_model_final.py` 中：
+- `PatchFSL.forward`：多尺度模式库检索、基于模式的图重建、GWN
   短期特征、长期分支、特征融合与预测输出；
-- \`STRep.meta_train_revise\`：源任务 support 内更新、query
+- `STRep.meta_train_revise`：源任务 support 内更新、query
   损失及最终参数更新；
-- \`STRep.finetuning\`：目标城市适配与评估。
+- `STRep.finetuning`：目标城市适配与评估。
 
 **只替换第二项：源域 meta-train 的参数更新逻辑。**
-\`integrated\` 模式完全不调用 \`STRep.meta_train_revise\` ，不再出现
+`integrated` 模式完全不调用 `STRep.meta_train_revise` ，不再出现
 「先 MTPB 原生更新、再进行额外梯度补偿」。
-保持完整的 \`PatchFSL\`、Graph WaveNet、模式库、预测头、
-目标微调 \`finetuning\` 与 288→36 时域协议。原生 MTPB
-\`native\` 模式仅作为控制组保留，不改写作者源码。
+保持完整的 `PatchFSL`、Graph WaveNet、模式库、预测头、
+目标微调 `finetuning` 与 288→36 时域协议。原生 MTPB
+`native` 模式仅作为控制组保留，不改写作者源码。
 
-本项目先前的 \`iteration/mtpb-native-288x36-gradient-adapter\`
+本项目先前的 `iteration/mtpb-native-288x36-gradient-adapter`
 采用的「原更新 + delta_g 后置补丁」在本版本被 **完全放弃**；
 旧尝试未运行四城市实证，因此不是已证明失败的效果实验。
 
@@ -77,13 +77,13 @@ g_{\perp}=\lambda\sum_c v_c R(g_c,g_T,p,\phi_c),
 
 ## 输入长度和数据隔离
 
-- 官方 \`configs/config.yaml\`：history=288，prediction=36。
-- MTPB 的 \`datasets.py\` 已将 10 分钟采样的成都和深圳数据插值为
+- 官方 `configs/config.yaml`：history=288，prediction=36。
+- MTPB 的 `datasets.py` 已将 10 分钟采样的成都和深圳数据插值为
   5 分钟网格。跨城统一 288→36，而**不是**沿用旧 TSJT 6→6 / 12→12。
-- 目标梯度数据仅来自 \`target_maml\` 的前三天；
-  \`test\` 数据只进入原生最终评价 \`STRep.finetuning\`。
-- 原生 MTPB 的 \`source_train\` 默认 \`add_target=True\`，
-  这里对 native/integrated 两模式均设 \`add_target=False\`，
+- 目标梯度数据仅来自 `target_maml` 的前三天；
+  `test` 数据只进入原生最终评价 `STRep.finetuning`。
+- 原生 MTPB 的 `source_train` 默认 `add_target=True`，
+  这里对 native/integrated 两模式均设 `add_target=False`，
   使源城市列表明确仅为 LA/成都/深圳。
   因而与论文作者默认源域训练协议不完全相同。
 - 上游 MTPB 在切分之前使用全量目标速度计算均值/标准差，
@@ -99,7 +99,7 @@ g_{\perp}=\lambda\sum_c v_c R(g_c,g_T,p,\phi_c),
 
 外部先单独下载并固定上游作者仓库，不向作者仓库提交代码：
 
-\`\`\`bash
+```bash
 git clone https://github.com/zhyliu00/MTPB /path/to/MTPB
 cd /path/to/MTPB
 git checkout 5676a38a34bf3aebbd83cef3cb0d617a9a153b15
@@ -125,11 +125,11 @@ PYTHONPATH=src python scripts/run_mtpb_integrated.py --upstream /path/to/MTPB \
 PYTHONPATH=src python scripts/run_mtpb_integrated.py --upstream /path/to/MTPB \
   --mode integrated --epochs 50 --finetune-epochs 300 \
   --output outputs/mtpb_integrated_seed7
-\`\`\`
+```
 
-官方 README 所用 PyTorch 1.10 与我们 \`torch.func.functional_call\`
+官方 README 所用 PyTorch 1.10 与我们 `torch.func.functional_call`
 要求的 PyTorch 2.x 不兼容，需要另外确认 PyG 和官方模型依赖版本。
-\`upstream_compat.py\` 仅修复作者原 GWN Conv1d 接收四维张量的兼容问题；
+`upstream_compat.py` 仅修复作者原 GWN Conv1d 接收四维张量的兼容问题；
 两组同时修，不以其作为性能提升原因。
 
 ## 证据、限制及下一轮
@@ -143,8 +143,8 @@ PYTHONPATH=src python scripts/run_mtpb_integrated.py --upstream /path/to/MTPB \
   support/query 及 PGrad 虚拟轨迹。与原 MTPB 虽保持 50 个
   元训练 epoch，但 FLOPs/前后向次数并非天然相同。
   正式实验须记录每轮耗时及总训练预算，做 compute-matched 对照。
-- 下一步优先用原版完整 \`PatchFSL\` 实测前向、反向、参数更新和
-  \`torch.func\` 兼容性；确认 pred std、Persistence、旋转触发
+- 下一步优先用原版完整 `PatchFSL` 实测前向、反向、参数更新和
+  `torch.func` 兼容性；确认 pred std、Persistence、旋转触发
   次数、源目标余弦、融合非零贡献及更新范数。
   随后固定 50/300 epoch 与同一源域采样协议比较 MAE/RMSE。
 
