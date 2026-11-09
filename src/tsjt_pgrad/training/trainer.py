@@ -152,6 +152,7 @@ def _pgrad_direction(model,source_chunks,params,device,virtual_lr,num_components
         previous_weights=previous_weights,
         target_strength=float(cfg.get('source_interaction_target_strength', 1.0)),
         synergy_strength=float(cfg.get('source_interaction_synergy_strength', 0.5)),
+        target_consistent_synergy=float(cfg.get('source_interaction_target_consistent_synergy', 0.0)),
         conflict_strength=float(cfg.get('source_interaction_conflict_strength', 0.5)),
         redundancy_strength=float(cfg.get('source_interaction_redundancy_strength', 0.6)),
         redundancy_threshold=float(cfg.get('source_interaction_redundancy_threshold', 0.8)),
