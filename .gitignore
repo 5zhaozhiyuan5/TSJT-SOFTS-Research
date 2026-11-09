@@ -1,0 +1,17 @@
+# Model training artifacts and private data
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.pt
+*.pth
+*.ckpt
+data/
+outputs/
+logs/
+.env
+.env.*
+.venv/
+venv/
+.idea/
+.vscode/
+.DS_Store

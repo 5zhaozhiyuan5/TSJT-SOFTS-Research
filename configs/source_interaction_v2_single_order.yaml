@@ -1,0 +1,126 @@
+run:
+  seed: 2025
+  device: auto
+  output_dir: outputs/source_interaction_v2_single_order_seed2025
+  num_workers: 0
+  resume: false
+  skip_complete: false
+  formal: false
+  test_override: true
+data:
+  root: data
+  sources:
+  - city: metr-la
+    steps_per_day: 288
+    history: 12
+    horizon: 12
+    stride: 4
+    train_ratio: 0.7
+    val_ratio: 0.1
+  - city: chengdu
+    steps_per_day: 144
+    history: 6
+    horizon: 6
+    stride: 4
+    train_ratio: 0.7
+    val_ratio: 0.1
+  - city: shenzhen
+    steps_per_day: 144
+    history: 6
+    horizon: 6
+    stride: 4
+    train_ratio: 0.7
+    val_ratio: 0.1
+  target:
+    city: pems-bay
+    steps_per_day: 288
+    history: 12
+    horizon: 12
+    train_days: 3
+    train_stride: 1
+    test_stride: 1
+    allow_prior_split_history: false
+model:
+  factory: tsjt_pgrad.models.pgrad_model:TSJTPGrad
+  kwargs:
+    input_dim: 3
+    hidden_dim: 32
+    heads: 4
+    dropout: 0.1
+    prompt_bank_size: 64
+    canonical_steps: 12
+    residual_channels: 32
+    dilation_channels: 32
+    skip_channels: 64
+    end_channels: 128
+    blocks: 2
+    layers: 2
+    kernel_size: 2
+    diffusion_order: 2
+    use_reverse_support: true
+    use_knowledge_graph: true
+    supported_horizons:
+    - 6
+    - 12
+    angle_controller_hidden: 16
+    angle_max: 0.7853981633974483
+    softs_d_model: 128
+    softs_d_core: 64
+    softs_d_ff: 256
+    softs_e_layers: 2
+    softs_use_norm: true
+    softs_use_time_features: true
+    softs_star_pooling: soft
+train:
+  gradient_method: full_method
+  epochs: 50
+  max_epochs: 50
+  target_batch_size: 4
+  source_batch_size: 124
+  source_microbatch_size: 42
+  gamma_target: 0.0002
+  gamma_source: 0.0001
+  save_every: 1
+  pgrad_virtual_lr: 0.001
+  pgrad_num_components: 2
+  meta_lr: 0.001
+  meta_interval: 10
+  mu_phi: 0.0001
+  fusion_lambda: 1.0
+  fusion_mu_w: 0.001
+  pgrad_interval: 10
+  pgrad_rounds: 1
+  angle_learning_rate: 0.001
+  meta_step_scale: 1.0
+  fusion_interval: 10
+  diagnostic_interval: 25
+  query_r_batch_size: 2
+  query_w_batch_size: 2
+  source_budget_ratio: 0.3
+  source_interaction_mode: source_interaction_v2
+  source_interaction_order_count: 1
+  source_interaction_target_strength: 1.0
+  source_interaction_synergy_strength: 0.5
+  source_interaction_conflict_strength: 0.5
+  source_interaction_redundancy_strength: 0.6
+  source_interaction_redundancy_threshold: 0.8
+  source_interaction_temperature: 0.35
+  source_interaction_uniform_mix: 0.15
+  source_interaction_weight_ema: 0.65
+  source_interaction_trajectory_blend: 0.5
+evaluation:
+  batch_size: 64
+  full_test: true
+  evaluate_once_after_epoch: 50
+  skip_final_evaluation: false
+notes:
+- 'Only PGrad source-city interaction has changed: balanced virtual-city orders + target-aware positive synergy/conflict/redundancy
+  interaction.'
+- All new source interaction hyperparameters are research candidates, not tuned results.
+- SOFTS replaces only the forecasting backbone. TV-SGI, rotation.py, meta.py, fusion.py and trainer.py algorithms
+  are unchanged.
+- Input/output 6-step 10min source traffic maps to the same physical 60min as 12-step 5min cities.
+- star_pooling=soft applies the official SOFTS evaluation STAR aggregation during train to stabilize repeated
+  PGrad virtual evaluations; set stochastic for canonical train STAR.
+- Requires external tsjt_c1 installed for existing data engine and original TSB filtering. Old GWN checkpoints
+  are incompatible.
