@@ -131,7 +131,8 @@ class GraphWaveNetBackbone(nn.Module):
                                       p=self.dropout, training=self.training))
             h = bn(residual_conv(h) + residual[..., -h.shape[-1]:])
         out = self.end_conv_2(F.relu(self.end_conv_1(F.relu(skip))))[..., -1]
-        out = out.permute(0, 2, 1)
+        # end_conv_2[..., -1] already returns [B,H,N]; do not transpose.
+
         if int(horizon) != self.canonical_steps:
             stride = self.canonical_steps // int(horizon)
             out = out[:, stride - 1::stride, :]
