@@ -50,6 +50,5 @@ class ToyModel(nn.Module):
     def forward(self,x,adjacency,horizon=None):
         return self.backbone(x,adjacency,horizon=horizon)
 
-stubmodel=types.ModuleType('tsjt_pgrad.models.pgrad_model')
-stubmodel.TSJTPGrad=ToyModel
-sys.modules['tsjt_pgrad.models.pgrad_model']=stubmodel
+# The real TSJTPGrad is Graph WaveNet; never shadow it with ToyModel.
+# Individual trainer tests instantiate ToyModel directly for fast synthetic checks.
