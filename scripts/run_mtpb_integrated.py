@@ -25,8 +25,11 @@ def main(argv=None):
     ap.add_argument('--target-days',type=int,default=3)
     ap.add_argument('--output',type=Path,required=True)
     ap.add_argument('--skip-finetune',action='store_true')
+    ap.add_argument('--one-stage',action='store_true',help='Use target training data for gradient guidance; skip target finetuning')
     ap.add_argument('--order-count',type=int,default=3)
     args=ap.parse_args(argv)
+    if args.one_stage and args.mode != 'integrated':
+        ap.error('--one-stage requires --mode integrated')
     upstream=args.upstream.resolve()
     if not (upstream/'model/Meta_Models/rep_model_final.py').exists():
         ap.error('--upstream must point to an official MTPB checkout')
@@ -93,7 +96,9 @@ def main(argv=None):
        'target_train_normalization':target_stats,
        'source_meta_update_replaced':updater is not None,
        'seed':args.seed,'epochs':args.epochs,
-       'finetune_epochs':args.finetune_epochs,'gwn_compat_repairs':repaired}
+       'finetune_epochs':0 if args.one_stage else args.finetune_epochs,
+       'one_stage':args.one_stage,'target_train_role':'gradient_guidance_only' if args.one_stage else 'guidance_and_finetune',
+       'gwn_compat_repairs':repaired}
     (args.output/'run_protocol.json').write_text(json.dumps(protocol,indent=2),encoding='utf-8')
     with open(args.output/'diagnostics.jsonl','w',encoding='utf-8') as f:
         for epoch in range(args.epochs):
@@ -115,7 +120,28 @@ def main(argv=None):
             f.write(json.dumps(record,ensure_ascii=False)+'\n')
             f.flush()
             print(json.dumps(record,ensure_ascii=False))
-    if not args.skip_finetune:
+    if args.one_stage:
+        # Save last training checkpoint before evaluation. Never use target
+        # test labels for model selection or parameter updates.
+        checkpoint=args.output/'one_stage_model.pt'
+        torch.save(rep.model.state_dict(),checkpoint)
+        rep.model.eval()
+        with torch.no_grad():
+            mse,rmse,mae,mape,_=rep.test_batch(0,len(target_test),target_test,'test')
+        if not mae:
+            raise RuntimeError('target test set has no evaluation windows')
+        scores={
+            'checkpoint':str(checkpoint),'selection':'last_source_epoch',
+            'target_finetune_steps':0,'num_test_batches':len(mae),
+            'horizon_mae':np.asarray(mae,dtype=float).mean(axis=0).tolist(),
+            'horizon_rmse':np.asarray(rmse,dtype=float).mean(axis=0).tolist(),
+            'horizon_mse':np.asarray(mse,dtype=float).mean(axis=0).tolist(),
+            'horizon_mape':np.asarray(mape,dtype=float).mean(axis=0).tolist(),
+        }
+        (args.output/'one_stage_test_metrics.json').write_text(
+            json.dumps(scores,ensure_ascii=False,indent=2),encoding='utf-8')
+        print(json.dumps(scores,ensure_ascii=False))
+    elif not args.skip_finetune:
         rep.finetuning(target_train,target_test,args.finetune_epochs)
 
 
