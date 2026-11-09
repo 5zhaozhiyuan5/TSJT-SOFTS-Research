@@ -124,3 +124,47 @@ def test_08_reject_bad_configuration():
     with pytest.raises(ValueError):
         combine_source_interaction(p,[_g([1,0,0,0]),_g([0,1,0,0])],_g([1,0,0,0]),
                                    [_g([1,1,0,0])],temperature=0)
+
+
+def test_09_target_consistent_synergy_suppresses_conflicting_pair_bonus():
+    """Two near-identical anti-target cities should not reward each other."""
+    _,p=_parameters()
+    sources=[_g([-1,1,0,0]),_g([-1,1,0,0]),_g([1,0,1,0])]
+    target=_g([1,0,0,0])
+    references=[_g([0,1,1,0])]
+    _,baseline=combine_source_interaction(
+        p,sources,target,references,weight_ema=0,
+        target_consistent_synergy=0)
+    _,gated=combine_source_interaction(
+        p,sources,target,references,weight_ema=0,
+        target_consistent_synergy=1)
+    assert baseline['source_positive_synergy'][0]>0
+    assert gated['source_positive_synergy'][0]==pytest.approx(0.,abs=1e-7)
+    assert gated['source_positive_synergy'][1]==pytest.approx(0.,abs=1e-7)
+    assert gated['source_weights'][2]>baseline['source_weights'][2]
+    assert gated['target_gate'][0]==0
+    assert gated['target_gate'][2]>0
+
+
+def test_10_zero_switch_exactly_matches_default_and_rejects_invalid_gate():
+    _,p=_parameters()
+    sources=[_g([1,1,0,0]),_g([1,0,1,0]),_g([-1,0,0,1])]
+    target=_g([1,0,0,0])
+    refs=[_g([1,1,1,0])]
+    default,meta=combine_source_interaction(p,sources,target,refs)
+    off,offmeta=combine_source_interaction(
+        p,sources,target,refs,target_consistent_synergy=0.)
+    assert torch.equal(default[0],off[0])
+    assert meta['source_weights']==offmeta['source_weights']
+    with pytest.raises(ValueError,match='target_consistent_synergy'):
+        combine_source_interaction(p,sources,target,refs,target_consistent_synergy=1.1)
+
+
+def test_11_gating_does_not_change_source_gradients():
+    _,p=_parameters()
+    sources=[_g([-1,1,0,0]),_g([-1,1,0,0]),_g([1,0,1,0])]
+    before=[g[0].clone() for g in sources]
+    combine_source_interaction(
+        p,sources,_g([1,0,0,0]),[_g([0,1,1,0])],
+        target_consistent_synergy=1.)
+    assert all(torch.equal(g[0],b) for g,b in zip(sources,before))
