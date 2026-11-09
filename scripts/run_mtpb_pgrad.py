@@ -46,9 +46,17 @@ def main(argv=None):
     if task_args['maml']['his_num']!=288 or task_args['maml']['pred_num']!=36:
         raise RuntimeError('native MTPB must use history=288, horizon=36')
     task_args['maml']['train_epochs']=args.epochs
+    task_args['maml']['finetune_epochs']=args.finetune_epochs
+    for city in data_args['data_keys']:
+        for key in ('dataset_path', 'adjacency_matrix_path'):
+            raw=Path(data_args[city][key])
+            data_args[city][key]=str(raw if raw.is_absolute() else upstream/raw)
+    if not (upstream/'pattern/chengdu_shenzhen_metr/cosine_10_cl_1.pt').exists():
+        raise FileNotFoundError('Official MTPB pattern bank missing: generate/download official pattern artifacts first')
     target='pems-bay'
     source_cities=['chengdu_m','shenzhen','metr-la']
-    source=traffic_dataset(data_args,task_args['maml'],source_cities,
+    # Prevent source_dataset from mutating the caller's list in-place.
+    source=traffic_dataset(data_args,task_args['maml'],source_cities.copy(),
                            'source_train',test_data=target,add_target=False,
                            target_days=3)
     target_train=traffic_dataset(data_args,task_args['maml'],[],
@@ -59,7 +67,8 @@ def main(argv=None):
                                 target_days=3)
     args.output.mkdir(parents=True,exist_ok=True)
     run_args=argparse.Namespace(STmodel='GWN',device=device,seed=args.seed,
-                                save_dir=args.output,curr_time=datetime.now().isoformat())
+                                save_dir=args.output,curr_time=datetime.now().isoformat(),
+                                batch_size=task_args['maml']['batch_size'])
     patch_cfg=dict(data_list='chengdu_shenzhen_metr',sim='cosine',K=10,
                    patch_encoder='pattern',base_dir=upstream,device=device)
     rep=STRep(data_args,task_args,model_args,patch_cfg,run_args)
