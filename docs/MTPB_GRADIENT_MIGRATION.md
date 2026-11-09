@@ -136,3 +136,28 @@ not been validated. Run `PYTHONPATH=src pytest -q tests/test_mtpb_upstream_compa
 
 This is a compatibility fix only. Do not attribute forecasting improvement
 to it, or compare repaired and unrepaired models as a gradient ablation.
+
+## Literature triangulation (separate papers; adaptation is our hypothesis)
+
+- **PGrad: Learning Principal Gradients for Domain Generalization**,
+  ICLR 2023, official implementation:
+  https://github.com/QData/PGrad ; specifically
+  `domainbed/algorithms.py` (`class PGrad`). The original paper
+  estimates robust gradient directions from sequential domain-training
+  parameter trajectories via principal directions. Our transfer to
+  cross-city traffic is an extrapolation, **not** a reported MTPB result.
+- **Conflict-Averse Gradient Descent for Multi-task Learning**,
+  NeurIPS 2021, official implementation:
+  https://github.com/Cranial-XIX/CAGrad ; see
+  `mtrl/mtrl_files/cagrad.py`. It is a general multi-objective gradient
+  balancing method, not a cross-city traffic forecasting benchmark.
+  Kept as a future *alternative ablation*, not stacked into this patch.
+- **Gradient Vaccine: Investigating and Improving Multi-task
+  Optimization in Massively Multilingual Models**, ICLR 2021.
+  The original work models target gradient alignment across multilingual
+  tasks; it does not establish performance on MTPB. Not implemented
+  this round so the ablation remains a single source-gradient correction.
+
+These are methodological references, not evidence of target-city MAE/RMSE
+improvement. The controlled comparison here changes only source-gradient
+correction within the native MTPB model family.
