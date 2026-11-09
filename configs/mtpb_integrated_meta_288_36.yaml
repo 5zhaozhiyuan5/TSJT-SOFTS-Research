@@ -1,0 +1,21 @@
+# Research protocol reference only. Runner reads upstream official config.
+upstream_repository: https://github.com/zhyliu00/MTPB
+upstream_commit: 5676a38a34bf3aebbd83cef3cb0d617a9a153b15
+model: original_MTPB_PatchFSL_GraphWaveNet
+source_cities: [metr-la, chengdu_m, shenzhen]
+target_city: pems-bay
+target_train_days: 3
+history: 288
+horizon: 36
+comparison_modes: [native, integrated]
+source_epochs: 50
+target_finetune_epochs: 300
+gradient:
+  replaces: STRep.meta_train_revise
+  support_inner_steps: 2
+  source_mixing: PGrad_source_interaction_target_rotation_residual
+  target_train_only: true
+  no_post_hoc_meta_correction: true
+verification:
+  real_city_metrics: pending
+  official_full_mtpb_smoke: pending
