@@ -1,7 +1,7 @@
 run:
   seed: 2025
   device: auto
-  output_dir: outputs/tvsgi_softs_full_seed2025
+  output_dir: outputs/gwn_full_seed2025
   num_workers: 0
   resume: false
   skip_complete: false
@@ -43,6 +43,7 @@ data:
 model:
   factory: tsjt_pgrad.models.pgrad_model:TSJTPGrad
   kwargs:
+    backbone_type: graph_wavenet
     input_dim: 3
     hidden_dim: 32
     heads: 4
@@ -57,20 +58,14 @@ model:
     layers: 2
     kernel_size: 2
     diffusion_order: 2
+    adaptive_dim: 16
     use_reverse_support: true
-    use_knowledge_graph: true
+    use_knowledge_graph: false
     supported_horizons:
     - 6
     - 12
     angle_controller_hidden: 16
     angle_max: 0.7853981633974483
-    softs_d_model: 128
-    softs_d_core: 64
-    softs_d_ff: 256
-    softs_e_layers: 2
-    softs_use_norm: true
-    softs_use_time_features: true
-    softs_star_pooling: soft
 train:
   gradient_method: full_method
   epochs: 50
@@ -117,10 +112,8 @@ notes:
 - 'Only PGrad source-city interaction has changed: balanced virtual-city orders + target-aware positive synergy/conflict/redundancy
   interaction.'
 - All new source interaction hyperparameters are research candidates, not tuned results.
-- SOFTS replaces only the forecasting backbone. TV-SGI, rotation.py, meta.py, fusion.py and trainer.py algorithms
+- Graph WaveNet replaces only the forecasting backbone. TV-SGI, rotation.py, meta.py, fusion.py and trainer.py algorithms
   are unchanged.
 - Input/output 6-step 10min source traffic maps to the same physical 60min as 12-step 5min cities.
-- star_pooling=soft applies the official SOFTS evaluation STAR aggregation during train to stabilize repeated
-  PGrad virtual evaluations; set stochastic for canonical train STAR.
-- Requires external tsjt_c1 installed for existing data engine and original TSB filtering. Old GWN checkpoints
+- Requires external tsjt_c1 installed for existing data engine and original TSB filtering. Old SOFTS and fixed-node GWN checkpoints
   are incompatible.
