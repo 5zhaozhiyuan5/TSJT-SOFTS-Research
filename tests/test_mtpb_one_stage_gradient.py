@@ -149,3 +149,19 @@ def test_no_target_support_adaptation_during_guided_step(geometry_stubs):
     assert report['target_finetune_epochs']==0
     assert report['target_inner_steps']==0
     assert report['training_protocol']=='source_meta_with_target_gradient_guidance'
+
+
+def test_target_gradient_cannot_update_model_when_all_source_gradients_zero(geometry_stubs):
+    """Target guidance is not a hidden target SGD step."""
+    torch.manual_seed(44)
+    rep=ToyRep()
+    updater=m.TargetGuidedMTPBMetaUpdate(
+        rep,m.IntegratedMetaConfig(inner_steps=1,order_count=1))
+    original=rep.model.weight.detach().clone()
+    def zero_source_tasks(model,support,query,initial):
+        return tuple(torch.zeros_like(p) for p in initial.values()),0.
+    updater.task_gradient=zero_source_tasks
+    report=updater.step(ToyDataset(['metr-la','chengdu_m','shenzhen']),
+                        ToyDataset(['pems-bay']))
+    assert report['realized_update_norm']==0
+    assert torch.equal(original,rep.model.weight.detach())
