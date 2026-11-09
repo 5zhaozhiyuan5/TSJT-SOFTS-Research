@@ -42,9 +42,11 @@ def test_gradient_and_virtual_forward():
     model = small()
     x = torch.randn(2, 6, 5, 3)
     loss = (model(x, horizon=6) - torch.randn(2, 6, 5, 1)).abs().mean()
-    grads = torch.autograd.grad(loss, tuple(model.parameters()))
-    assert any(g.abs().sum() > 0 for g in grads)
-    virtual = {k: p.detach() - .001 * g for (k, p), g in zip(model.named_parameters(), grads)}
+    grads = torch.autograd.grad(loss, tuple(model.parameters()), allow_unused=True)
+    assert any(g is not None and g.abs().sum() > 0 for g in grads)
+    # The final post-skip graph path does not affect the prediction loss.
+    virtual = {k: p.detach() - .001 * (torch.zeros_like(p) if g is None else g)
+               for (k, p), g in zip(model.named_parameters(), grads)}
     assert functional_call(model, virtual, (x, None), {'horizon': 6}).shape == (2, 6, 5, 1)
 
 
@@ -53,3 +55,10 @@ def test_tsjt_wrapper_preserves_angle_controller():
         skip_channels=16, end_channels=16, blocks=1, layers=1)
     assert model.angle_controller is not None
     assert model(torch.randn(1, 12, 5, 3), None).shape == (1, 12, 5, 1)
+
+
+def test_prediction_head_axis_regression():
+    model = small().eval()
+    with torch.no_grad():
+        y = model(torch.randn(2, 12, 7, 3), horizon=12)
+    assert y.shape == (2, 12, 7, 1)
