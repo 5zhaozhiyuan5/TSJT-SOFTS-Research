@@ -1,7 +1,7 @@
 run:
   seed: 2025
   device: auto
-  output_dir: outputs/tvsgi_softs_softs_original_pgrad_baseline_seed2025
+  output_dir: outputs/tvsgi_gwn_softs_original_pgrad_baseline_seed2025
   num_workers: 0
   resume: false
   skip_complete: false
@@ -58,7 +58,7 @@ model:
     kernel_size: 2
     diffusion_order: 2
     use_reverse_support: true
-    use_knowledge_graph: true
+    use_knowledge_graph: false
     supported_horizons:
     - 6
     - 12

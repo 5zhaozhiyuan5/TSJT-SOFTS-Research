@@ -58,7 +58,7 @@ model:
     kernel_size: 2
     diffusion_order: 2
     use_reverse_support: true
-    use_knowledge_graph: true
+    use_knowledge_graph: false
     supported_horizons:
     - 6
     - 12

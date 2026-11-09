@@ -1,30 +1,26 @@
-# TSJT-SOFTS-Research
+# TSJT Graph WaveNet Research
 
-Cross-city few-shot traffic forecasting research code: shared SOFTS backbone, source interaction v2, and retained target-guided gradient rotation / meta-learning / residual fusion.
+Cross-city few-shot traffic forecasting with a shared **Graph WaveNet-style** backbone, source interaction v2, target-guided gradient rotation, angle meta-learning and residual fusion.
 
-**Status:** Initial research snapshot. Local synthetic/regression tests pass (49/49 on 2026-11-09); real four-city 50-epoch training and MAE improvements have **not** been verified here.
+**Default backbone: Graph WaveNet**, using history-derived dynamic graph supports (no fixed topology, POI, or city-specific node embeddings). The historical SOFTS implementation is retained for reproducibility, but is not used by the default TSJTPGrad model.
 
-**Important dependency:** This package is **not standalone**. It imports the existing `tsjt_c1` training/data engine and expects traffic datasets to be provided separately. No private datasets, checkpoints, or experiment logs are included.
+**Status:** Backbone migration committed as research code. Synthetic tests and real four-city training have not yet been validated for this migration. There is no verified Graph WaveNet MAE/RMSE improvement. Existing SOFTS checkpoints cannot be loaded into the new backbone.
 
-- [Detailed Chinese guide](README_SOFTS_%E6%BA%90%E5%9F%8E%E5%B8%82%E4%BA%A4%E4%BA%92%E6%94%B9%E8%BF%9B.md)
-- [Compatibility check](SOURCE_COMPATIBILITY_CHECK.md)
-- [Main experiment configuration](configs/source_interaction_v2_pemsbay_full.yaml)
-- [Interaction module](src/tsjt_pgrad/pgrad/source_interaction.py)
-- [SOFTS backbone](src/tsjt_pgrad/models/softs_backbone.py)
+**External dependency:** This package is not standalone: training imports the original `tsjt_c1` engine and expects separate datasets.
 
-## Local regression tests
+- [Migration details](docs/GRAPH_WAVENET_MIGRATION.md)
+- [Backbone implementation](src/tsjt_pgrad/models/graph_wavenet_backbone.py)
+- [Source interaction](src/tsjt_pgrad/pgrad/source_interaction.py)
+- [Full experiment configuration](configs/source_interaction_v2_pemsbay_full.yaml)
 
 ```bash
 pip install torch numpy pyyaml pytest
+PYTHONPATH=src pytest -q tests/test_graph_wavenet_backbone.py
 PYTHONPATH=src pytest -q tests
-```
-
-## Run with existing TSJT engine
-
-```bash
 export PYTHONPATH="$(pwd)/src:/path/to/tsjt_c1:${PYTHONPATH}"
 python -m tsjt_pgrad.run --config configs/source_interaction_v2_smoke.yaml
-python -m tsjt_pgrad.run --config configs/source_interaction_v2_pemsbay_full.yaml
 ```
 
-This is research code inspired by the publicly released SOFTS structure and is not the official SOFTS repository. See [SOFTS](https://github.com/Secilia-Cxy/SOFTS).
+Graph WaveNet reference: Wu et al., IJCAI 2019, https://github.com/nnzhan/Graph-WaveNet . This node-count-agnostic implementation differs from the original fixed node-embedding adaptive adjacency.
+
+See historical SOFTS notes in [legacy guide](README_SOFTS_%E6%BA%90%E5%9F%8E%E5%B8%82%E4%BA%A4%E4%BA%92%E6%94%B9%E8%BF%9B.md).
