@@ -1,0 +1,27 @@
+name: GWN target-consistent synergy synthetic checks
+on:
+  push:
+    branches:
+      - iteration/20261110-target-consistent-synergy-gwn
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest numpy PyYAML
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Static Python syntax
+        run: python -m compileall -q src tests
+      - name: Synthetic source-interaction and Graph WaveNet tests
+        env:
+          PYTHONPATH: src
+        run: python -m pytest -q tests/test_source_interaction_v2.py tests/test_graph_wavenet_backbone.py
