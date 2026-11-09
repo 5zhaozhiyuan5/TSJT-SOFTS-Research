@@ -1,4 +1,19 @@
-# TSJT Graph WaveNet Research
+# MTPB 288->36 + TSJT target-guided gradient research (iteration branch)
+
+**Current research candidate: native MTPB PatchFSL/GWN (ACM TKDD 2025)**, retaining its official traffic pattern bank, graph reconstruction, long-term branch and 288-step input / 36-step prediction protocol. The previously migrated Graph WaveNet 12-step model below is now **historical**, not this branch's default experimental protocol. The original MTPB checkout is required; the author's code has not been copied.
+
+- [MTPB official repository](https://github.com/zhyliu00/MTPB) (pinned SHA `5676a38a34bf3aebbd83cef3cb0d617a9a153b15`)
+- [Migration audit, upstream compatibility and run commands](docs/MTPB_GRADIENT_MIGRATION.md)
+- [Gradient source interaction bridge](src/tsjt_pgrad/mtpb/adapter.py)
+- [Native/GD comparison runner](scripts/run_mtpb_pgrad.py)
+- [MTPB 288/36 protocol](configs/mtpb_pemsbay_288_36.yaml)
+
+**Status: code integration candidate, independent iteration branch; no actual four-city MTPB 288->36 run or MAE/RMSE result.** Source-only vs target-guided modes share the same official MTPB model and a weight-preserving repair of upstream 4D convolution usage. MTPB graph data are unchanged baseline inputs, not a new graph innovation.
+
+---
+
+## Historical TSJT Graph WaveNet 12-step research (retained for comparison)
+
 
 Cross-city few-shot traffic forecasting with a shared **Graph WaveNet-style** backbone, source interaction v2, target-guided gradient rotation, angle meta-learning and residual fusion.
 
