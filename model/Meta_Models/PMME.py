@@ -353,8 +353,8 @@ class STRep(nn.Module):
                         print('OT_loss_scale', OT_loss_scale)
             
             else:
-                alpha = torch.ones(size1, device='cuda')/size1  
-                beta = torch.ones(size2, device='cuda')/size2  
+                alpha = torch.ones(size1, device=self.device)/size1  
+                beta = torch.ones(size2, device=self.device)/size2  
                 OT_loss_scale = 1
 
             if self.DA == 'OT':
