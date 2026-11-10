@@ -19,3 +19,6 @@ comparison: [native, target_guided]
 prebuilt_pattern_bank: required
 goal: avoid_target_second_stage_finetune
 status: unverified_real_traffic
+
+# New one-factor ablation: CLI --retrieval-guidance-strength 0 (legacy) or 1 (enabled)
+retrieval_guidance_strength: 0.0
