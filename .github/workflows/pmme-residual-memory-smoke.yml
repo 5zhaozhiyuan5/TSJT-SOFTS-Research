@@ -1,0 +1,26 @@
+name: PMME residual-memory smoke tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "datasets.py"
+      - "model/Meta_Models/PMME_2ndStage.py"
+      - "model/Meta_Models/residual_memory.py"
+      - "tests/test_residual_memory.py"
+      - ".github/workflows/pmme-residual-memory-smoke.yml"
+
+jobs:
+  residual-memory-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+      - name: Compile changed Python files
+        run: python -m py_compile datasets.py model/Meta_Models/PMME_2ndStage.py model/Meta_Models/residual_memory.py tests/test_residual_memory.py
+      - name: Run residual-memory smoke tests
+        run: python tests/test_residual_memory.py

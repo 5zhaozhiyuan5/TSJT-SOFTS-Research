@@ -60,6 +60,25 @@ class StationarityAwareResidualMemory(nn.Module):
         self.register_buffer("memory_city_ids", torch.empty(0, dtype=torch.long))
         self.register_buffer("memory_sample_ids", torch.empty(0, dtype=torch.long))
 
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict,
+        missing_keys, unexpected_keys, error_msgs
+    ):
+        # The online bank grows dynamically, so resize registered buffers
+        # before PyTorch copies a saved Stage-II checkpoint into them.
+        for name in (
+            "memory_keys", "memory_values", "memory_city_ids", "memory_sample_ids"
+        ):
+            incoming = state_dict.get(prefix + name)
+            if incoming is not None and self._buffers[name].shape != incoming.shape:
+                self._buffers[name] = torch.empty_like(
+                    incoming, device=self._buffers[name].device
+                )
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict,
+            missing_keys, unexpected_keys, error_msgs
+        )
+
     @property
     def num_entries(self):
         return int(self.memory_keys.shape[0])
@@ -270,7 +289,12 @@ class StationarityAwareResidualMemory(nn.Module):
                 weights = torch.exp(
                     -(distance ** 2) / (2.0 * sigma[:, None].clamp_min(1e-4) ** 2)
                 )
-                weights = weights / weights.sum(dim=1, keepdim=True).clamp_min(1e-8)
+                weight_sum = weights.sum(dim=1, keepdim=True)
+                normalized_weights = weights / weight_sum.clamp_min(1e-8)
+                fallback_weights = torch.softmax(
+                    selected_relevance / sigma[:, None].clamp_min(1e-4), dim=1
+                )
+                weights = torch.where(weight_sum > 1e-8, normalized_weights, fallback_weights)
                 values = self.memory_values[selected_indices]
                 retrieved = (weights.unsqueeze(-1) * values).sum(dim=1)
                 retrieved_chunks.append(retrieved)
