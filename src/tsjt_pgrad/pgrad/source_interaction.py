@@ -59,6 +59,7 @@ def combine_source_interaction(
     previous_weights: Sequence[float] | None = None,
     target_strength: float = 1.0,
     synergy_strength: float = 0.50,
+    target_consistent_synergy: float = 0.0,
     conflict_strength: float = 0.50,
     redundancy_strength: float = 0.60,
     redundancy_threshold: float = 0.80,
@@ -82,6 +83,8 @@ def combine_source_interaction(
         raise ValueError('target gradient shape mismatch')
     if not (0 <= uniform_mix <= 1 and 0 <= weight_ema < 1 and 0 <= trajectory_blend <= 1):
         raise ValueError('invalid source interaction convex weighting')
+    if not (0 <= target_consistent_synergy <= 1):
+        raise ValueError('target_consistent_synergy must be in [0,1]')
     if temperature <= 0 or not (0 <= redundancy_threshold <= 1):
         raise ValueError('invalid source interaction temperature/redundancy threshold')
 
@@ -104,7 +107,12 @@ def combine_source_interaction(
     # Positive synergy is useful, but near-duplicate sources (e.g. correlated
     # source cities) must not receive disproportionate influence.
     pos = pairwise.clamp_min(0.)
-    pos_synergy = pos.clamp(max=redundancy_threshold).sum(dim=1) / (n-1)
+    # Reward pair agreement fully only when BOTH cities align with the target.
+    # lambda=0 exactly reproduces the original source-only synergy term.
+    target_agreement = target_cos.clamp(min=0., max=1.)
+    pair_gate = ((1. - target_consistent_synergy) +
+                 target_consistent_synergy * target_agreement[:, None] * target_agreement[None, :])
+    pos_synergy = (pos.clamp(max=redundancy_threshold) * pair_gate).sum(dim=1) / (n-1)
     redundancy = (pos - redundancy_threshold).clamp_min(0.).sum(dim=1) / (n-1)
     conflict = (-pairwise).clamp_min(0.).sum(dim=1) / (n-1)
     score = (target_strength * target_cos
@@ -185,6 +193,7 @@ def combine_source_interaction(
         'source_target_cosine': [float(x) for x in target_cos],
         'pairwise_cosine': [[float(x) for x in row] for row in pairwise_cos],
         'source_positive_synergy': [float(x) for x in pos_synergy],
+        'target_consistent_synergy': float(target_consistent_synergy),
         'source_conflict': [float(x) for x in conflict],
         'source_redundancy': [float(x) for x in redundancy],
         'order_consistency': consistency,
@@ -210,6 +219,7 @@ def source_interaction_principal_gradient(
     previous_weights: Sequence[float] | None = None,
     target_strength: float = 1.0,
     synergy_strength: float = 0.5,
+    target_consistent_synergy: float = 0.0,
     conflict_strength: float = 0.5,
     redundancy_strength: float = 0.6,
     redundancy_threshold: float = 0.8,
@@ -236,6 +246,7 @@ def source_interaction_principal_gradient(
         parameters, source_gradients, target_gradients, pgrads,
         previous_weights=previous_weights,
         target_strength=target_strength, synergy_strength=synergy_strength,
+        target_consistent_synergy=target_consistent_synergy,
         conflict_strength=conflict_strength, redundancy_strength=redundancy_strength,
         redundancy_threshold=redundancy_threshold, temperature=temperature,
         uniform_mix=uniform_mix, weight_ema=weight_ema,
