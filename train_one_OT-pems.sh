@@ -41,7 +41,7 @@ for model_name in 'SOFTS'; do  #
                                         --train_epochs ${train_epochs} \
                                         --data_list ${data_list} \
                                         --test_dataset ${test_dataset} \
-                                        --config_file ./configs/config.yaml  \
+                                        --config_filename ./configs/config.yaml  \
                                         --seed ${seed} \
                                         --classifier ${classifier} \
                                         --xySquaredRatio ${xySquaredRatio} \
@@ -76,7 +76,7 @@ for model_name in 'iTransformer'; do  #
                                         --train_epochs ${train_epochs} \
                                         --data_list ${data_list} \
                                         --test_dataset ${test_dataset} \
-                                        --config_file ./configs/config.yaml  \
+                                        --config_filename ./configs/config.yaml  \
                                         --seed ${seed} \
                                         --classifier ${classifier} \
                                         --xySquaredRatio ${xySquaredRatio} \
