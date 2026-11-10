@@ -28,7 +28,8 @@ class ToyRep:
 class ToyDataset:
     def __init__(self,cities,*,samples=32,horizon=36):
         self.data_list=cities
-        self.task_args={'batch_size':3}
+        self.stage='target_maml' if cities == ['pems-bay'] else 'source_train'
+        self.task_args={'batch_size':3, 'pred_num':horizon}
         self.x_list={}
         self.y_list={}
         self.A_list={}
@@ -165,3 +166,30 @@ def test_target_gradient_cannot_update_model_when_all_source_gradients_zero(geom
                         ToyDataset(['pems-bay']))
     assert report['realized_update_norm']==0
     assert torch.equal(original,rep.model.weight.detach())
+
+
+def test_target_guidance_query_labels_are_disjoint():
+    """MTPB target_maml stride=12, horizon=36: indices 1 apart leak labels."""
+    torch.manual_seed(23)
+    dataset=ToyDataset(['pems-bay'], samples=46, horizon=36)
+    updater=m.TargetGuidedMTPBMetaUpdate(ToyRep())
+    reference,query,ref_idx,query_idx=updater.target_guidance_pairs(
+        dataset,'pems-bay')
+    assert reference[0].x.shape[0] == 3
+    assert query[0].x.shape[0] == 3
+    assert (query_idx.min()-ref_idx.max()).item()*12 >= 36
+    assert len(torch.unique(torch.cat((ref_idx,query_idx)))) == 6
+
+
+def test_target_guidance_rejects_insufficient_separation():
+    dataset=ToyDataset(['pems-bay'], samples=8, horizon=36)
+    updater=m.TargetGuidedMTPBMetaUpdate(ToyRep())
+    with pytest.raises(ValueError,match='label-disjoint'):
+        updater.target_guidance_pairs(dataset,'pems-bay')
+
+
+def test_target_guidance_rejects_test_split():
+    dataset=ToyDataset(['pems-bay'], samples=46)
+    dataset.stage='test'
+    with pytest.raises(ValueError,match='target_maml'):
+        m.TargetGuidedMTPBMetaUpdate.target_guidance_pairs(dataset,'pems-bay')
