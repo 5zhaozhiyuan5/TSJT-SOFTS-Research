@@ -42,9 +42,9 @@ def test_gradient_and_virtual_forward():
     model = small()
     x = torch.randn(2, 6, 5, 3)
     loss = (model(x, horizon=6) - torch.randn(2, 6, 5, 1)).abs().mean()
-    grads = torch.autograd.grad(loss, tuple(model.parameters()))
-    assert any(g.abs().sum() > 0 for g in grads)
-    virtual = {k: p.detach() - .001 * g for (k, p), g in zip(model.named_parameters(), grads)}
+    grads = torch.autograd.grad(loss, tuple(model.parameters()), allow_unused=True)
+    assert any(g is not None and g.abs().sum() > 0 for g in grads)
+    virtual = {k: p.detach() - .001 * (g if g is not None else torch.zeros_like(p)) for (k, p), g in zip(model.named_parameters(), grads)}
     assert functional_call(model, virtual, (x, None), {'horizon': 6}).shape == (2, 6, 5, 1)
 
 
