@@ -54,8 +54,10 @@ class TargetGuidedMTPBMetaUpdate:
         self.last_diagnostics = {}
 
     @staticmethod
-    def sample(dataset, city, *, exclude=None):
+    def sample(dataset, city, *, exclude=None, allowed=None):
         available = torch.arange(len(dataset.x_list[city]))
+        if allowed is not None:
+            available = available[torch.isin(available, allowed.cpu())]
         if exclude is not None:
             available = available[~torch.isin(available, exclude.cpu())]
         batch = int(dataset.task_args['batch_size'])
@@ -71,6 +73,36 @@ class TargetGuidedMTPBMetaUpdate:
         )
         adjacency = dataset.A_list[city].float().unsqueeze(0).expand(batch, -1, -1)
         return (data, adjacency), indices
+
+    @classmethod
+    def target_guidance_pairs(cls, dataset, city):
+        """Split chronological target TRAIN windows into label-disjoint halves.
+
+        Official MTPB target_maml uses stride=12 on the 5-minute grid and
+        horizon=36. Distinct window indices alone are NOT label-disjoint.
+        Exclude a boundary guard of ceil(horizon/stride)-1 windows on each
+        side; never use held-out test samples to construct this split.
+        """
+        if getattr(dataset, 'stage', 'target_maml') != 'target_maml':
+            raise ValueError('target guidance requires target_maml training windows')
+        horizon = int(dataset.task_args['pred_num'])
+        stride = 12  # official MTPB datasets.py target_maml inter_step
+        guard = (horizon + stride - 1) // stride - 1
+        count = len(dataset.x_list[city])
+        middle = count // 2
+        left = torch.arange(0, max(0, middle - guard))
+        right = torch.arange(min(count, middle + guard), count)
+        batch = int(dataset.task_args['batch_size'])
+        if len(left) < batch or len(right) < batch:
+            raise ValueError(
+                f'not enough target training windows for label-disjoint '
+                f'guidance batches: count={count}, batch={batch}, guard={guard}')
+        reference, ref_idx = cls.sample(dataset, city, allowed=left)
+        query, query_idx = cls.sample(dataset, city, allowed=right)
+        # Forecast labels of index i occupy [i*stride, i*stride+horizon).
+        if int(query_idx.min() - ref_idx.max()) * stride < horizon:
+            raise AssertionError('target reference/query forecast labels overlap')
+        return reference, query, ref_idx, query_idx
 
     @staticmethod
     def loss(model, pair, state):
@@ -145,8 +177,8 @@ class TargetGuidedMTPBMetaUpdate:
             s,idx = self.sample(source_dataset,city)
             q,_ = self.sample(source_dataset,city,exclude=idx)
             source_tasks.append((s,q))
-        target_reference,t_idx = self.sample(target_train_dataset,target)
-        target_query,q_idx = self.sample(target_train_dataset,target,exclude=t_idx)
+        target_reference,target_query,t_idx,q_idx = self.target_guidance_pairs(
+            target_train_dataset,target)
 
         source_results = [
             self.task_gradient(model,s,q,initial) for s,q in source_tasks]
