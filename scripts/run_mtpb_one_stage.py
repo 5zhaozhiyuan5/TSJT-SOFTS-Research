@@ -104,11 +104,17 @@ def main(argv=None):
     ap.add_argument('--epochs',type=int,default=50)
     ap.add_argument('--order-count',type=int,default=3)
     ap.add_argument('--seed',type=int,default=7)
+    ap.add_argument('--retrieval-guidance-strength',type=float,default=0.,
+                    help='0: legacy target alignment; 1: gate target alignment by MTPB five-scale retrieval certainty')
     ap.add_argument('--target-days',type=int,default=3)
     ap.add_argument('--output',type=Path,required=True)
     ap.add_argument('--skip-eval',action='store_true',
                     help='only for a source-train smoke test; never target finetune')
     args=ap.parse_args(argv)
+    if not 0 <= args.retrieval_guidance_strength <= 1:
+        ap.error('retrieval-guidance-strength must be in [0,1]')
+    if args.mode=='native' and args.retrieval_guidance_strength:
+        ap.error('retrieval guidance requires --mode target_guided')
     if args.epochs<1 or args.order_count<1 or args.target_days!=3:
         ap.error('epochs/order-count must be positive; target-days must be 3')
     upstream=args.upstream.resolve()
@@ -178,7 +184,8 @@ def main(argv=None):
                 inner_lr=float(model_args['STnet']['update_lr']),
                 inner_steps=int(model_args['STnet']['update_step']),
                 meta_lr=float(model_args['STnet']['update_lr']),
-                order_count=args.order_count))
+                order_count=args.order_count,
+                retrieval_guidance_strength=args.retrieval_guidance_strength))
 
     protocol={
         'mode':args.mode,'model':'official_MTPB_PatchFSL_GWN',
@@ -192,6 +199,7 @@ def main(argv=None):
         'seed':args.seed,'source_epochs':args.epochs,
         'gwn_compat_repairs':repairs,'skip_eval':args.skip_eval,
         'uses_prebuilt_source_pattern_bank':True,
+        'retrieval_guidance_strength':args.retrieval_guidance_strength,
     }
     (args.output/'protocol.json').write_text(
         json.dumps(protocol,indent=2,ensure_ascii=False),encoding='utf-8')
