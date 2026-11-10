@@ -193,3 +193,37 @@ def test_target_guidance_rejects_test_split():
     dataset.stage='test'
     with pytest.raises(ValueError,match='target_maml'):
         m.TargetGuidedMTPBMetaUpdate.target_guidance_pairs(dataset,'pems-bay')
+
+
+def test_pattern_entropy_reaches_actual_source_interaction(monkeypatch, geometry_stubs):
+    """Enabled mode must condition real source-interaction call, not a dead helper."""
+    from contextlib import contextmanager
+    recorded = []
+    @contextmanager
+    def fake_capture(model):
+        # The official retrieval hook is independently exercised in
+        # test_mtpb_retrieval_confidence.py; this checks training integration.
+        yield [(.25, {'1':.25,'3':.25,'6':.25,'12':.25,'24':.25})]
+    def principal(model, callback, params, sources, target, **kwargs):
+        recorded.append(kwargs['target_strength'])
+        state={name:p.detach().clone().requires_grad_(True)
+               for name,p in model.named_parameters() if p.requires_grad}
+        assert len(callback(0,state)) == len(params)
+        return sources[0], {
+            'source_weights':[1./3]*3,
+            'source_target_cosine':[1.]*3,
+            'pairwise_cosine':[[1.]*3]*3,
+            'principal_norm':1.}
+    monkeypatch.setattr(m,'capture_retrieval_confidence',fake_capture)
+    monkeypatch.setattr(m,'source_interaction_principal_gradient',principal)
+    torch.manual_seed(42)
+    rep=ToyRep()
+    updater=m.TargetGuidedMTPBMetaUpdate(
+        rep,m.IntegratedMetaConfig(
+            inner_steps=1,order_count=1,retrieval_guidance_strength=1.))
+    result=updater.step(ToyDataset(['metr-la','chengdu_m','shenzhen']),
+                        ToyDataset(['pems-bay']))
+    assert recorded == pytest.approx([.25])
+    assert result['effective_target_alignment_strength'] == pytest.approx(.25)
+    assert result['pattern_retrieval_confidence_by_hour']['24'] == pytest.approx(.25)
+    assert result['realized_update_norm'] > 0
