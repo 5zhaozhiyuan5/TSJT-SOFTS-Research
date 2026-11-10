@@ -16,6 +16,7 @@ from tsjt_pgrad.pgrad.grad_utils import flatten_gradients
 from tsjt_pgrad.pgrad.rotation import AngleController, rotate_source_gradient
 from tsjt_pgrad.pgrad.source_interaction import source_interaction_principal_gradient
 from tsjt_pgrad.pgrad.fusion import residual_matching_fusion
+from tsjt_pgrad.mtpb.retrieval_confidence import capture_retrieval_confidence
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class IntegratedMetaConfig:
     fusion_mu_w: float = 1e-3
     angle_lr: float = 1e-3
     angle_meta_step: float = 1e-5
+    retrieval_guidance_strength: float = 0.0  # ablation: 0 = exact legacy
 
 
 class TargetGuidedMTPBMetaUpdate:
@@ -47,6 +49,8 @@ class TargetGuidedMTPBMetaUpdate:
             raise ValueError('inner_steps and order_count must be positive')
         if min(self.cfg.inner_lr, self.cfg.meta_lr, self.cfg.virtual_lr) <= 0:
             raise ValueError('training learning rates must be positive')
+        if not 0.0 <= self.cfg.retrieval_guidance_strength <= 1.0:
+            raise ValueError('retrieval_guidance_strength must be in [0,1]')
         self.angle_controller = AngleController().to(rep.device)
         self.angle_optimizer = torch.optim.Adam(
             self.angle_controller.parameters(), lr=self.cfg.angle_lr)
@@ -185,8 +189,22 @@ class TargetGuidedMTPBMetaUpdate:
         source_grads = [r[0] for r in source_results]
         # Important: do not perform target Support adaptation even virtually.
         # Target labels influence ONLY source-gradient geometry and angle feedback.
-        target_grad = self.guidance_gradient(model,target_reference,initial)
+        # Pattern entropy is measured on the SAME target-train forward as g_T.
+        # No extra test access, no target Support adaptation, no predictor update.
+        retrieval = None
+        if self.cfg.retrieval_guidance_strength > 0:
+            with capture_retrieval_confidence(model) as captures:
+                target_grad = self.guidance_gradient(model,target_reference,initial)
+            if len(captures) != 1:
+                raise RuntimeError(f'expected one MTPB pattern retrieval, got {len(captures)}')
+            retrieval = captures[0]
+        else:
+            target_grad = self.guidance_gradient(model,target_reference,initial)
         target_query_grad = self.guidance_gradient(model,target_query,initial)
+        # Confidence scales ONLY the target-alignment term in source-city
+        # interaction; target gradient never becomes a direct predictor step.
+        confidence = 1.0 if retrieval is None else retrieval[0]
+        target_strength = 1.0 - self.cfg.retrieval_guidance_strength * (1.0 - confidence)
 
         def source_callback(city,virtual_state):
             return self.task_gradient(
@@ -195,7 +213,8 @@ class TargetGuidedMTPBMetaUpdate:
         principal,interaction = source_interaction_principal_gradient(
             model,source_callback,params,source_grads,target_grad,
             virtual_lr=self.cfg.virtual_lr,order_count=self.cfg.order_count,
-            previous_weights=self.previous_weights)
+            previous_weights=self.previous_weights,
+            target_strength=target_strength)
         self.previous_weights = interaction['source_weights']
 
         rotated = []
@@ -274,6 +293,10 @@ class TargetGuidedMTPBMetaUpdate:
             'source_target_cosine':interaction['source_target_cosine'],
             'pairwise_cosine':interaction['pairwise_cosine'],
             'principal_norm':interaction['principal_norm'],
+            'retrieval_guidance_strength':self.cfg.retrieval_guidance_strength,
+            'pattern_retrieval_confidence':None if retrieval is None else retrieval[0],
+            'pattern_retrieval_confidence_by_hour':None if retrieval is None else retrieval[1],
+            'effective_target_alignment_strength':target_strength,
             'rotation_triggers':int(sum(rotation_flags)),
             'fusion_weights':fusion['weights'],
             'gradient_norm':float(gradient_norm),'clip_factor':clip,
