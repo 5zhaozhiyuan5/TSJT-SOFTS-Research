@@ -1,9 +1,7 @@
 # MTPB + Target-Guided Gradient: 一阶段研究版（无目标城市微调）
 
-基线：5zhaozhiyuan5/TSJT-SOFTS-Research 的 `main`
-`a4f72961cb26e8204b9b12587207c0998a0d04c9`。
-本研究改动在独立 `iteration/mtpb-one-stage-target-gradient-no-finetune` 分支，
-没有合并 `main`，也没有触碰任何其他仓库。
+当前主线：5zhaozhiyuan5/TSJT-SOFTS-Research 的 `main`。
+本方案已于 2026-11-10 随 MTPB 研究分支快进合并到 `main`；此前的 iteration 分支仅作为历史来源保留。
 
 ## 关键定义：这里的“一阶段”
 
@@ -32,7 +30,7 @@
 未改动 MTPB 源模式库、模式检索、图重建、Graph WaveNet、长期表示、
 融合预测头与 288→36 任务设置。Graph WaveNet 使用 MTPB 官方从模式和原始
 图得到的重建图（此处不增加新的道路拓扑、POI、LLM 或固定节点 embedding）。
-官方图路径与本仓库 main 既有“历史信号动态图”实现并不相同，
+官方图路径与旧版 TSJT-GWN 主线的“历史信号动态图”实现并不相同，
 因此两者应视为不同预测模型，切勿直接混淆实验结果。
 
 ## 真实更新路径
