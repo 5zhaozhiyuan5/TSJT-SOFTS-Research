@@ -6,7 +6,7 @@ Cross-city few-shot traffic forecasting based on the official MTPB architecture,
 
 **Status:** MTPB one-stage code and retrieval-entropy guidance are now on `main`. Synthetic tests are not evidence of real traffic improvement. No verified four-city MAE/RMSE gain is available yet.
 
-**External dependency:** This package is not standalone: training imports the original `tsjt_c1` engine and expects separate datasets.
+**External dependencies:** The MTPB runner requires a separate checkout of the official MTPB repository, its Python dependencies, datasets and prebuilt five-scale pattern-bank artifacts. The legacy TSJT Graph WaveNet runner still depends on the original `tsjt_c1` engine.
 
 - [MTPB one-stage protocol](docs/MTPB_ONE_STAGE_GUIDED_TRANSFER.md)
 - [Pattern retrieval entropy × gradient guidance](docs/MTPB_RETRIEVAL_ENTROPY_GRADIENT.md)
