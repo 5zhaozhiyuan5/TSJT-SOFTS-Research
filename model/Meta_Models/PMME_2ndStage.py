@@ -26,6 +26,11 @@ from gpytorch.likelihoods import BernoulliLikelihood, LaplaceLikelihood
 from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
+try:
+    from .residual_memory import StationarityAwareResidualMemory
+except ImportError:
+    from residual_memory import StationarityAwareResidualMemory
+
 def log_verbose(args, msg):
     print(msg)
     with open(os.path.join(args.save_dir, "log.txt"), "a") as f:
@@ -50,110 +55,83 @@ class PatchFSL(nn.Module):
         elif model_name in ['MLP']:  
             self.forecasting_model = MLP(288, 36)
         
-        self.memory = None 
-        
-        if self.temperature_args>0:
-            
-            self.memory = nn.Parameter(torch.randn(memory_size_args, 128)) 
-            print('self.memory.shape', self.memory.shape)
-            D, D_out, H_w, H_b = 128, 36, 256, 256
-            
-            self.bias_mlp = nn.Sequential(
-                
-                nn.Linear(D, D_out),
-                # nn.Tanh()
+        self.residual_memory = None
+        if self.temperature_args > 0 and self.memory_size_args > 0:
+            source_city_names = [
+                name for name in data_args.get('data_keys', [])
+                if name != getattr(args, 'test_dataset', None)
+            ]
+            self.residual_memory = StationarityAwareResidualMemory(
+                seq_len=288,
+                pred_len=36,
+                d_model=128,
+                max_memory_size=memory_size_args,
+                source_city_names=source_city_names,
+                topk=8,
+                candidate_pool=50,
+                overlap_window=27,
             )
-            
-            self.gating_mlp = nn.Sequential(
-                nn.Linear(memory_size_args, H_b),
-                #nn.ReLU(inplace=True),
-                nn.GELU(),
-                nn.Linear(H_b, H_b),
-                nn.GELU(),
-                nn.Linear(H_b, 1),
-                nn.Sigmoid()
-            )
-
-            d_model = D
-            self.Wq = nn.Linear(d_model, d_model, bias=False)
-            self.Wk = nn.Linear(d_model, d_model, bias=False)
-            self.Wv = nn.Linear(d_model, d_model, bias=False)
             
     
-    def forward(self, data_i, stage = 'train'):  
-        
-        if(stage == 'train'):
-            
-            self.forecasting_model.train()
-            if self.temperature_args>0:
-                self.bias_mlp.train()
-                self.gating_mlp.train()
-                self.Wq.train()
-                self.Wk.train()
-                self.Wv.train()
-        else:
-            
+    def forward(self, data_i, stage='train', return_base=False):
+        # The forecasting backbone is frozen in Stage-II. Keep it deterministic
+        # when residual memory is enabled (SOFTS STAR has train/eval differences).
+        if self.residual_memory is not None:
             self.forecasting_model.eval()
-            if self.temperature_args>0:
-                self.bias_mlp.eval()
-                self.gating_mlp.eval()
-                self.Wq.eval()
-                self.Wk.eval()
-                self.Wv.eval()
-            
+            if stage == 'train':
+                self.residual_memory.train()
+            else:
+                self.residual_memory.eval()
+        elif stage == 'train':
+            self.forecasting_model.train()
+        else:
+            self.forecasting_model.eval()
+
         x, y, means, stds = data_i.x, data_i.y, data_i.means, data_i.stds
-        # print("x shape is : {}, y shape is : {}".format(x.shape, y.shape))
-        x, y, means, stds = torch.tensor(x).to(self.PatchFSL_cfg['device']), torch.tensor(y).to(self.PatchFSL_cfg['device']),torch.tensor(means).to(self.PatchFSL_cfg['device']),torch.tensor(stds).to(self.PatchFSL_cfg['device']) #,torch.tensor(A,dtype=torch.float32).to(self.PatchFSL_cfg['device'])
-        # remember that the input of TSFormer is [B, N, 2, L]
-        x = x.permute(0,1,3,2)
+        x = torch.as_tensor(x, dtype=torch.float32, device=self.PatchFSL_cfg['device'])
+        y = torch.as_tensor(y, dtype=torch.float32, device=self.PatchFSL_cfg['device'])
+        means = torch.as_tensor(means, dtype=torch.float32, device=self.PatchFSL_cfg['device'])
+        stds = torch.as_tensor(stds, dtype=torch.float32, device=self.PatchFSL_cfg['device'])
 
-        # ############
-
-        x = x[:,:,0, -288:]
+        # Input layout: [B, N, L, 2] -> speed channel [B, N, L].
+        x = x.permute(0, 1, 3, 2)
+        x = x[:, :, 0, -288:]
         self.eps = 1e-9
-        self.RevIn_mean = x.mean(dim=2, keepdim=True).detach()         # [B,D,1]
-        var = x.var(dim=2, keepdim=True, unbiased=False).detach()                     
-        self.RevIn_std  = torch.sqrt(var + self.eps)      
+        self.RevIn_mean = x.mean(dim=2, keepdim=True).detach()
+        var = x.var(dim=2, keepdim=True, unbiased=False).detach()
+        self.RevIn_std = torch.sqrt(var + self.eps)
         x = (x - self.RevIn_mean) / self.RevIn_std
-        # y = (y - self.RevIn_mean) / self.RevIn_std 
+        history_for_memory = x.detach()
 
-        x = x.permute(0,2,1) # # [B, D, T] -> [B, T, D]
-
+        x = x.permute(0, 2, 1)
         if self.model_name in ['MLP']:
-            x = x.permute(0,2,1)
-        rep, out = self.forecasting_model(x) 
+            x = x.permute(0, 2, 1)
+        rep, out = self.forecasting_model(x)
 
         out = out.detach()
         rep = rep.detach()
+        base_out = out * self.RevIn_std + self.RevIn_mean
+        base_out = unnorm(base_out, means, stds)
 
-        B, N, D = rep.shape
-        
         normed_memory = None
-        if self.temperature_args>0:
-            normed_memory = self.memory 
-            r = rep.view(B*N, D)  # 
-            q = self.Wq(r)                          # (B, d)
-            K = self.Wk(self.memory)                # (N, d)
-            V = self.Wv(self.memory)                # (N, d)
+        if self.residual_memory is not None and self.residual_memory.num_entries > 0:
+            correction, normed_memory = self.residual_memory.retrieve(
+                history_for_memory, rep, data_i
+            )
+            out = base_out + correction
+        else:
+            out = base_out
 
-            scores = torch.matmul(q, K.t())     # (B, N)
-            scores = scores / (D ** 0.5)       
-            
-            alpha = torch.softmax(scores, dim=1)  # (B, N)
-            retrieved = torch.matmul(alpha, V)      # (B, d)
-            delta_b  = self.bias_mlp(retrieved)       # [(B*N), D_out]
-
-            delta_b = delta_b.view(B, N, -1) #/10    # [B, N, D_out]     
-            out = out + delta_b # 
-            
-        out = out * self.RevIn_std + self.RevIn_mean
-        out = unnorm(out, means, stds)
-
-        #y_unscale = y * self.RevIn_std + self.RevIn_mean
         y_unscale = norm(y, means, stds)
-        y_unscale = (y_unscale - self.RevIn_mean) / self.RevIn_std 
+        y_unscale = (y_unscale - self.RevIn_mean) / self.RevIn_std
 
+        if return_base:
+            return out, y, rep, y_unscale, normed_memory, base_out
         return out, y, rep, y_unscale, normed_memory
+
+    def update_residual_memory(self, data_i, base_prediction):
+        if self.residual_memory is not None:
+            self.residual_memory.update(data_i, base_prediction)
 
 class STRep(nn.Module):
     """
@@ -209,6 +187,7 @@ class STRep(nn.Module):
         y_target = []
 
         target_task_loss = 0
+        base_outputs = []
         #origin_normed_memory = 0
         
 
@@ -216,7 +195,10 @@ class STRep(nn.Module):
             task_loss = 0
             #  for k in range(1):
             batch_size, node_num, seq_len, _ = data[i].x.shape
-            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train') 
+            out, y, rep, y_unscale, normed_memory, base_out = self.model(
+                data[i], stage='train', return_base=True
+            )
+            base_outputs.append(base_out)
             
             if epoch%25==0:
                 print(out.shape, rep.shape)
@@ -258,6 +240,12 @@ class STRep(nn.Module):
                     target_task_loss = loss
     
         
+        # Update the bank only after this batch has queried the previous bank.
+        # Source cities are inserted; the target city is never used as memory.
+        if self.model.residual_memory is not None:
+            for memory_index in range(1, len(data)):
+                self.model.update_residual_memory(data[memory_index], base_outputs[memory_index])
+
         OT_losses = []
         y_norm_sources = []
         y_norm_targets = []

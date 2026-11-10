@@ -244,11 +244,25 @@ class traffic_dataset(Dataset):
                 #print('indices', indices)
                 x_data = self.x_list[select_dataset][indices:indices+batch_size] 
                 y_data = self.y_list[select_dataset][indices:indices+batch_size]
-            
+
+        if torch.is_tensor(indices):
+            sample_indices = indices.detach().clone().long()
+        else:
+            sample_indices = torch.arange(
+                int(indices), int(indices) + x_data.shape[0], dtype=torch.long
+            )
+
         x_data = x_data.float()
         y_data = y_data.float()
         node_num = self.A_list[select_dataset].shape[0]
-        data_i = Data(node_num=node_num, x=x_data, y=y_data,means=self.means_list[select_dataset],stds = self.stds_list[select_dataset])
+        data_i = Data(
+            node_num=node_num,
+            x=x_data,
+            y=y_data,
+            means=self.means_list[select_dataset],
+            stds=self.stds_list[select_dataset],
+            sample_index=sample_indices,
+        )
         data_i.edge_index = self.edge_index_list[select_dataset]
         data_i.data_name = select_dataset
         A_wave = self.A_list[select_dataset]
