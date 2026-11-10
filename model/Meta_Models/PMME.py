@@ -25,7 +25,6 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
-from dynamic_pattern import DynamicPatternMoE, prototype_partial_alignment
 
 def log_verbose(args, msg):
     print(msg)
@@ -52,20 +51,7 @@ class PatchFSL(nn.Module):
             self.forecasting_model = iTransformer()
         elif model_name in ['MLP', 'MLP_noRevIn']:
             self.forecasting_model = MLP(288, 36)
-
-        self.dynamic_moe = DynamicPatternMoE(
-            d_model=128,
-            pred_len=36,
-            num_experts=getattr(args, 'num_experts', 4),
-            top_k=getattr(args, 'top_k', 2),
-            bottleneck=getattr(args, 'expert_bottleneck', 16),
-            router_hidden=getattr(args, 'router_hidden', 64),
-            fusion_mode=getattr(args, 'moe_fusion_mode', 'add'),
-            gate_coef=getattr(args, 'moe_gate_coef', 0.0),
-        )
-        self.last_router_probs = None
-        self.last_router_aux = None
-        self.last_router_dense = None
+            
         self.memory = None 
         
     def forward(self, data_i, stage = 'train'):  
@@ -88,7 +74,6 @@ class PatchFSL(nn.Module):
         if self.model_name == 'MLP_noRevIn':
             #x = x.permute(0,2,1)
             #print('x.shape', x.shape)
-            x_node = x
             rep, out = self.forecasting_model(x)
             out = unnorm(out, means, stds)
     
@@ -103,25 +88,15 @@ class PatchFSL(nn.Module):
             self.RevIn_std  = torch.sqrt(var + self.eps)      
     
             x = (x - self.RevIn_mean) / self.RevIn_std
-            x_node = x
+    
             x = x.permute(0,2,1) # # [B, D, T] -> [B, T, D]
             if self.model_name == 'MLP':
                 x = x.permute(0,2,1)
             
-            rep, out = self.forecasting_model(x)
-
-            normed_memory = None
-
-        rep, route, router_aux = self.dynamic_moe(rep, x_node)
-        # The MoE only refines the representation used for cross-city OT
-        # alignment and residual compensation; the backbone forecast `out` is
-        # intentionally left unchanged so the dynamic-pattern expert never
-        # steals the regression task from the (frozen-in-Stage-II) backbone.
-        self.last_router_probs = route
-        self.last_router_aux = router_aux
-        self.last_router_dense = router_aux['dense_prob']
+            rep, out = self.forecasting_model(x) 
     
-        if self.model_name != 'MLP_noRevIn':
+            normed_memory = None
+            
             out = out * self.RevIn_std + self.RevIn_mean
             out = unnorm(out, means, stds)
     
@@ -167,21 +142,8 @@ class STRep(nn.Module):
 
         self.main_optim = optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=1e-2)
         
-        self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
-
-        # Horizon-adaptive regression weight.  The 180-min (long-range) horizon
-        # is the one place where the transfer lags the paper baseline: a flat
-        # SmoothL1 treats all 36 horizons equally, so the easy short horizons
-        # soak up the gradient while the hard long horizons are under-fitted.
-        # We re-weight the per-horizon loss to increase with the forecast lead
-        # time (cf. horizon-progressive / curriculum weighting in long-horizon
-        # time-series forecasting).  ``horizon_weight_gamma`` controls how fast
-        # the weight grows; 0 reproduces the original flat loss.
-        pred_num = int(task_args['source']['pred_num'])
-        self._horizon_weight_gamma = getattr(args, 'stage1_horizon_gamma', getattr(args, 'horizon_weight_gamma', 0.0))
-        _h = torch.arange(pred_num, dtype=torch.float32, device=self.device)
-        self.horizon_weights = 1.0 + self._horizon_weight_gamma * (_h / max(pred_num - 1, 1))
-
+        self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
+        
         input_dim = 36
         
         num_inducing = 256
@@ -214,29 +176,9 @@ class STRep(nn.Module):
         ], lr=0.01)
         
     
-    def _weighted_horizon_loss(self, out, y):
-        """Horizon-adaptive SmoothL1 regression loss.
-
-        ``out``/``y`` are [B, N, pred_len]; the last axis is the forecast
-        horizon.  When ``horizon_weight_gamma`` is 0 the per-horizon weights are
-        all 1 and this reduces to the original flat loss.  Otherwise long-range
-        horizons receive a proportionally larger weight so the backbone does not
-        under-fit the 180-min lead time.
-        """
-        if self._horizon_weight_gamma <= 0:
-            return self.loss_criterion(out, y)
-        w = self.horizon_weights.to(out.device)
-        diff = out - y
-        # SmoothL1 elementwise, beta matches loss_criterion.
-        beta = 5e-4
-        abs_diff = diff.abs()
-        l2 = 0.5 * diff.pow(2) / beta
-        l1 = abs_diff - 0.5 * beta
-        per_element = torch.where(abs_diff < beta, l2, l1)
-        weighted = per_element * w.view(1, 1, -1)
-        return weighted.mean()
-
-    def meta_train_revise(self, data, matrix, epoch):
+    
+    def meta_train_revise(self, data, matrix, epoch): 
+        
         total_mae = []
         total_mse = []
         total_rmse = []
@@ -247,11 +189,6 @@ class STRep(nn.Module):
         rep_target = []
         y_source = []
         y_target = []
-        route_source = []
-        route_target = []
-        route_source_dense = []
-        route_target_dense = []
-        router_regularisers = []
 
         target_task_loss = 0
         for i in range(len(data)):  
@@ -259,14 +196,6 @@ class STRep(nn.Module):
             batch_size, node_num, seq_len, _ = data[i].x.shape
             
             out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train') 
-            route = self.model.last_router_probs
-            route_dense = self.model.last_router_dense
-            aux = self.model.last_router_aux
-            router_regularisers.append(
-                getattr(self.args, 'balance_coef', 0.01) * aux['balance']
-                + getattr(self.args, 'diversity_coef', 0.01) * aux['diversity']
-                + getattr(self.args, 'adapter_l2_coef', 0.0) * aux['adapter_l2']
-            )
             
             if epoch%25==0:
                 print(out.shape, rep.shape)
@@ -279,18 +208,14 @@ class STRep(nn.Module):
                 
                 rep_target.extend(rep_split)
                 y_target.extend(y_unscale_split)
-                route_target.extend(torch.split(route, split_indices, dim=0))
-                route_target_dense.extend(torch.split(route_dense, split_indices, dim=0))
                 
             else:
                 rep_source.append(rep)
                 y_source.append(y_unscale)
-                route_source.append(route)
-                route_source_dense.append(route_dense)
                 
             
-            if i>0:
-                loss = self._weighted_horizon_loss(out, y)
+            if i>0:   
+                loss = self.loss_criterion(out, y)
 
                 task_loss = loss
 
@@ -307,8 +232,8 @@ class STRep(nn.Module):
                     task_losses.append(task_loss)
 
             if i ==0 :
-                loss = self._weighted_horizon_loss(out, y)
-
+                loss = self.loss_criterion(out, y)
+    
                 target_task_loss = loss
             
             
@@ -342,20 +267,6 @@ class STRep(nn.Module):
 
             x1,y1 = rep_source[index], y_source[index] 
             x2,y2 = rep_target[index], y_target[index]
-            if getattr(self.args, 'expert_guide_dense', False):
-                # Soft (non-sparse) routing for expert-guided OT: keep the full
-                # per-expert distribution so mid-horizon transition dynamics
-                # are not over-committed to a single expert.  Optional temperature
-                # sharpens (T<1) or softens (T>1) the distribution.
-                temp = getattr(self.args, 'expert_guide_temp', 1.0)
-                rd1 = route_source_dense[index].clamp_min(1e-8)
-                rd2 = route_target_dense[index].clamp_min(1e-8)
-                r1 = (rd1 / rd1.sum(-1, keepdim=True).clamp_min(1e-8)) ** (1.0 / max(temp, 1e-6))
-                r2 = (rd2 / rd2.sum(-1, keepdim=True).clamp_min(1e-8)) ** (1.0 / max(temp, 1e-6))
-                r1 = r1 / r1.sum(-1, keepdim=True).clamp_min(1e-8)
-                r2 = r2 / r2.sum(-1, keepdim=True).clamp_min(1e-8)
-            else:
-                r1, r2 = route_source[index], route_target[index]
             shape0 = x1.shape[1]
                     
             y_norm_sources.append(y1)
@@ -365,8 +276,6 @@ class STRep(nn.Module):
             x2 = x2.view(-1, x2.size(-1))
             y1 = y1.view(-1, y1.size(-1))
             y2 = y2.view(-1, y2.size(-1))
-            r1 = r1.view(-1, r1.size(-1))
-            r2 = r2.view(-1, r2.size(-1))
             
 
             if self.classifier_args>1e-6:
@@ -420,56 +329,12 @@ class STRep(nn.Module):
                     print('error_prob_mean', prob1.mean(), prob2.mean()) 
                     
                 thresh = self.classifier_args 
-                if getattr(self.args, 'dvgp_soft_selector', False):
-                    # ---- CDTrans/FixMatch-style soft + adaptive confidence selector ----
-                    # 1) Temperature de-saturation: power-like sharpening that tightens
-                    #    the margin between shared/private patterns WITHOUT collapsing the
-                    #    probs toward the over-confident extremes that kill OT_loss_scale.
-                    T = max(getattr(self.args, 'dvgp_temp', 1.0), 1e-6)
-                    # Temperature de-saturation keeps the ORIGINAL [0,1] scale
-                    # (no sum-normalisation) so OT_loss_scale = sqrt(prob1.mean
-                    # * prob2.mean) stays well-posed; normalising to sum=1 would
-                    # shrink probs to ~1/N and drive OT_loss_scale to 0 -> NaN
-                    # in Sinkhorn.
-                    prob1_t = prob1 ** (1.0 / T)
-                    prob2_t = prob2 ** (1.0 / T)
-                    # 2) Adaptive threshold: curriculum from start -> end over training,
-                    #    loose early (keep most samples) to strict late (keep confident).
-                    th_start = getattr(self.args, 'dvgp_thresh_start', 0.05)
-                    th_end = getattr(self.args, 'dvgp_thresh_end', 0.3)
-                    # Per-city adaptation (route A): chengdu_m (524 nodes) has DVGP
-                    # accuracy ~0.98, so its prob1 collapses and ratio1~0.008 late in
-                    # training, over-excluding the source city that carries the richest
-                    # LONG-horizon dynamics (180min depends on it).  Give chengdu a lower
-                    # threshold end so more of its samples survive, keeping ratio1 in a
-                    # healthy band.  scale=1.0 reproduces v58 exactly.
-                    if int(shape0) == 524:
-                        chengdu_scale = getattr(self.args, 'dvgp_chengdu_scale', 1.0)
-                        th_end = min(1.0, th_end * chengdu_scale)
-                    ramp = min(1.0, max(0.0, epoch / float(self.DAepoch_args)))
-                    thresh_t = th_start + (th_end - th_start) * ramp
-                    # 3) Soft gating (no hard zero): confidence minus threshold, clipped.
-                    #    A sample barely below threshold is smoothly damped instead of
-                    #    discarded, preserving its (small) contribution to OT mass.
-                    def soft_gate(x, t):
-                        g = (x - t).clamp(min=0.0)
-                        g = g / g.max().clamp_min(1e-8)
-                        return g
-                    w1 = soft_gate(prob1_t, thresh_t)
-                    w2 = soft_gate(prob2_t, thresh_t)
-                    count1 = (prob1 > thresh_t).sum().detach().cpu().numpy()
-                    count2 = (prob2 > thresh_t).sum().detach().cpu().numpy()
-                    ratio1 = count1/len(prob1)
-                    ratio2 = count2/len(prob2)
-                else:
-                    thresh_t = thresh
-                    mask1 = prob1 > thresh
-                    mask2 = prob2 > thresh
-                    count1 = torch.sum(mask1).detach().cpu().numpy()
-                    count2 = torch.sum(mask2).detach().cpu().numpy()
-                    ratio1 = count1/len(mask1)
-                    ratio2 = count2/len(mask2)
-                    w1 = None; w2 = None
+                mask1 = prob1 > thresh
+                mask2 = prob2 > thresh
+                count1 = torch.sum(mask1).detach().cpu().numpy()
+                count2 = torch.sum(mask2).detach().cpu().numpy()
+                ratio1 = count1/len(mask1)
+                ratio2 = count2/len(mask2)
                 
                 if ratio1>0.00 and ratio2>0.00:
                     if epoch%25==0:
@@ -477,89 +342,32 @@ class STRep(nn.Module):
                     def threshold(x):   
                         return torch.where(x > thresh, x, torch.tensor(0.0, device=x.device))
                     
-                    if getattr(self.args, 'dvgp_soft_selector', False):
-                        prob1, prob2 = w1.detach(), w2.detach()
-                    else:
-                        prob1, prob2 = threshold(prob1).detach(), threshold(prob2).detach() 
+                    prob1, prob2 = threshold(prob1).detach(), threshold(prob2).detach() 
                     alpha = (prob1/torch.sum(prob1)).detach()
                     beta = (prob2/torch.sum(prob2)).detach()
                     
                    
                     OT_loss_scale = torch.sqrt(((prob1.mean())*(prob2.mean())).detach())
-                    _olf = getattr(self.args, 'ot_loss_scale_floor', 0.0)
-                    if _olf > 0.0:
-                        # DVGP becomes over-confident late in training (ratio1
-                        # collapses toward ~0.008), driving OT_loss_scale down to
-                        # ~0.014 and effectively switching the DA alignment off.
-                        # A hard floor keeps the alignment active while preserving
-                        # the confidence weighting above the floor.  floor=0 (v31)
-                        # reproduces the original behaviour.
-                        OT_loss_scale = OT_loss_scale.clamp_min(_olf)
                     
                     if epoch%25==0:
                         print('OT_loss_scale', OT_loss_scale)
             
             else:
-                alpha = torch.ones(size1, device=self.device)/size1
-                beta = torch.ones(size2, device=self.device)/size2
+                alpha = torch.ones(size1, device='cuda')/size1  
+                beta = torch.ones(size2, device='cuda')/size2  
                 OT_loss_scale = 1
 
             if self.DA == 'OT':
                 if (epoch>=self.DAepoch_args): 
-                    warmup = min(1.0, max(0.0, (epoch - self.DAepoch_args) / float(getattr(self.args, 'DAwarmup', 1500))))
+                    
                     x_y_scale = math.sqrt(self.xySquaredRatio_args)
                     y1, y2 = y1*x_y_scale, y2*x_y_scale
-
+                    
+                    x = torch.cat((x1,y1),dim=-1) 
+                    y = torch.cat((x2,y2),dim=-1) # y: target  
+                    
                     if (ratio1>0.00 and ratio2>0.00):
-                        prototype_loss, prototype_plan, mapped_r1, route_entropy_loss = prototype_partial_alignment(
-                            x1, y1, r1, alpha,
-                            x2, y2, r2, beta,
-                            transported_mass=getattr(self.args, 'partial_mass', 0.8),
-                            epsilon=getattr(self.args, 'proto_epsilon', 0.05),
-                            iterations=getattr(self.args, 'proto_iters', 50),
-                            label_weight=getattr(self.args, 'proto_label_weight', 1.0),
-                            mode_anchor=self.model.dynamic_moe.mode_anchor,
-                            route_weight=getattr(self.args, 'route_cost_weight', 0.0),
-                        )
-                        dynamic_scale = math.sqrt(getattr(self.args, 'dynamic_cost_weight', 1.0))
-                        expert_guide_scale = getattr(self.args, 'expert_guide_scale', 0.0)
-                        if getattr(self.args, 'expert_guide_warmup', False):
-                            # Ramp the guidance up with the DA warmup so the
-                            # expert-guided transport does not suddenly jerk the
-                            # mid-horizon dynamics at DA activation.
-                            expert_guide_scale = expert_guide_scale * warmup
-                        route_ent_scale = getattr(self.args, 'route_entropy_guide_scale', 0.0)
-                        if expert_guide_scale > 0.0:
-                            # Expert-guided OT: append the raw per-sample routing
-                            # distribution so the sample-level Sinkhorn matches
-                            # source/target samples of the SAME dynamic type first
-                            # (cross-type transport becomes geometrically more
-                            # expensive).  scale=0 reproduces the original.
-                            x = torch.cat((x1, y1, mapped_r1 * dynamic_scale, r1 * expert_guide_scale), dim=-1)
-                            y = torch.cat((x2, y2, r2 * dynamic_scale, r2 * expert_guide_scale), dim=-1) # y: target
-                        else:
-                            x = torch.cat((x1, y1, mapped_r1 * dynamic_scale), dim=-1)
-                            y = torch.cat((x2, y2, r2 * dynamic_scale), dim=-1) # y: target
-                        # Route-uncertainty guide: append the per-sample routing
-                        # entropy as an extra geometry dimension.  A sample whose
-                        # sparse route is sharp (low entropy) is confidently one
-                        # dynamic pattern; a high-entropy sample is ambiguous.
-                        # Placing entropy in the transport geometry lets the
-                        # Sinkhorn distinguish "clear" vs "ambiguous" samples so
-                        # ambiguous few-shot target samples are not forcibly
-                        # mis-matched (which is what injects the systematic MAE
-                        # bias).  route_entropy_guide_scale=0 (v31) skips this.
-                        if route_ent_scale > 0.0:
-                            ent1 = -(r1.clamp_min(1e-8) * r1.clamp_min(1e-8).log()).sum(-1, keepdim=True)
-                            ent2 = -(r2.clamp_min(1e-8) * r2.clamp_min(1e-8).log()).sum(-1, keepdim=True)
-                            x = torch.cat((x, ent1 * route_ent_scale), dim=-1)
-                            y = torch.cat((y, ent2 * route_ent_scale), dim=-1)
-                        sample_ot = torch.sum(criterion(alpha, x, beta, y))
-                        OT_loss = (
-                            sample_ot
-                            + getattr(self.args, 'prototype_loss_coef', 0.1) * prototype_loss
-                            + getattr(self.args, 'route_entropy_coef', 0.0) * route_entropy_loss
-                        ) * self.DAcoef_args * warmup * OT_loss_scale
+                        OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args *OT_loss_scale
                     else:
                         OT_loss = 0
                     DA_losses.append(OT_loss)
@@ -593,8 +401,7 @@ class STRep(nn.Module):
         else:
             DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
         
-        router_loss = sum(router_regularisers) / max(len(router_regularisers), 1)
-        model_loss += (task_loss + DA_loss + router_loss)
+        model_loss += (task_loss + DA_loss) 
 
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
             

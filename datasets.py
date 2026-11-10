@@ -25,11 +25,6 @@ class traffic_dataset(Dataset):
         self.test_data = test_data
         self.target_days = target_days
         self.predefined_data_list = data_list
-        # Test windows are generated lazily.  Materialising every
-        # [node, 288, feature] window for METR-LA uses more than 1 GB even
-        # though evaluation consumes only one batch at a time.
-        self.raw_test_list = {}
-        self.test_sample_count = {}
         # if(self.stage == 'pretrain' or self.stage == 'cluster'):
         #     self.add_target = False
         self.load_data(stage, test_data)
@@ -148,24 +143,6 @@ class traffic_dataset(Dataset):
                 inter_step = 12
             else:
                 inter_step = 12
-
-            if self.stage == 'test':
-                sample_count = max(
-                    0,
-                    (X.shape[2] - (his_num + pred_num)) // inter_step + 1,
-                )
-                self.raw_test_list[dataset_name] = X
-                self.test_sample_count[dataset_name] = sample_count
-                # Only the leading dimension is used by __len__.  Keeping a
-                # zero-width placeholder preserves the existing interface.
-                self.x_list[dataset_name] = np.empty((sample_count, 0), dtype=np.uint8)
-                self.y_list[dataset_name] = np.empty((sample_count, 0), dtype=np.uint8)
-                print(
-                    '{} : lazy test windows : {}, raw shape : {}'.format(
-                        dataset_name, sample_count, X.shape
-                    )
-                )
-                continue
             # x, y : [num_samples, num_vertices, L, D]
             # x, y : [B, N, L, D]
             x_inputs, y_outputs = generate_dataset(X, his_num, pred_num, means, stds, inter_step)
@@ -253,28 +230,7 @@ class traffic_dataset(Dataset):
             # print('target select_dataset', select_dataset)
             batch_size = self.task_args['batch_size'] 
 
-            if self.stage == 'test' and select_dataset in self.raw_test_list:
-                raw = self.raw_test_list[select_dataset]
-                inter_step = 12
-                first = index * batch_size
-                last = min(first + batch_size, self.test_sample_count[select_dataset])
-                sample_indices = range(first, last)
-                features = []
-                targets = []
-                for sample_index in sample_indices:
-                    start = sample_index * inter_step
-                    features.append(
-                        raw[:, :, start:start + self.his_num].transpose((0, 2, 1))
-                    )
-                    target_start = start + self.his_num
-                    targets.append(
-                        raw[:, 0, target_start:target_start + self.pred_num]
-                        * self.stds_list[select_dataset][0]
-                        + self.means_list[select_dataset][0]
-                    )
-                x_data = torch.from_numpy(np.stack(features)).float()
-                y_data = torch.from_numpy(np.stack(targets)).float()
-            elif batch_size==46:
+            if batch_size==46:
                 torch.manual_seed(42)
                 permutation = torch.randperm(batch_size) 
                 indices = permutation[0: batch_size]
