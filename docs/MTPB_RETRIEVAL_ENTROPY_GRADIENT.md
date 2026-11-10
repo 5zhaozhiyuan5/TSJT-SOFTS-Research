@@ -1,9 +1,7 @@
 # 五尺度模式检索熵 × 目标引导源梯度（2026-11-10）
 
 基线：main a4f72961cb26e8204b9b12587207c0998a0d04c9。
-本分支沿用已提交的 MTPB 一阶段适配研究分支
-iteration/20261110-mtpb-target-query-label-disjoint（其祖先为 main），
-仅添加一个可证伪交叉改动；**尚未合并 main**。
+本研究分支 `iteration/20261110-mtpb-retrieval-entropy-gradient` 已于 2026-11-10 快进更新至 `main`；该提交在 MTPB 一阶段适配路径上增加一个可证伪交叉改动。
 
 ## 论文及源码依据
 
