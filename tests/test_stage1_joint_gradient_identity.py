@@ -50,5 +50,23 @@ class TestJointGradientIdentity(unittest.TestCase):
         self.assertTrue(math.isnan(d['ot_target_cos']))
 
 
+    def test_nonfinite_ot_loss_is_rejected(self):
+        p = torch.nn.Parameter(torch.tensor([1.0, 2.0]))
+        for value in (float('nan'), float('inf'), -float('inf')):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, 'Loss must be finite'):
+                    audit_stage1_gradients(p.sum(), p[0] * value,
+                                           p.square().sum(), [p])
+        self.assertIsNone(p.grad)
+
+    def test_finite_ot_loss_with_infinite_gradient_is_rejected(self):
+        p = torch.nn.Parameter(torch.tensor([1.0, 2.0]))
+        # sqrt(0) is finite, but its derivative is infinite.
+        with self.assertRaisesRegex(ValueError, 'Loss gradient must be finite'):
+            audit_stage1_gradients(p.sum(), (p[0] - 1).sqrt(),
+                                   p.square().sum(), [p])
+        self.assertIsNone(p.grad)
+
+
 if __name__ == '__main__':
     unittest.main()
