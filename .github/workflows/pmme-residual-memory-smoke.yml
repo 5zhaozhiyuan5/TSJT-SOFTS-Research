@@ -1,13 +1,16 @@
-name: PMME residual-memory smoke tests
+name: PMME RAFT Stage-II smoke tests
 
 on:
   push:
     branches: [main]
     paths:
       - "datasets.py"
+      - "model/Meta_Models/PMME.py"
       - "model/Meta_Models/PMME_2ndStage.py"
-      - "model/Meta_Models/residual_memory.py"
-      - "tests/test_residual_memory.py"
+      - "model/Meta_Models/raft_cross_city.py"
+      - "tests/test_raft_cross_city.py"
+      - "tests/test_pmme_raft_stage2_integration.py"
+      - "train_DA_OT.py"
       - "train_one_OT-*.sh"
       - "PMME.sh"
       - ".github/workflows/pmme-residual-memory-smoke.yml"
@@ -15,25 +18,27 @@ on:
     paths:
       - "datasets.py"
       - "model/Meta_Models/PMME_2ndStage.py"
-      - "model/Meta_Models/residual_memory.py"
-      - "tests/test_residual_memory.py"
+      - "model/Meta_Models/raft_cross_city.py"
+      - "tests/test_raft_cross_city.py"
+      - "tests/test_pmme_raft_stage2_integration.py"
+      - "train_DA_OT.py"
       - "train_one_OT-*.sh"
       - "PMME.sh"
       - ".github/workflows/pmme-residual-memory-smoke.yml"
 
 jobs:
-  residual-memory-smoke:
+  raft-stage2-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install CPU PyTorch
-        run: python -m pip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+      - name: Install CPU test dependencies
+        run: python -m pip install torch --extra-index-url https://download.pytorch.org/whl/cpu && python -m pip install numpy scikit-learn gpytorch geomloss tqdm pyyaml torch-geometric einops
       - name: Compile changed Python files
-        run: python -m py_compile datasets.py model/Meta_Models/PMME_2ndStage.py model/Meta_Models/residual_memory.py train_DA_OT.py tests/test_residual_memory.py
-      - name: Check PMME launch scripts
+        run: python -m py_compile datasets.py model/Meta_Models/PMME.py model/Meta_Models/PMME_2ndStage.py model/Meta_Models/raft_cross_city.py train_DA_OT.py tests/test_raft_cross_city.py tests/test_pmme_raft_stage2_integration.py tests/test_pmme_raft_stage2_integration.py
+      - name: Check PMME launch scripts and source-only data split
         run: |
           bash -n PMME.sh train_one_OT-pems.sh train_one_OT-chengdu.sh train_one_OT-metr.sh train_one_OT-shenzhen.sh
           grep -Fq 'add_target=False' train_DA_OT.py || { echo "Source dataset must exclude the target city"; exit 1; }
@@ -41,5 +46,7 @@ jobs:
             echo "Found unsupported --config_file option; train_DA_OT.py expects --config_filename"
             exit 1
           fi
-      - name: Run residual-memory smoke tests
-        run: python tests/test_residual_memory.py
+      - name: Run RAFT cross-city adapter smoke tests
+        run: python tests/test_raft_cross_city.py
+      - name: Run PMME Stage-II integration smoke tests
+        run: python tests/test_pmme_raft_stage2_integration.py

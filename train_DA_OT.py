@@ -301,13 +301,18 @@ if __name__ == '__main__':
         new_state.update(filtered)
         
         rep_model.model.load_state_dict(new_state)
-    
-        testing_score = rep_model.test_evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
-        indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35] 
-        current_testing_score = [testing_score[i] for i in indices] 
-        print('current_testing_score', current_testing_score) 
-        print('sum(current_testing_score)',sum(current_testing_score))
-    
+
+        # Build the RAFT retrieval bank once from source-city windows only.
+        # The target city is explicitly excluded from the bank.
+        bank_entries, bank_city_counts = rep_model.model.build_retrieval_bank(source_dataset)
+        log_verbose(
+            args,
+            f"[Stage-II][RAFT] source bank entries={bank_entries}; "
+            f"per-city counts={bank_city_counts}; target={args.test_dataset} excluded."
+        )
+
+        # Do not inspect the held-out test set before Stage-II adaptation.
+        # The Stage-I-only baseline was already measured above.
         print()
         print('End ckpt check!!!!!')
         print()
@@ -328,78 +333,71 @@ if __name__ == '__main__':
         yaml.dump([dict(vars(args)), config], open(os.path.join(args.save_dir, "config.yaml"), "w"))
         
         for i in range(task_args['source']['finetune_epochs']):
-            length = source_dataset.__len__()
-            # length=40
-            if i%25==0:
-                log_verbose(args,'----------------------')
+            if i % 25 == 0:
+                log_verbose(args, '----------------------')
             time_1 = time.time()
-            
-            data = []
-            matrix = []
-            idx = 0
-            #a = time.time()
-            current_shape = set()
-    
-            data_i, A = finetune_dataset[idx] 
-            
-            data.append(data_i)
-            matrix.append(A)
-            current_shape.add(A.shape[1])
-            
-            for idx in range(args.target_days):
-                while(True):
-                    data_i, A = source_dataset[idx] 
-                    if(A.shape[1]) not in current_shape:
-                        current_shape.add(A.shape[1])
-                        # print('true for read') 
-                        break
-                # print('use', A.shape)
-                data.append(data_i)
-                matrix.append(A)
-                idx+=1
-            #b = time.time()
-            if True:
-                model_loss ,mse_loss, rmse_loss, mae_loss, mape_loss = rep_model.meta_train_revise(data, matrix, i)
-    
-                
-                if i%25==0:
-                    log_verbose(args,'Epochs {}/{}'.format(i,task_args['source']['train_epochs']))
-                    log_verbose(args,'in meta-training   Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, MAPE: {:.5f}, reconstruction Loss : {:.5f}.'.format(mse_loss, rmse_loss, mae_loss,mape_loss,model_loss))
-                log_verbose(args,"This epoch cost {:.3}s.".format(time.time() - time_1))
-                
-                # if((i+1)%50==0):
-                if((i+1)%100==0)or i==0:
-                    state = {
-                        'epoch': i,  
-                        'model_state_dict': rep_model.state_dict(),  
-                        'optimizer_state_dict': rep_model.main_optim.state_dict(),  
-                    }
-                    print('epoch:',i)
-                    validation_score, testing_score = rep_model.evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
-                    print('finetune_dataset[0][1].shape[1]', finetune_dataset[0][1].shape[1])
-                    #print('validation_score', validation_score)
-                    if i >= 0: #1000:
-                        indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35] 
-                        current_validation_score = [validation_score[i] for i in indices]  
-    
-                        current_testing_score = [testing_score[i] for i in indices]
-                        
-                        print('sum(current_validation_score),sum(best_validation_score)',sum(current_validation_score),sum(best_validation_score))
-                        #print('sum(current_testing_score),sum(best_testing_score)',sum(current_testing_score),sum(best_testing_score))
-                        if sum(current_testing_score)<sum(best_testing_score):
-                            best_testing_score = current_testing_score  
-                        
-                        if sum(current_validation_score)<sum(best_validation_score):
-                            torch.save(state, f"l2_{args.test_dataset}_{args.model_name}_seed{seed}.pth")  # Keep Stage-I checkpoint intact.
-                            best_validation_score = current_validation_score
-                            best_epoch = i
-                            print(f'epoch:{i} best!')
-                        else:
-                            print('not_best')
-                            #if (i-best_epoch)>=1000:
-                            #    print('No better epoch for over 1000 epochs!!!')
-                            #    break
-                    
+
+            # Adapt the retrieval/fusion adapter using every target support batch.
+            # The source-only RAFT bank was already built once above.
+            epoch_stats = []
+            for target_batch_index in range(len(finetune_dataset)):
+                target_data, target_graph = finetune_dataset[target_batch_index]
+                stats = rep_model.meta_train_revise(
+                    target_data, target_graph, i, target=True
+                )
+                epoch_stats.append(stats)
+
+            if not epoch_stats:
+                raise RuntimeError("The 3-day target support set produced no training batches.")
+
+            model_loss, mse_loss, rmse_loss, mae_loss, mape_loss = [
+                float(np.mean([batch_stats[j] for batch_stats in epoch_stats]))
+                for j in range(5)
+            ]
+
+            if i % 25 == 0:
+                log_verbose(args, 'Epochs {}/{}'.format(i, task_args['source']['finetune_epochs']))
+                log_verbose(
+                    args,
+                    'Stage-II RAFT target adaptation '
+                    'Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, '
+                    'MAPE: {:.5f}, loss : {:.5f}.'.format(
+                        mse_loss, rmse_loss, mae_loss, mape_loss, model_loss
+                    )
+                )
+            log_verbose(args, "This epoch cost {:.3}s.".format(time.time() - time_1))
+
+            # Save progress without using the target support set as a validation
+            # set or repeatedly inspecting the held-out test set.
+            if ((i + 1) % 100 == 0) or i == 0:
+                state = {
+                    'epoch': i,
+                    'model_state_dict': rep_model.state_dict(),
+                    'optimizer_state_dict': rep_model.main_optim.state_dict(),
+                }
+                torch.save(state, f"l2_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
+                print(f"[Stage-II][RAFT] checkpoint saved at epoch {i}")
+
+        # This protocol has no target validation split: all three target days
+        # are support data. Save the final adapter and evaluate the held-out
+        # target test period once, after adaptation is complete.
+        final_state = {
+            'epoch': task_args['source']['finetune_epochs'] - 1,
+            'model_state_dict': rep_model.state_dict(),
+            'optimizer_state_dict': rep_model.main_optim.state_dict(),
+        }
+        torch.save(final_state, f"l2_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
+
+        final_testing_score = rep_model.test_evaluation(
+            finetune_dataset,
+            test_dataset,
+            task_args['source']['finetune_epochs'],
+        )
+        indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]
+        selected_test_scores = [final_testing_score[j] for j in indices]
+        print("[Stage-II][RAFT] final held-out test MAE:", selected_test_scores)
+        print("[Stage-II][RAFT] sum(final held-out test MAE):", sum(selected_test_scores))
+
         print('2ndStage Source training Ending!!!')
     # del rep_model
     # torch.cuda.empty_cache()
