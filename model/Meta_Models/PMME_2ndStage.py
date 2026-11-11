@@ -50,6 +50,7 @@ class PatchFSL(nn.Module):
         super(PatchFSL,self).__init__()
 
         self.data_args, self.model_args, self.task_args, self.memory_size_args, self.temperature_args, self.model_name, self.PatchFSL_cfg = data_args, model_args, task_args, memory_size_args, temperature_args, model_name, PatchFSL_cfg
+        self.args = args
         
         num_model = 1
         #########
