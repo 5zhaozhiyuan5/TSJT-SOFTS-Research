@@ -120,8 +120,22 @@ This replacement does not change the PMME dataset pipeline. In the current `data
 
 ## Tests and what they do not prove
 
-Run: **python -m unittest tests.test_raft_cross_city -v**
+Run the two smoke suites from the repository root:
 
-The tests check source-only bank construction, per-city balancing, target-city exclusion, 36-step and 12-step output shapes, identity initialization, gradients, frozen-backbone parameter selection, and checkpoint buffer restoration.
+- **python tests/test_raft_cross_city.py**
+- **python tests/test_pmme_raft_stage2_integration.py**
 
-Passing these tests establishes that the module runs and obeys the intended data-flow constraints. It does **not** establish a traffic-forecasting performance improvement. That requires running the real METR-LA / PEMS-BAY / Chengdu / Shenzhen experiment with the same Stage-I checkpoint, seed, data split, and evaluation script, and comparing Stage-I-only vs. old residual-memory Stage-II vs. RAFT Stage-II.
+The adapter suite checks source-only bank construction, per-city balancing, target-city exclusion, 36-step and 12-step output shapes, identity initialization, gradients, frozen-backbone parameter selection, and checkpoint buffer restoration.
+
+The Stage-II integration suite goes through the repository's actual `traffic_dataset` preprocessing, constructs a `PMME_2ndStage.STRep` with the real SOFTS backbone, builds a source-only bank, executes one Stage-II forward/backward/optimizer step, verifies finite losses and an actual fusion-parameter update, and verifies that SOFTS weights remain unchanged. It uses small generated arrays, not the real four-city data.
+
+### Runtime defects found and fixed during integration
+
+1. `PatchFSL.build_retrieval_bank()` read `self.args.test_dataset`, but `PatchFSL.__init__()` had not stored `self.args`. The constructor now retains the arguments, and the integration test covers this path.
+2. Both `PMME.py` and `PMME_2ndStage.py` imported `SamplesLoss` from `geomloss.samples_loss`, which failed with the installed GeomLoss package. Both now use the supported public import `from geomloss import SamplesLoss`.
+3. The Stage-II runner evaluated the held-out target test set again immediately after building the retrieval bank but before adaptation. That redundant pre-adaptation test call was removed; the Stage-I-only baseline measurement remains separate, and the Stage-II held-out test is evaluated after adaptation.
+4. CI now installs the runtime dependencies and imports both PMME modules through the integration test rather than relying on `py_compile` alone.
+
+**Verified CI run:** [GitHub Actions run](https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/43031478916), commit `2cae7bdedf635305b220b5131db4a085ebfcf725`. It passed Python compilation, shell/source-split checks, 6 adapter tests, and 2 production-path integration tests. The integration log includes a completed Stage-II step with finite loss and non-zero adapter gradient.
+
+Passing these tests establishes that the adapter and a synthetic end-to-end Stage-II training step run. It does **not** establish that the full launch script completes with the real datasets/checkpoints, or that target-city MAE/RMSE improves. The repository does not contain the real METR-LA / PEMS-BAY / Chengdu / Shenzhen arrays or the Stage-I checkpoint. A real benchmark must still compare Stage-I-only vs. old residual-memory Stage-II vs. RAFT Stage-II using the same Stage-I checkpoint, seed, data split, and evaluation script.
