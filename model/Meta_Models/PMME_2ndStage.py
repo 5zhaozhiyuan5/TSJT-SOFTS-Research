@@ -17,7 +17,7 @@ sys.path.append('../../')
 from utils import *
 import datetime
 
-from geomloss.samples_loss import SamplesLoss 
+from geomloss import SamplesLoss 
 from torch.utils.data import TensorDataset, DataLoader
 #from gpytorch.likelihoods import BernoulliLikelihood
 from gpytorch.mlls.variational_elbo import VariationalELBO
