@@ -2,7 +2,6 @@ import os
 import sys
 import unittest
 
-import numpy as np
 import torch
 import torch.nn as nn
 
@@ -47,8 +46,8 @@ class RaftCrossCityAdapterTest(unittest.TestCase):
         return self.adapter.build_memory(
             {"source_a": x_a, "source_b": x_b},
             {"source_a": y_a, "source_b": y_b},
-            {"source_a": np.array([60.0]), "source_b": np.array([30.0])},
-            {"source_a": np.array([10.0]), "source_b": np.array([8.0])},
+            {"source_a": [60.0], "source_b": [30.0]},
+            {"source_a": [10.0], "source_b": [8.0]},
             city_names=["source_a", "source_b"],
             target_city="target",
         )
@@ -77,8 +76,8 @@ class RaftCrossCityAdapterTest(unittest.TestCase):
         fused, retrieved = self.adapter(
             history,
             base,
-            means=np.array([55.0]),
-            stds=np.array([11.0]),
+            means=[55.0],
+            stds=[11.0],
         )
         self.assertEqual(tuple(fused.shape), (2, 4, 36))
         self.assertEqual(tuple(retrieved.shape), (2, 4, 36))
