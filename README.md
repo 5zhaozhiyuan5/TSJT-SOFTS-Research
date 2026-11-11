@@ -11,10 +11,13 @@ The Stage-II residual-memory implementation has been replaced on the `stage2-raf
 - Adapter implementation: [model/Meta_Models/raft_cross_city.py](model/Meta_Models/raft_cross_city.py)
 - Smoke tests: [tests/test_raft_cross_city.py](tests/test_raft_cross_city.py)
 
-Run the adapter tests with:
+Run both smoke suites from the repository root:
 
 ```bash
 python tests/test_raft_cross_city.py
+python tests/test_pmme_raft_stage2_integration.py
 ```
 
-These tests validate module behavior and data-flow constraints; they do not replace the full four-city forecasting benchmark.
+The second suite exercises the real dataset preprocessing code, the SOFTS forecasting backbone, source-only memory construction, and one Stage-II optimizer step using generated synthetic arrays. It is an integration smoke test, not a real four-city forecasting benchmark. Full real-data training still requires the four datasets and the matching Stage-I checkpoint.
+
+See [the Stage-II runtime review](docs/stage2_raft_replacement.md#tests-and-what-they-do-not-prove) for the bugs found and CI evidence.
