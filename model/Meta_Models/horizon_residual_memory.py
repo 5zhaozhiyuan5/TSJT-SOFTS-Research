@@ -153,11 +153,11 @@ class HorizonConditionedResidualMemory(nn.Module):
             query = self.Wq(flat + self.horizon_embeddings[band])
             head = self.bias_heads[band]
 
-            def retrieve_chunk(query_chunk, key_matrix, value_matrix):
+            def retrieve_chunk(query_chunk, key_matrix, value_matrix, active_head=head):
                 logits = torch.matmul(query_chunk, key_matrix.transpose(0, 1)) * scale
                 attention = torch.softmax(logits, dim=-1)
                 retrieved = torch.matmul(attention, value_matrix)
-                correction = head(retrieved)
+                correction = active_head(retrieved)
                 entropy = -(
                     attention.clamp_min(1e-12) * attention.clamp_min(1e-12).log()
                 ).sum(dim=-1)
