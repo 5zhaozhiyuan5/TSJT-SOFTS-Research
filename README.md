@@ -14,7 +14,7 @@ The Stage-II residual-memory implementation has been replaced on the `stage2-raf
 Run the adapter tests with:
 
 ```bash
-python -m unittest tests.test_raft_cross_city -v
+python tests/test_raft_cross_city.py
 ```
 
 These tests validate module behavior and data-flow constraints; they do not replace the full four-city forecasting benchmark.
