@@ -8,7 +8,10 @@ import torch
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
-from model.Meta_Models.residual_memory import StationarityAwareResidualMemory
+from model.Meta_Models.residual_memory import (
+    StationarityAwareResidualMemory,
+    should_skip_stage2_optimizer_step,
+)
 
 
 class ResidualMemorySmokeTest(unittest.TestCase):
@@ -42,6 +45,14 @@ class ResidualMemorySmokeTest(unittest.TestCase):
         for city in ("source_a", "source_b", "source_c"):
             data, base = self.make_batch(city, [0, 1, 2, 3])
             self.memory.update(data, base)
+
+    def test_stage2_empty_bank_warmup_guard(self):
+        # First batch starts with an empty bank; after source insertion, skip
+        # its graph-free backward once. Later batches must train normally.
+        self.assertTrue(should_skip_stage2_optimizer_step(True, 1))
+        self.assertFalse(should_skip_stage2_optimizer_step(False, 1))
+        with self.assertRaisesRegex(RuntimeError, "warm-up failed"):
+            should_skip_stage2_optimizer_step(True, 0)
 
     def test_source_only_balanced_bank(self):
         self.fill_source_memory()
