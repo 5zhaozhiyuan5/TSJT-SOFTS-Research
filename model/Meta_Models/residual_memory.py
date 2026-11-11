@@ -3,6 +3,23 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def should_skip_stage2_optimizer_step(memory_was_empty, memory_entries):
+    """Skip the first Stage-II optimizer step while the source residual bank warms up.
+
+    The first forward pass is computed with an empty bank, so its detached
+    backbone output has no trainable path. Source residuals are inserted after
+    that forward pass; the already-computed loss must not be backpropagated.
+    """
+    if not memory_was_empty:
+        return False
+    if int(memory_entries) <= 0:
+        raise RuntimeError(
+            "Stage-II residual-memory warm-up failed: no source-city residuals "
+            "were inserted. Check source_city_names, data_name, and source batches."
+        )
+    return True
+
+
 class StationarityAwareResidualMemory(nn.Module):
     """
     Cross-city residual memory with SARAF-inspired retrieval.
