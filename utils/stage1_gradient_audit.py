@@ -16,6 +16,8 @@ def _flatten(loss, params, retain_graph=True):
         raise TypeError('Loss must be a Tensor, None, or numeric zero')
     if loss.numel() != 1:
         raise ValueError('Loss must be scalar')
+    if not torch.isfinite(loss.detach()).all().item():
+        raise ValueError('Loss must be finite')
     if not loss.requires_grad:
         if torch.count_nonzero(loss.detach()).item() == 0:
             return torch.zeros(sum(p.numel() for p in params), device=params[0].device,
@@ -23,8 +25,11 @@ def _flatten(loss, params, retain_graph=True):
         raise ValueError('Nonzero loss must require gradients')
     grads = torch.autograd.grad(loss, params, retain_graph=retain_graph,
                                 allow_unused=True)
-    return torch.cat([(torch.zeros_like(p) if g is None else g).detach().reshape(-1)
-                      for p, g in zip(params, grads)])
+    flattened = torch.cat([(torch.zeros_like(p) if g is None else g).detach().reshape(-1)
+                           for p, g in zip(params, grads)])
+    if not torch.isfinite(flattened).all().item():
+        raise ValueError('Loss gradient must be finite')
+    return flattened
 
 
 def _cos(a, b, eps=1e-12):
