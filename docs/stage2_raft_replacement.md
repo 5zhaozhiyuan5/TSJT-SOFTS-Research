@@ -1,5 +1,8 @@
 # PMME Stage-II replacement: RAFT-style cross-city multi-scale retrieval
 
+> **Superseded on 2026-11-12.** This document records the previous RAFT experiment for reproducibility. It is no longer the active Stage-II implementation. The current model is the PMME-native horizon-conditioned residual memory documented in [stage2_horizon_memory.md](stage2_horizon_memory.md). The RAFT experiment was retired after the user-reported results failed to improve MAE across the four evaluation horizons.
+
+
 ## Decision
 
 The previous Stage-II residual-memory implementation is replaced by a cross-city adaptation of **RAFT (Retrieval Augmented Time Series Forecasting, ICML 2025)**. The PMME Stage-I implementation and the SOFTS forecasting backbone remain unchanged.
