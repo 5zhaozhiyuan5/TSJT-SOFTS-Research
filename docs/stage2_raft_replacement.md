@@ -224,3 +224,11 @@ The hypothesis is falsified if, under the same Stage-I checkpoint, seed, data sp
 The runner previously computed Stage-I-only test metrics before Stage-II training. Although those metrics did not feed the optimizer, this made it too easy to inspect held-out target results during adaptation. The runner now delays constructing the explicit `test_dataset` and all `test_evaluation` calls until after the Stage-II loop. It then reports both RAFT-Stage-II and Stage-I-only metrics on the same held-out split, without selecting checkpoints or epochs from either result.
 
 **Remaining preprocessing caveat:** `traffic_dataset` still computes target-city global mean/std before truncating to the three-day support period. This means the existing PMME Stage-I checkpoint and current Stage-II comparison inherit full-series target normalization statistics. Fixing that requires changing the normalization protocol and retraining Stage-I; this iteration deliberately preserves the existing checkpoint-compatible preprocessing.
+
+### Latest main verification (2026-11-11)
+
+- **Commit:** `eeedbd857fd120e98b236e835321a8f3617d8bbb`
+- **GitHub Actions:** https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/43053686986
+- **Result:** passed Python compilation, launch-script/source-only checks, 6 adapter tests, and 3 Stage-II integration/protocol tests.
+- The integration run exercised the actual `traffic_dataset` preprocessing and SOFTS Stage-II code with small generated arrays, built a source-only bank with 12 entries, and completed one finite optimizer step. The Stage-II gate received gradients while SOFTS weights remained unchanged.
+- This is still a CPU synthetic smoke test. It does not establish a real four-city MAE/RMSE improvement or a full 300-epoch run.
