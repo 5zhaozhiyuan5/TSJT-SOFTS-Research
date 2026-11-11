@@ -16,7 +16,7 @@ from utils import *
 import datetime
 from block import *
 
-from geomloss.samples_loss import SamplesLoss 
+from geomloss import SamplesLoss 
 from torch.utils.data import TensorDataset, DataLoader
 from gpytorch.mlls.variational_elbo import VariationalELBO
 from gpytorch.likelihoods import BernoulliLikelihood, LaplaceLikelihood
