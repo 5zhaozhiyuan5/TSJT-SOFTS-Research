@@ -27,14 +27,14 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 try:
-    from .raft_cross_city import (
-        MultiScaleRetrievalAdapter,
-        configure_raft_stage2_parameters,
+    from .horizon_residual_memory import (
+        HorizonConditionedResidualMemory,
+        configure_horizon_stage2_parameters,
     )
 except ImportError:
-    from raft_cross_city import (
-        MultiScaleRetrievalAdapter,
-        configure_raft_stage2_parameters,
+    from horizon_residual_memory import (
+        HorizonConditionedResidualMemory,
+        configure_horizon_stage2_parameters,
     )
 
 def log_verbose(args, msg):
@@ -43,113 +43,123 @@ def log_verbose(args, msg):
         f.write(str(msg) + "\n")
 
 class PatchFSL(nn.Module):
-    """
-    Full PatchFSL Model
-    """
-    def __init__(self, data_args, model_args, task_args, memory_size_args, temperature_args, model_name, PatchFSL_cfg, args, model='GWN'):
-        super(PatchFSL,self).__init__()
+    """PMME Stage-II wrapper with a frozen Stage-I forecasting backbone."""
 
-        self.data_args, self.model_args, self.task_args, self.memory_size_args, self.temperature_args, self.model_name, self.PatchFSL_cfg = data_args, model_args, task_args, memory_size_args, temperature_args, model_name, PatchFSL_cfg
+    def __init__(self, data_args, model_args, task_args, memory_size_args,
+                 temperature_args, model_name, PatchFSL_cfg, args, model='GWN'):
+        super(PatchFSL, self).__init__()
+        self.data_args = data_args
+        self.model_args = model_args
+        self.task_args = task_args
+        self.memory_size_args = int(memory_size_args)
+        self.temperature_args = temperature_args
+        self.model_name = model_name
+        self.PatchFSL_cfg = PatchFSL_cfg
         self.args = args
-        
-        num_model = 1
-        #########
-        
+
         if model_name == 'SOFTS':
             self.forecasting_model = softs()
-        if model_name == 'iTransformer':
+        elif model_name == 'iTransformer':
             self.forecasting_model = iTransformer()
-        elif model_name in ['MLP']:  
+        elif model_name == 'MLP':
             self.forecasting_model = MLP(288, 36)
-        
-        self.raft_adapter = None
+        else:
+            raise ValueError(f"Unsupported PMME forecasting model: {model_name}")
+
+        self.horizon_memory = None
         if self.temperature_args > 0 and self.memory_size_args > 0:
-            source_city_names = [
-                name for name in data_args.get('data_keys', [])
-                if name != getattr(args, 'test_dataset', None)
-            ]
-            self.raft_adapter = MultiScaleRetrievalAdapter(
-                seq_len=288,
-                pred_len=task_args['source']['pred_num'],
-                max_memory_size=memory_size_args,
-                source_city_names=source_city_names,
-                periods=(4, 2, 1),
-                topm=20,
-                temperature=0.1,
+            self.horizon_memory = HorizonConditionedResidualMemory(
+                d_model=128,
+                pred_len=int(task_args['source']['pred_num']),
+                memory_size=self.memory_size_args,
+                num_bands=3,
+                query_chunk=getattr(args, 'stage2_query_chunk', 256),
             )
-            
-    
+
+    @torch.no_grad()
+    def initialize_horizon_memory(self, target_support_dataset, seed=1):
+        """Initialize memory from target-support SOFTS representations only.
+
+        This pass reads support inputs to obtain representations. It does not
+        use target labels to initialize slots and does not construct/read the
+        held-out target test split.
+        """
+        if self.horizon_memory is None:
+            raise RuntimeError("Horizon memory is disabled; set MemSize > 0 and temperature > 0.")
+
+        feature_parts = []
+        for index in range(len(target_support_dataset)):
+            data_i, _ = target_support_dataset[index]
+            _, _, representation, _, _, _, _ = self(
+                data_i, stage='test', return_base=True
+            )
+            feature_parts.append(representation.reshape(-1, representation.shape[-1]))
+
+        if not feature_parts:
+            raise RuntimeError("Target support dataset produced no representations.")
+        features = torch.cat(feature_parts, dim=0)
+        count = self.horizon_memory.initialize_from_features(features, seed=seed)
+        return count
+
     def forward(self, data_i, stage='train', return_base=False):
-        # Stage-II keeps the SOFTS forecasting backbone frozen and deterministic.
-        if self.raft_adapter is not None:
+        # STAR in SOFTS has train/eval-dependent behavior. Keep Stage-I fixed
+        # and deterministic while adapting only the Stage-II memory.
+        if self.horizon_memory is not None:
             self.forecasting_model.eval()
             if stage == 'train':
-                self.raft_adapter.train()
+                self.horizon_memory.train()
             else:
-                self.raft_adapter.eval()
+                self.horizon_memory.eval()
         elif stage == 'train':
             self.forecasting_model.train()
         else:
             self.forecasting_model.eval()
 
         x, y, means, stds = data_i.x, data_i.y, data_i.means, data_i.stds
-        x = torch.as_tensor(x, dtype=torch.float32, device=self.PatchFSL_cfg['device'])
-        y = torch.as_tensor(y, dtype=torch.float32, device=self.PatchFSL_cfg['device'])
-        means = torch.as_tensor(means, dtype=torch.float32, device=self.PatchFSL_cfg['device'])
-        stds = torch.as_tensor(stds, dtype=torch.float32, device=self.PatchFSL_cfg['device'])
+        device = self.PatchFSL_cfg['device']
+        x = torch.as_tensor(x, dtype=torch.float32, device=device)
+        y = torch.as_tensor(y, dtype=torch.float32, device=device)
+        means = torch.as_tensor(means, dtype=torch.float32, device=device)
+        stds = torch.as_tensor(stds, dtype=torch.float32, device=device)
 
-        # Input layout: [B,N,L,2] -> globally standardized speed [B,N,L].
+        # Preserve the PMME/SOFTS RevIN preprocessing exactly.
         x = x.permute(0, 1, 3, 2)
         x = x[:, :, 0, -288:]
-        history_for_retrieval = x.detach()
+        eps = 1e-9
+        revin_mean = x.mean(dim=2, keepdim=True).detach()
+        revin_var = x.var(dim=2, keepdim=True, unbiased=False).detach()
+        revin_std = torch.sqrt(revin_var + eps)
+        x_normalized = (x - revin_mean) / revin_std
+        x_normalized = x_normalized.permute(0, 2, 1)
+        if self.model_name == 'MLP':
+            x_normalized = x_normalized.permute(0, 2, 1)
 
-        # Keep the original PMME/SOFTS RevIN path unchanged.
-        self.eps = 1e-9
-        self.RevIn_mean = x.mean(dim=2, keepdim=True).detach()
-        var = x.var(dim=2, keepdim=True, unbiased=False).detach()
-        self.RevIn_std = torch.sqrt(var + self.eps)
-        x = (x - self.RevIn_mean) / self.RevIn_std
+        representation, base_normalized = self.forecasting_model(x_normalized)
+        representation = representation.detach()
+        base_normalized = base_normalized.detach()
 
-        x = x.permute(0, 2, 1)
-        if self.model_name in ['MLP']:
-            x = x.permute(0, 2, 1)
-        rep, out = self.forecasting_model(x)
+        base_revin = base_normalized * revin_std + revin_mean
+        base_out = unnorm(base_revin, means, stds)
 
-        # Stage-II must not backpropagate into the pretrained forecaster.
-        out = out.detach()
-        rep = rep.detach()
-        base_out = out * self.RevIn_std + self.RevIn_mean
-        base_out = unnorm(base_out, means, stds)
-
-        retrieved_out = None
-        retrieval_gate = None
-        if self.raft_adapter is not None:
-            out, retrieved_out, retrieval_gate = self.raft_adapter(
-                history_for_retrieval, base_out, means, stds
-            )
+        correction = None
+        attention_entropy = None
+        if self.horizon_memory is not None:
+            correction, attention_entropy = self.horizon_memory(representation)
+            corrected_normalized = base_normalized + correction
+            corrected_revin = corrected_normalized * revin_std + revin_mean
+            out = unnorm(corrected_revin, means, stds)
         else:
             out = base_out
 
         y_unscale = norm(y, means, stds)
-        y_unscale = (y_unscale - self.RevIn_mean) / self.RevIn_std
+        y_unscale = (y_unscale - revin_mean) / revin_std
 
         if return_base:
-            return out, y, rep, y_unscale, retrieved_out, base_out, retrieval_gate
-        return out, y, rep, y_unscale, retrieved_out
-
-    def build_retrieval_bank(self, source_dataset):
-        if self.raft_adapter is None:
-            raise RuntimeError("RAFT adapter is disabled; set MemSize > 0 and temperature_args > 0.")
-        target_city = getattr(self.args, 'test_dataset', None)
-        count = self.raft_adapter.build_memory(
-            source_dataset.x_list,
-            source_dataset.y_list,
-            source_dataset.means_list,
-            source_dataset.stds_list,
-            city_names=source_dataset.data_list,
-            target_city=target_city,
-        )
-        return count, self.raft_adapter.city_counts()
+            return (
+                out, y, representation, y_unscale,
+                correction, base_out, attention_entropy,
+            )
+        return out, y, representation, y_unscale, correction
 
 class STRep(nn.Module):
     """
@@ -182,10 +192,10 @@ class STRep(nn.Module):
         log_verbose(args,"model params: {}".format(count_parameters(self.model)))
 
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
-        if self.model.raft_adapter is not None:
-            # Only the RAFT scale projections and reliability-aware horizon gate
-            # are adapted. The pretrained SOFTS backbone stays frozen.
-            self.trainable_params = configure_raft_stage2_parameters(self.model)
+        if self.model.horizon_memory is not None:
+            # Only the three horizon-conditioned memory queries/generators and
+            # shared memory are trainable; all Stage-I SOFTS weights are frozen.
+            self.trainable_params = configure_horizon_stage2_parameters(self.model)
             self.main_optim = optim.AdamW(
                 self.trainable_params, lr=self.lr, weight_decay=1e-4
             )
@@ -196,60 +206,61 @@ class STRep(nn.Module):
             )
     
     def meta_train_revise(self, data, matrix, epoch, target=False):
-        """Few-shot target adaptation of the RAFT retrieval/fusion adapter.
-
-        The source-only bank is built once before Stage-II training. This
-        optimizer step uses all 46 target windows (the configured 3-day support
-        set); it does not resample source batches or apply PCGrad.
-        """
-        if self.model.raft_adapter is None:
+        """Few-shot target adaptation of the horizon-conditioned residual memory."""
+        memory = self.model.horizon_memory
+        if memory is None:
+            raise RuntimeError("Stage-II requires HorizonConditionedResidualMemory.")
+        if not bool(memory.memory_initialized.item()):
             raise RuntimeError(
-                "Stage-II requires RAFT retrieval; check MemSize > 0 and temperature_args > 0."
-            )
-        if self.model.raft_adapter.num_entries == 0:
-            raise RuntimeError(
-                "RAFT source bank is empty. Call model.build_retrieval_bank(source_dataset) "
-                "before Stage-II training."
+                "Horizon memory has not been initialized. Call "
+                "model.initialize_horizon_memory(target_support_dataset) first."
             )
 
         data_i = data[0] if isinstance(data, (list, tuple)) else data
         self.model.train()
         self.main_optim.zero_grad(set_to_none=True)
 
-        out, y, _, _, retrieved_out, base_out, retrieval_gate = self.model(
+        out, y, _, _, correction, base_out, attention_entropy = self.model(
             data_i, stage='train', return_base=True
         )
         forecast_loss = self.loss_criterion(out, y)
-        # Small shrinkage penalty lets the gate prefer the frozen PMME forecast
-        # unless source retrieval contributes useful evidence on target support.
-        loss = forecast_loss + 1e-3 * retrieval_gate.mean()
-        if not torch.isfinite(loss):
-            raise RuntimeError("Non-finite Stage-II RAFT adaptation loss.")
+        if not torch.isfinite(forecast_loss):
+            raise RuntimeError("Non-finite PMME Stage-II horizon-memory loss.")
 
-        loss.backward()
+        forecast_loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self.trainable_params, max_norm=1.0)
         self.main_optim.step()
 
         MSE, RMSE, MAE, MAPE = calc_metric(out.detach(), y.detach())
         if epoch % 25 == 0:
-            retrieval_mae = torch.mean(torch.abs(retrieved_out.detach() - y.detach()))
-            base_mae = torch.mean(torch.abs(base_out.detach() - y.detach()))
-            gate_parts = torch.tensor_split(retrieval_gate.detach(), 3, dim=-1)
-            gate_short, gate_mid, gate_long = [
-                float(part.mean().item()) for part in gate_parts
-            ]
+            pred_len = out.shape[-1]
+            band_width = pred_len // 3
+            band_stats = []
+            for band in range(3):
+                left = band * band_width
+                right = (band + 1) * band_width
+                base_mae = torch.mean(torch.abs(base_out[..., left:right] - y[..., left:right]))
+                final_mae = torch.mean(torch.abs(out[..., left:right] - y[..., left:right]))
+                correction_norm = correction[..., left:right].abs().mean()
+                band_stats.append(
+                    f"{base_mae.item():.4f}->{final_mae.item():.4f}"
+                    f"(d={correction_norm.item():.4f})"
+                )
+            entropy_values = "/".join(
+                f"{value:.3f}" for value in attention_entropy.detach().cpu().tolist()
+            )
             print(
-                f"[Stage-II][RAFT-ReliabilityGate] epoch={epoch} "
-                f"loss={loss.item():.6f} forecast_loss={forecast_loss.item():.6f} "
-                f"base_mae={base_mae.item():.6f} retrieval_mae={retrieval_mae.item():.6f} "
-                f"gate_mean={float(retrieval_gate.detach().mean().item()):.4f} "
-                f"gate_short/mid/long={gate_short:.4f}/{gate_mid:.4f}/{gate_long:.4f} "
+                f"[Stage-II][HorizonMemory] epoch={epoch} "
+                f"loss={forecast_loss.item():.6f} "
+                f"short/mid/long(base->final,|delta|)={' | '.join(band_stats)} "
+                f"attention_entropy={entropy_values} "
                 f"grad_norm={float(grad_norm):.6f} "
-                f"bank_entries={self.model.raft_adapter.num_entries}"
+                f"memory_slots={memory.memory.shape[0]} "
+                f"support_features={int(memory.initialization_feature_count.item())}"
             )
 
         return (
-            loss.detach().cpu().numpy(),
+            forecast_loss.detach().cpu().numpy(),
             MSE.detach().cpu().numpy(),
             RMSE.detach().cpu().numpy(),
             MAE.detach().cpu().numpy(),
