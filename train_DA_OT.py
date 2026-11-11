@@ -371,32 +371,36 @@ if __name__ == '__main__':
                 )
             log_verbose(args, "This epoch cost {:.3}s.".format(time.time() - time_1))
 
+            # Save progress without using the target support set as a validation
+            # set or repeatedly inspecting the held-out test set.
             if ((i + 1) % 100 == 0) or i == 0:
                 state = {
                     'epoch': i,
                     'model_state_dict': rep_model.state_dict(),
                     'optimizer_state_dict': rep_model.main_optim.state_dict(),
                 }
-                print('epoch:', i)
-                validation_score, testing_score = rep_model.evaluation(
-                    finetune_dataset,
-                    test_dataset,
-                    task_args['source']['finetune_epochs'],
-                )
-                indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]
-                current_validation_score = [validation_score[j] for j in indices]
-                current_testing_score = [testing_score[j] for j in indices]
+                torch.save(state, f"l2_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
+                print(f"[Stage-II][RAFT] checkpoint saved at epoch {i}")
 
-                if sum(current_testing_score) < sum(best_testing_score):
-                    best_testing_score = current_testing_score
+        # This protocol has no target validation split: all three target days
+        # are support data. Save the final adapter and evaluate the held-out
+        # target test period once, after adaptation is complete.
+        final_state = {
+            'epoch': task_args['source']['finetune_epochs'] - 1,
+            'model_state_dict': rep_model.state_dict(),
+            'optimizer_state_dict': rep_model.main_optim.state_dict(),
+        }
+        torch.save(final_state, f"l2_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
 
-                if sum(current_validation_score) < sum(best_validation_score):
-                    torch.save(state, f"l2_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
-                    best_validation_score = current_validation_score
-                    best_epoch = i
-                    print(f'epoch:{i} best!')
-                else:
-                    print('not_best')
+        final_testing_score = rep_model.test_evaluation(
+            finetune_dataset,
+            test_dataset,
+            task_args['source']['finetune_epochs'],
+        )
+        indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]
+        selected_test_scores = [final_testing_score[j] for j in indices]
+        print("[Stage-II][RAFT] final held-out test MAE:", selected_test_scores)
+        print("[Stage-II][RAFT] sum(final held-out test MAE):", sum(selected_test_scores))
 
         print('2ndStage Source training Ending!!!')
     # del rep_model
