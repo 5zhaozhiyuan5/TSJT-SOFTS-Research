@@ -11,6 +11,15 @@ on:
       - "train_one_OT-*.sh"
       - "PMME.sh"
       - ".github/workflows/pmme-residual-memory-smoke.yml"
+  pull_request:
+    paths:
+      - "datasets.py"
+      - "model/Meta_Models/PMME_2ndStage.py"
+      - "model/Meta_Models/residual_memory.py"
+      - "tests/test_residual_memory.py"
+      - "train_one_OT-*.sh"
+      - "PMME.sh"
+      - ".github/workflows/pmme-residual-memory-smoke.yml"
 
 jobs:
   residual-memory-smoke:
