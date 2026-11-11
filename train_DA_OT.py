@@ -311,12 +311,8 @@ if __name__ == '__main__':
             f"per-city counts={bank_city_counts}; target={args.test_dataset} excluded."
         )
 
-        testing_score = rep_model.test_evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
-        indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35] 
-        current_testing_score = [testing_score[i] for i in indices] 
-        print('current_testing_score', current_testing_score) 
-        print('sum(current_testing_score)',sum(current_testing_score))
-    
+        # Do not inspect the held-out test set before Stage-II adaptation.
+        # The Stage-I-only baseline was already measured above.
         print()
         print('End ckpt check!!!!!')
         print()
