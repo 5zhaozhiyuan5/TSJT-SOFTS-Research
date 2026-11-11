@@ -27,16 +27,14 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 try:
-    from .residual_memory import (
-        StationarityAwareResidualMemory,
-        should_skip_stage2_optimizer_step,
-        configure_stage2_trainable_parameters,
+    from .raft_cross_city import (
+        MultiScaleRetrievalAdapter,
+        configure_raft_stage2_parameters,
     )
 except ImportError:
-    from residual_memory import (
-        StationarityAwareResidualMemory,
-        should_skip_stage2_optimizer_step,
-        configure_stage2_trainable_parameters,
+    from raft_cross_city import (
+        MultiScaleRetrievalAdapter,
+        configure_raft_stage2_parameters,
     )
 
 def log_verbose(args, msg):
@@ -63,33 +61,31 @@ class PatchFSL(nn.Module):
         elif model_name in ['MLP']:  
             self.forecasting_model = MLP(288, 36)
         
-        self.residual_memory = None
+        self.raft_adapter = None
         if self.temperature_args > 0 and self.memory_size_args > 0:
             source_city_names = [
                 name for name in data_args.get('data_keys', [])
                 if name != getattr(args, 'test_dataset', None)
             ]
-            self.residual_memory = StationarityAwareResidualMemory(
+            self.raft_adapter = MultiScaleRetrievalAdapter(
                 seq_len=288,
-                pred_len=36,
-                d_model=128,
+                pred_len=task_args['source']['pred_num'],
                 max_memory_size=memory_size_args,
                 source_city_names=source_city_names,
-                topk=8,
-                candidate_pool=50,
-                overlap_window=27,
+                periods=(4, 2, 1),
+                topm=20,
+                temperature=0.1,
             )
             
     
     def forward(self, data_i, stage='train', return_base=False):
-        # The forecasting backbone is frozen in Stage-II. Keep it deterministic
-        # when residual memory is enabled (SOFTS STAR has train/eval differences).
-        if self.residual_memory is not None:
+        # Stage-II keeps the SOFTS forecasting backbone frozen and deterministic.
+        if self.raft_adapter is not None:
             self.forecasting_model.eval()
             if stage == 'train':
-                self.residual_memory.train()
+                self.raft_adapter.train()
             else:
-                self.residual_memory.eval()
+                self.raft_adapter.eval()
         elif stage == 'train':
             self.forecasting_model.train()
         else:
@@ -101,32 +97,34 @@ class PatchFSL(nn.Module):
         means = torch.as_tensor(means, dtype=torch.float32, device=self.PatchFSL_cfg['device'])
         stds = torch.as_tensor(stds, dtype=torch.float32, device=self.PatchFSL_cfg['device'])
 
-        # Input layout: [B, N, L, 2] -> speed channel [B, N, L].
+        # Input layout: [B,N,L,2] -> globally standardized speed [B,N,L].
         x = x.permute(0, 1, 3, 2)
         x = x[:, :, 0, -288:]
+        history_for_retrieval = x.detach()
+
+        # Keep the original PMME/SOFTS RevIN path unchanged.
         self.eps = 1e-9
         self.RevIn_mean = x.mean(dim=2, keepdim=True).detach()
         var = x.var(dim=2, keepdim=True, unbiased=False).detach()
         self.RevIn_std = torch.sqrt(var + self.eps)
         x = (x - self.RevIn_mean) / self.RevIn_std
-        history_for_memory = x.detach()
 
         x = x.permute(0, 2, 1)
         if self.model_name in ['MLP']:
             x = x.permute(0, 2, 1)
         rep, out = self.forecasting_model(x)
 
+        # Stage-II must not backpropagate into the pretrained forecaster.
         out = out.detach()
         rep = rep.detach()
         base_out = out * self.RevIn_std + self.RevIn_mean
         base_out = unnorm(base_out, means, stds)
 
-        normed_memory = None
-        if self.residual_memory is not None and self.residual_memory.num_entries > 0:
-            correction, normed_memory = self.residual_memory.retrieve(
-                history_for_memory, rep, data_i
+        retrieved_out = None
+        if self.raft_adapter is not None:
+            out, retrieved_out = self.raft_adapter(
+                history_for_retrieval, base_out, means, stds
             )
-            out = base_out + correction
         else:
             out = base_out
 
@@ -134,12 +132,22 @@ class PatchFSL(nn.Module):
         y_unscale = (y_unscale - self.RevIn_mean) / self.RevIn_std
 
         if return_base:
-            return out, y, rep, y_unscale, normed_memory, base_out
-        return out, y, rep, y_unscale, normed_memory
+            return out, y, rep, y_unscale, retrieved_out, base_out
+        return out, y, rep, y_unscale, retrieved_out
 
-    def update_residual_memory(self, data_i, base_prediction):
-        if self.residual_memory is not None:
-            self.residual_memory.update(data_i, base_prediction)
+    def build_retrieval_bank(self, source_dataset):
+        if self.raft_adapter is None:
+            raise RuntimeError("RAFT adapter is disabled; set MemSize > 0 and temperature_args > 0.")
+        target_city = getattr(self.args, 'test_dataset', None)
+        count = self.raft_adapter.build_memory(
+            source_dataset.x_list,
+            source_dataset.y_list,
+            source_dataset.means_list,
+            source_dataset.stds_list,
+            city_names=source_dataset.data_list,
+            target_city=target_city,
+        )
+        return count, self.raft_adapter.city_counts()
 
 class STRep(nn.Module):
     """
@@ -172,194 +180,71 @@ class STRep(nn.Module):
         log_verbose(args,"model params: {}".format(count_parameters(self.model)))
 
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
-        if self.model.residual_memory is not None:
-            # Stage-II must optimize only the residual-memory gate. The SOFTS
-            # backbone is frozen explicitly and excluded from AdamW entirely,
-            # so decoupled weight decay cannot silently change its parameters.
-            self.trainable_params = configure_stage2_trainable_parameters(self.model)
+        if self.model.raft_adapter is not None:
+            # Only the RAFT retrieval projections and fusion layer are adapted.
+            # The pretrained SOFTS backbone is frozen and excluded from AdamW.
+            self.trainable_params = configure_raft_stage2_parameters(self.model)
             self.main_optim = optim.AdamW(
-                self.trainable_params, lr=self.lr, weight_decay=1e-2
+                self.trainable_params, lr=self.lr, weight_decay=1e-4
             )
         else:
             self.trainable_params = [p for p in self.model.parameters() if p.requires_grad]
             self.main_optim = optim.AdamW(
                 self.trainable_params, lr=self.lr, weight_decay=1e-2
             )
-            if self.temperature_args > 0:
-                param_groups = [
-                    {'params': [p for name, p in self.model.named_parameters()
-                                if name != 'log_temp'], 'lr': self.lr, 'weight_decay': 1e-2},
-                ]
-                self.main_optim = optim.AdamW(param_groups)
     
-    def meta_train_revise(self, data, matrix, epoch, target=False): # matrix没有用到
+    def meta_train_revise(self, data, matrix, epoch, target=False):
+        """Few-shot target adaptation of the RAFT retrieval/fusion adapter.
 
-        # Stage-II has no trainable output path until the residual bank contains
-        # source residuals. Keep the SOFTS backbone detached/frozen and warm up
-        # the bank with the first source batch instead of backpropagating a
-        # graph-free loss.
-        residual_memory = self.model.residual_memory
-        if residual_memory is None:
+        The source-only bank is built once before Stage-II training. This
+        optimizer step uses all 46 target windows (the configured 3-day support
+        set); it does not resample source batches or apply PCGrad.
+        """
+        if self.model.raft_adapter is None:
             raise RuntimeError(
-                "Stage-II training requires residual memory; check MemSize > 0 "
-                "and temperature_args > 0."
+                "Stage-II requires RAFT retrieval; check MemSize > 0 and temperature_args > 0."
             )
-        memory_was_empty = residual_memory.num_entries == 0
-
-        total_mae = []
-        total_mse = []
-        total_rmse = []
-        total_mape = []
-        
-        task_losses = []
-        rep_source = []
-        rep_target = []
-        y_source = []
-        y_target = []
-
-        target_task_loss = 0
-        base_outputs = []
-        #origin_normed_memory = 0
-        
-
-        for i in range(len(data)):  # self.task_num):
-            task_loss = 0
-            #  for k in range(1):
-            batch_size, node_num, seq_len, _ = data[i].x.shape
-            out, y, rep, y_unscale, normed_memory, base_out = self.model(
-                data[i], stage='train', return_base=True
+        if self.model.raft_adapter.num_entries == 0:
+            raise RuntimeError(
+                "RAFT source bank is empty. Call model.build_retrieval_bank(source_dataset) "
+                "before Stage-II training."
             )
-            base_outputs.append(base_out)
-            
-            if epoch%25==0:
-                print(out.shape, rep.shape)
-            
-            if i == 0:
-                split_indices = [15, 15, rep.shape[0] - 30]
-                rep_split = torch.split(rep, split_indices, dim=0)
-                y_unscale_split = torch.split(y_unscale, split_indices, dim=0)
-                
-                rep_target.extend(rep_split)
-                y_target.extend(y_unscale_split)
-                
-            else:
-                rep_source.append(rep)
-                y_source.append(y_unscale) #y_unscale
-                
-            if True: 
-                if i>0: #True:  
-                    
-                    loss = self.loss_criterion(out, y)
-    
-                    task_loss = loss
-    
-                    # if(k == 0):
-                    MSE,RMSE,MAE,MAPE = calc_metric(out, y)
-                    if epoch%25==0:
-                        print('MAPE',MAPE)
-                    total_mse.append(MSE.cpu().detach().numpy())
-                    total_rmse.append(RMSE.cpu().detach().numpy())
-                    total_mae.append(MAE.cpu().detach().numpy())
-                    total_mape.append(MAPE.cpu().detach().numpy())
-    
-                    #if i>0:
-                    task_losses.append(task_loss)
 
-                #elif target == True:
-                if i ==0 :
-                    loss = self.loss_criterion(out, y)
-                    target_task_loss = loss
-    
-        
-        # Update the bank only after this batch has queried the previous bank.
-        # Source cities are inserted; the target city is never used as memory.
-        if self.model.residual_memory is not None:
-            for memory_index in range(1, len(data)):
-                self.model.update_residual_memory(data[memory_index], base_outputs[memory_index])
+        data_i = data[0] if isinstance(data, (list, tuple)) else data
+        self.model.train()
+        self.main_optim.zero_grad(set_to_none=True)
 
-        # The first batch was forwarded while the bank was empty. Updating the
-        # bank above does not retroactively attach gradients to those outputs.
-        # Skip exactly this warm-up optimizer step; the next batch will retrieve
-        # from the populated bank and train residual_gate normally.
-        skip_optimizer_step = should_skip_stage2_optimizer_step(
-            memory_was_empty, residual_memory.num_entries
+        out, y, _, _, retrieved_out, base_out = self.model(
+            data_i, stage='train', return_base=True
         )
-        if skip_optimizer_step:
-            self.main_optim.zero_grad(set_to_none=True)
-            model_loss = sum(task_losses)
-            print(
-                "[Stage-II] Residual-memory warm-up completed: "
-                f"{residual_memory.num_entries} source entries; "
-                "skipping backward/optimizer step for the first batch."
-            )
-            return (
-                model_loss.detach().cpu().numpy(),
-                np.mean(total_mse),
-                np.mean(total_rmse),
-                np.mean(total_mae),
-                np.mean(total_mape),
-            )
+        loss = self.loss_criterion(out, y)
+        if not torch.isfinite(loss):
+            raise RuntimeError("Non-finite Stage-II RAFT adaptation loss.")
 
-        OT_losses = []
-        y_norm_sources = []
-        y_norm_targets = []
-        
-        OT_loss_scale = 1
-        model_loss = 0
-        
-        task_loss = sum(task_losses)
-
-        def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
-            
-            dot = torch.dot(grad_a, grad_b)
-            if dot < 0:
-                proj_coeff = dot / (grad_b.norm()**2 + eps)
-                grad_a = grad_a - proj_coeff * grad_b
-            return grad_a
-        
-        def flatten_and_pad_grads(params):
-            
-            flat_grads = []
-            mapping = []  # list of (param, start, length)
-            offset = 0
-            for p in params:
-                numel = p.numel()
-                if p.grad is None:
-                    g = torch.zeros(numel, device=p.device, dtype=p.dtype)
-                else:
-                    g = p.grad.detach().view(-1).clone()
-                flat_grads.append(g)
-                mapping.append((p, offset, numel))
-                offset += numel
-            return torch.cat(flat_grads, dim=0), mapping
-        
-        def write_back_flat_grads(flat_grads, mapping):
-            for p, start, numel in mapping:
-                sub = flat_grads[start:start+numel].view_as(p)
-            
-                p.grad = sub.clone()
-        self.main_optim.zero_grad()
-        task_loss.backward(retain_graph=True)
-        
-        flat_A, mapping = flatten_and_pad_grads(self.trainable_params)
-        self.main_optim.zero_grad()
-        target_task_loss.backward(retain_graph=True)
-        
-        flat_B, _ = flatten_and_pad_grads(self.trainable_params)
-        flat_proj_A = pcgrad_one_sided(flat_A, flat_B)
-        write_back_flat_grads(flat_proj_A, mapping)
+        loss.backward()
+        grad_norm = torch.nn.utils.clip_grad_norm_(self.trainable_params, max_norm=1.0)
         self.main_optim.step()
-        self.main_optim.zero_grad()
 
+        MSE, RMSE, MAE, MAPE = calc_metric(out.detach(), y.detach())
+        if epoch % 25 == 0:
+            retrieval_mae = torch.mean(torch.abs(retrieved_out.detach() - y.detach()))
+            base_mae = torch.mean(torch.abs(base_out.detach() - y.detach()))
+            print(
+                f"[Stage-II][RAFT] epoch={epoch} "
+                f"loss={loss.item():.6f} base_mae={base_mae.item():.6f} "
+                f"retrieval_mae={retrieval_mae.item():.6f} "
+                f"grad_norm={float(grad_norm):.6f} "
+                f"bank_entries={self.model.raft_adapter.num_entries}"
+            )
 
-        model_loss = task_loss
-        
-        if epoch%25==0:
-            print('len(task_losses), len(OT_losses)', len(task_losses), len(OT_losses))
-        
-        return model_loss.detach().cpu().numpy(),np.mean(total_mse), np.mean(total_rmse), np.mean(total_mae),np.mean(total_mape)
-        
-        
+        return (
+            loss.detach().cpu().numpy(),
+            MSE.detach().cpu().numpy(),
+            RMSE.detach().cpu().numpy(),
+            MAE.detach().cpu().numpy(),
+            MAPE.detach().cpu().numpy(),
+        )
+
     def forward(self, data, matrix):
         out, meta_graph = self.model(data)
         return out, meta_graph
