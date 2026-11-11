@@ -30,11 +30,13 @@ try:
     from .residual_memory import (
         StationarityAwareResidualMemory,
         should_skip_stage2_optimizer_step,
+        configure_stage2_trainable_parameters,
     )
 except ImportError:
     from residual_memory import (
         StationarityAwareResidualMemory,
         should_skip_stage2_optimizer_step,
+        configure_stage2_trainable_parameters,
     )
 
 def log_verbose(args, msg):
@@ -169,15 +171,26 @@ class STRep(nn.Module):
         # print(self.model)
         log_verbose(args,"model params: {}".format(count_parameters(self.model)))
 
-        self.main_optim = optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=1e-2)
-        self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
-        if self.temperature_args>0:
-            param_groups = [
-                {'params': [p for name, p in self.model.named_parameters() 
-                            if name != 'log_temp'], 'lr': self.lr, 'weight_decay': 1e-2,},  
-            ]
-            
-            self.main_optim = optim.AdamW(param_groups)
+        self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
+        if self.model.residual_memory is not None:
+            # Stage-II must optimize only the residual-memory gate. The SOFTS
+            # backbone is frozen explicitly and excluded from AdamW entirely,
+            # so decoupled weight decay cannot silently change its parameters.
+            self.trainable_params = configure_stage2_trainable_parameters(self.model)
+            self.main_optim = optim.AdamW(
+                self.trainable_params, lr=self.lr, weight_decay=1e-2
+            )
+        else:
+            self.trainable_params = [p for p in self.model.parameters() if p.requires_grad]
+            self.main_optim = optim.AdamW(
+                self.trainable_params, lr=self.lr, weight_decay=1e-2
+            )
+            if self.temperature_args > 0:
+                param_groups = [
+                    {'params': [p for name, p in self.model.named_parameters()
+                                if name != 'log_temp'], 'lr': self.lr, 'weight_decay': 1e-2},
+                ]
+                self.main_optim = optim.AdamW(param_groups)
     
     def meta_train_revise(self, data, matrix, epoch, target=False): # matrix没有用到
 
@@ -328,11 +341,11 @@ class STRep(nn.Module):
         self.main_optim.zero_grad()
         task_loss.backward(retain_graph=True)
         
-        flat_A, mapping = flatten_and_pad_grads(self.model.parameters())
+        flat_A, mapping = flatten_and_pad_grads(self.trainable_params)
         self.main_optim.zero_grad()
         target_task_loss.backward(retain_graph=True)
         
-        flat_B, _ = flatten_and_pad_grads(self.model.parameters())
+        flat_B, _ = flatten_and_pad_grads(self.trainable_params)
         flat_proj_A = pcgrad_one_sided(flat_A, flat_B)
         write_back_flat_grads(flat_proj_A, mapping)
         self.main_optim.step()

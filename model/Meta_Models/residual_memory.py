@@ -3,6 +3,25 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def configure_stage2_trainable_parameters(model):
+    """Freeze the forecasting backbone and return only residual-memory parameters."""
+    residual_memory = getattr(model, "residual_memory", None)
+    if residual_memory is None:
+        raise RuntimeError(
+            "Stage-II requires a residual memory module to configure trainable parameters."
+        )
+
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    for parameter in residual_memory.parameters():
+        parameter.requires_grad_(True)
+
+    trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
+    if not trainable:
+        raise RuntimeError("Stage-II has no trainable residual-memory parameters.")
+    return trainable
+
+
 def should_skip_stage2_optimizer_step(memory_was_empty, memory_entries):
     """Skip the first Stage-II optimizer step while the source residual bank warms up.
 

@@ -11,6 +11,7 @@ sys.path.insert(0, REPO_ROOT)
 from model.Meta_Models.residual_memory import (
     StationarityAwareResidualMemory,
     should_skip_stage2_optimizer_step,
+    configure_stage2_trainable_parameters,
 )
 
 
@@ -45,6 +46,32 @@ class ResidualMemorySmokeTest(unittest.TestCase):
         for city in ("source_a", "source_b", "source_c"):
             data, base = self.make_batch(city, [0, 1, 2, 3])
             self.memory.update(data, base)
+
+    def test_stage2_optimizer_excludes_frozen_backbone(self):
+        class DummyModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.forecasting_model = torch.nn.Linear(3, 3)
+                self.residual_memory = torch.nn.Module()
+                self.residual_memory.residual_gate = torch.nn.Linear(3, 2)
+
+        model = DummyModel()
+        backbone_before = [p.detach().clone() for p in model.forecasting_model.parameters()]
+        trainable = configure_stage2_trainable_parameters(model)
+        self.assertTrue(all(not p.requires_grad for p in model.forecasting_model.parameters()))
+        self.assertTrue(all(p.requires_grad for p in model.residual_memory.parameters()))
+        self.assertEqual(
+            {id(p) for p in trainable},
+            {id(p) for p in model.residual_memory.parameters()},
+        )
+
+        optimizer = torch.optim.AdamW(trainable, lr=1e-2, weight_decay=1e-2)
+        for parameter in trainable:
+            parameter.grad = torch.ones_like(parameter)
+        optimizer.step()
+
+        for before, after in zip(backbone_before, model.forecasting_model.parameters()):
+            self.assertTrue(torch.equal(before, after.detach()))
 
     def test_stage2_empty_bank_warmup_guard(self):
         # First batch starts with an empty bank; after source insertion, skip

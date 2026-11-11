@@ -375,7 +375,7 @@ if __name__ == '__main__':
                             best_testing_score = current_testing_score  
                         
                         if sum(current_validation_score)<sum(best_validation_score):
-                            torch.save(state, f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth") #####
+                            torch.save(state, f"l2_{args.test_dataset}_{args.model_name}_seed{seed}.pth")  # Keep Stage-I checkpoint intact.
                             best_validation_score = current_validation_score
                             best_epoch = i
                             print(f'epoch:{i} best!')
