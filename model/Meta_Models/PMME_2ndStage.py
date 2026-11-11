@@ -122,8 +122,9 @@ class PatchFSL(nn.Module):
         base_out = unnorm(base_out, means, stds)
 
         retrieved_out = None
+        retrieval_gate = None
         if self.raft_adapter is not None:
-            out, retrieved_out = self.raft_adapter(
+            out, retrieved_out, retrieval_gate = self.raft_adapter(
                 history_for_retrieval, base_out, means, stds
             )
         else:
@@ -133,7 +134,7 @@ class PatchFSL(nn.Module):
         y_unscale = (y_unscale - self.RevIn_mean) / self.RevIn_std
 
         if return_base:
-            return out, y, rep, y_unscale, retrieved_out, base_out
+            return out, y, rep, y_unscale, retrieved_out, base_out, retrieval_gate
         return out, y, rep, y_unscale, retrieved_out
 
     def build_retrieval_bank(self, source_dataset):
@@ -182,8 +183,8 @@ class STRep(nn.Module):
 
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
         if self.model.raft_adapter is not None:
-            # Only the RAFT retrieval projections and fusion layer are adapted.
-            # The pretrained SOFTS backbone is frozen and excluded from AdamW.
+            # Only the RAFT scale projections and reliability-aware horizon gate
+            # are adapted. The pretrained SOFTS backbone stays frozen.
             self.trainable_params = configure_raft_stage2_parameters(self.model)
             self.main_optim = optim.AdamW(
                 self.trainable_params, lr=self.lr, weight_decay=1e-4
@@ -215,10 +216,13 @@ class STRep(nn.Module):
         self.model.train()
         self.main_optim.zero_grad(set_to_none=True)
 
-        out, y, _, _, retrieved_out, base_out = self.model(
+        out, y, _, _, retrieved_out, base_out, retrieval_gate = self.model(
             data_i, stage='train', return_base=True
         )
-        loss = self.loss_criterion(out, y)
+        forecast_loss = self.loss_criterion(out, y)
+        # Small shrinkage penalty lets the gate prefer the frozen PMME forecast
+        # unless source retrieval contributes useful evidence on target support.
+        loss = forecast_loss + 1e-3 * retrieval_gate.mean()
         if not torch.isfinite(loss):
             raise RuntimeError("Non-finite Stage-II RAFT adaptation loss.")
 
@@ -230,10 +234,16 @@ class STRep(nn.Module):
         if epoch % 25 == 0:
             retrieval_mae = torch.mean(torch.abs(retrieved_out.detach() - y.detach()))
             base_mae = torch.mean(torch.abs(base_out.detach() - y.detach()))
+            gate_parts = torch.tensor_split(retrieval_gate.detach(), 3, dim=-1)
+            gate_short, gate_mid, gate_long = [
+                float(part.mean().item()) for part in gate_parts
+            ]
             print(
-                f"[Stage-II][RAFT] epoch={epoch} "
-                f"loss={loss.item():.6f} base_mae={base_mae.item():.6f} "
-                f"retrieval_mae={retrieval_mae.item():.6f} "
+                f"[Stage-II][RAFT-ReliabilityGate] epoch={epoch} "
+                f"loss={loss.item():.6f} forecast_loss={forecast_loss.item():.6f} "
+                f"base_mae={base_mae.item():.6f} retrieval_mae={retrieval_mae.item():.6f} "
+                f"gate_mean={float(retrieval_gate.detach().mean().item()):.4f} "
+                f"gate_short/mid/long={gate_short:.4f}/{gate_mid:.4f}/{gate_long:.4f} "
                 f"grad_norm={float(grad_norm):.6f} "
                 f"bank_entries={self.model.raft_adapter.num_entries}"
             )

@@ -5,9 +5,9 @@ For PMME, run `PMME.sh`.
 
 ## PMME Stage-II (experimental replacement)
 
-The Stage-II residual-memory implementation has been replaced on the `stage2-raft-crosscity-20261111` branch by a RAFT-style cross-city multi-scale retrieval adapter. PMME Stage-I and the SOFTS backbone remain unchanged. The new source-only bank stores normalized historical windows and their future trajectories (not forecasting residuals); Stage-II adapts only the retrieval projection and forecast-fusion layers on the target three-day support set.
+The current `main` branch keeps PMME Stage-I and the SOFTS forecasting backbone unchanged. Stage-II uses a source-only RAFT-style multi-scale history/future bank and a SARAF/TimeFuse-inspired reliability-aware horizon gate. The gate replaces the earlier global dense fusion layer and adapts only the retrieval scale projections and gate on the target three-day support set.
 
-- Literature review and design: [docs/stage2_raft_replacement.md](docs/stage2_raft_replacement.md)
+- Literature review, v2 failure analysis, and gate design: [docs/stage2_raft_replacement.md](docs/stage2_raft_replacement.md)
 - Adapter implementation: [model/Meta_Models/raft_cross_city.py](model/Meta_Models/raft_cross_city.py)
 - Smoke tests: [tests/test_raft_cross_city.py](tests/test_raft_cross_city.py)
 

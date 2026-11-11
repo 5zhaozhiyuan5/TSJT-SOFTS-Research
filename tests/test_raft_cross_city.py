@@ -73,7 +73,7 @@ class RaftCrossCityAdapterTest(unittest.TestCase):
         self.build_bank()
         history = torch.randn(2, 4, 288)
         base = torch.randn(2, 4, 36) * 4.0 + 55.0
-        fused, retrieved = self.adapter(
+        fused, retrieved, gate = self.adapter(
             history,
             base,
             means=[55.0],
@@ -83,8 +83,16 @@ class RaftCrossCityAdapterTest(unittest.TestCase):
         self.assertEqual(tuple(retrieved.shape), (2, 4, 36))
         self.assertTrue(torch.isfinite(fused).all())
         self.assertTrue(torch.isfinite(retrieved).all())
-        # Before target adaptation, the linear fusion is exactly the SOFTS base.
-        self.assertTrue(torch.allclose(fused, base, atol=1e-6, rtol=1e-6))
+        self.assertEqual(tuple(gate.shape), (2, 4, 36))
+        self.assertTrue(torch.isfinite(gate).all())
+        self.assertTrue((gate >= 0.0).all())
+        self.assertTrue((gate <= 0.5 + 1e-6).all())
+        # The new gate starts with a small retrieval contribution, close to SOFTS.
+        self.assertTrue(torch.allclose(gate, torch.full_like(gate, 0.05), atol=1e-6))
+        self.assertLessEqual(
+            float((fused - base).abs().max()),
+            float((retrieved - base).abs().max()) * 0.051 + 1e-5,
+        )
 
     def test_adapter_receives_gradients_without_updating_memory(self):
         self.build_bank()
@@ -96,13 +104,17 @@ class RaftCrossCityAdapterTest(unittest.TestCase):
 
         for _ in range(2):
             optimizer.zero_grad(set_to_none=True)
-            fused, _ = self.adapter(history, base, [50.0], [9.0])
-            loss = torch.nn.functional.smooth_l1_loss(fused, target)
+            fused, _, gate = self.adapter(history, base, [50.0], [9.0])
+            loss = torch.nn.functional.smooth_l1_loss(fused, target) + 1e-3 * gate.mean()
             loss.backward()
-            self.assertIsNotNone(self.adapter.fusion.weight.grad)
+            self.assertIsNotNone(self.adapter.reliability_gate.network[-1].weight.grad)
             optimizer.step()
 
         self.assertIsNotNone(self.adapter.scale_projection["1"].weight.grad)
+        self.assertFalse(torch.equal(
+            torch.zeros_like(self.adapter.reliability_gate.network[-1].weight),
+            self.adapter.reliability_gate.network[-1].weight.detach(),
+        ))
         self.assertTrue(torch.equal(memory_before, self.adapter.memory_future_1))
 
     def test_stage2_freezes_backbone_and_trains_only_adapter(self):
@@ -164,7 +176,7 @@ class RaftCrossCityAdapterTest(unittest.TestCase):
             city_names=["source_a"],
             target_city="target",
         )
-        fused, retrieved = adapter(
+        fused, retrieved, gate = adapter(
             torch.randn(2, 3, 288),
             torch.randn(2, 3, 12),
             [50.0],
@@ -172,6 +184,8 @@ class RaftCrossCityAdapterTest(unittest.TestCase):
         )
         self.assertEqual(tuple(fused.shape), (2, 3, 12))
         self.assertEqual(tuple(retrieved.shape), (2, 3, 12))
+        self.assertEqual(tuple(gate.shape), (2, 3, 12))
+        self.assertTrue((gate <= 0.5 + 1e-6).all())
 
 
 if __name__ == "__main__":

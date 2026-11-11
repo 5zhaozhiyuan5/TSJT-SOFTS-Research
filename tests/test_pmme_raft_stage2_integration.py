@@ -119,15 +119,17 @@ class PmmeRaftStage2IntegrationTest(unittest.TestCase):
                 name: value.detach().clone()
                 for name, value in trainer.model.forecasting_model.state_dict().items()
             }
-            fusion_before = trainer.model.raft_adapter.fusion.weight.detach().clone()
+            gate_before = (
+                trainer.model.raft_adapter.reliability_gate.network[-1].weight.detach().clone()
+            )
 
             stats = trainer.meta_train_revise(target_data, None, epoch=0)
 
             self.assertEqual(len(stats), 5)
             self.assertTrue(all(torch.isfinite(torch.as_tensor(value)).all() for value in stats))
             self.assertFalse(torch.equal(
-                fusion_before,
-                trainer.model.raft_adapter.fusion.weight.detach(),
+                gate_before,
+                trainer.model.raft_adapter.reliability_gate.network[-1].weight.detach(),
             ))
             for name, value in trainer.model.forecasting_model.state_dict().items():
                 self.assertTrue(torch.equal(backbone_before[name], value.detach()))
