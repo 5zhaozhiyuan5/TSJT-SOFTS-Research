@@ -95,8 +95,9 @@ The fusion layer is initialized as an identity on the SOFTS half and zero on the
 3. Balance the bank capacity across source cities and sample across the complete source-window index range.
 4. Freeze the SOFTS backbone; train only the RAFT scale projections and forecast-fusion layer.
 5. Adapt with the target city's three-day support set. The source bank is not updated with target samples.
-6. Remove Stage-II PCGrad and source/target gradient projection. The replacement uses ordinary target supervised optimization with gradient clipping.
-7. Keep the PMME Stage-I training code and checkpoint loading path unchanged.
+6. The three target days are all support data; there is no separate target validation split. Save periodic recovery checkpoints, save the final adapter, and evaluate the held-out target test period once after training. Do not select epochs using the test set.
+7. Remove Stage-II PCGrad and source/target gradient projection. The replacement uses ordinary target supervised optimization with gradient clipping.
+8. Keep the PMME Stage-I training code and checkpoint loading path unchanged.
 
 ## Current implementation defaults
 
