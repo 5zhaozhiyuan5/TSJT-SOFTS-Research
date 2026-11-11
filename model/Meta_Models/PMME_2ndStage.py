@@ -27,9 +27,15 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 try:
-    from .residual_memory import StationarityAwareResidualMemory
+    from .residual_memory import (
+        StationarityAwareResidualMemory,
+        should_skip_stage2_optimizer_step,
+    )
 except ImportError:
-    from residual_memory import StationarityAwareResidualMemory
+    from residual_memory import (
+        StationarityAwareResidualMemory,
+        should_skip_stage2_optimizer_step,
+    )
 
 def log_verbose(args, msg):
     print(msg)
@@ -174,7 +180,19 @@ class STRep(nn.Module):
             self.main_optim = optim.AdamW(param_groups)
     
     def meta_train_revise(self, data, matrix, epoch, target=False): # matrix没有用到
-        
+
+        # Stage-II has no trainable output path until the residual bank contains
+        # source residuals. Keep the SOFTS backbone detached/frozen and warm up
+        # the bank with the first source batch instead of backpropagating a
+        # graph-free loss.
+        residual_memory = self.model.residual_memory
+        if residual_memory is None:
+            raise RuntimeError(
+                "Stage-II training requires residual memory; check MemSize > 0 "
+                "and temperature_args > 0."
+            )
+        memory_was_empty = residual_memory.num_entries == 0
+
         total_mae = []
         total_mse = []
         total_rmse = []
@@ -245,6 +263,29 @@ class STRep(nn.Module):
         if self.model.residual_memory is not None:
             for memory_index in range(1, len(data)):
                 self.model.update_residual_memory(data[memory_index], base_outputs[memory_index])
+
+        # The first batch was forwarded while the bank was empty. Updating the
+        # bank above does not retroactively attach gradients to those outputs.
+        # Skip exactly this warm-up optimizer step; the next batch will retrieve
+        # from the populated bank and train residual_gate normally.
+        skip_optimizer_step = should_skip_stage2_optimizer_step(
+            memory_was_empty, residual_memory.num_entries
+        )
+        if skip_optimizer_step:
+            self.main_optim.zero_grad(set_to_none=True)
+            model_loss = sum(task_losses)
+            print(
+                "[Stage-II] Residual-memory warm-up completed: "
+                f"{residual_memory.num_entries} source entries; "
+                "skipping backward/optimizer step for the first batch."
+            )
+            return (
+                model_loss.detach().cpu().numpy(),
+                np.mean(total_mse),
+                np.mean(total_rmse),
+                np.mean(total_mae),
+                np.mean(total_mape),
+            )
 
         OT_losses = []
         y_norm_sources = []
