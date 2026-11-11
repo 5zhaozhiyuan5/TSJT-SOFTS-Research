@@ -19,6 +19,7 @@ on:
       - "model/Meta_Models/PMME_2ndStage.py"
       - "model/Meta_Models/raft_cross_city.py"
       - "tests/test_raft_cross_city.py"
+      - "tests/test_pmme_raft_stage2_integration.py"
       - "train_DA_OT.py"
       - "train_one_OT-*.sh"
       - "PMME.sh"
