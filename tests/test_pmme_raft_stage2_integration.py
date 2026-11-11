@@ -13,6 +13,7 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, META_MODEL_DIR)
 
 from datasets import traffic_dataset
+import PMME
 import PMME_2ndStage
 
 
