@@ -99,6 +99,10 @@ The fusion layer is initialized as an identity on the SOFTS half and zero on the
 7. Remove Stage-II PCGrad and source/target gradient projection. The replacement uses ordinary target supervised optimization with gradient clipping.
 8. Keep the PMME Stage-I training code and checkpoint loading path unchanged.
 
+### Existing normalization caveat
+
+This replacement does not change the PMME dataset pipeline. In the current `datasets.py`, each city's mean and standard deviation are computed before the target/source time split is applied. For the target city, those global statistics can therefore include observations from the held-out period. This is pre-existing behavior shared with the PMME Stage-I/base forecast, not target windows inserted into the new RAFT bank. The current PR preserves Stage-I weights and preprocessing so that the Stage-II comparison remains controlled. A strictly leakage-free normalization protocol requires a separate dataset-pipeline change and a fresh Stage-I retraining; do not describe the current run as eliminating this normalization-statistics issue.
+
 ## Current implementation defaults
 
 | Setting | Value |
