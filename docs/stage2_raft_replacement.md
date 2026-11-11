@@ -151,7 +151,7 @@ This is one focused replacement of the RAFT fusion operator, not a new backbone 
 3. Balance the bank capacity across source cities and sample across the complete source-window index range.
 4. Freeze the SOFTS backbone; train only the RAFT scale projections and reliability-aware horizon gate.
 5. Adapt with the target city's three-day support set. The source bank is not updated with target samples.
-6. The three target days are all support data; there is no separate target validation split. Save periodic recovery checkpoints, save the final adapter, and evaluate the held-out target test period once after training. Do not select epochs using the test set.
+6. The three target days are all support data; there is no separate target validation split. Save periodic recovery checkpoints and the final adapter. Construct and evaluate the held-out target test split only after Stage-II adaptation has finished. The Stage-I-only baseline is also evaluated after adaptation, solely for reporting; neither test result selects epochs. Do not select epochs using the test set.
 7. Remove Stage-II PCGrad and source/target gradient projection. The replacement uses ordinary target supervised optimization with gradient clipping.
 8. Keep the PMME Stage-I training code and checkpoint loading path unchanged.
 
@@ -189,7 +189,7 @@ The Stage-II integration suite goes through the repository's actual `traffic_dat
 
 1. `PatchFSL.build_retrieval_bank()` read `self.args.test_dataset`, but `PatchFSL.__init__()` had not stored `self.args`. The constructor now retains the arguments, and the integration test covers this path.
 2. Both `PMME.py` and `PMME_2ndStage.py` imported `SamplesLoss` from `geomloss.samples_loss`, which failed with the installed GeomLoss package. Both now use the supported public import `from geomloss import SamplesLoss`.
-3. The Stage-II runner evaluated the held-out target test set again immediately after building the retrieval bank but before adaptation. That redundant pre-adaptation test call was removed; the Stage-I-only baseline measurement remains separate, and the Stage-II held-out test is evaluated after adaptation.
+3. The Stage-II runner previously evaluated the held-out target test set before adaptation. This was a protocol defect even though the result was not used by the optimizer. The pre-adaptation evaluation has now been removed; both Stage-II and Stage-I-only test metrics are computed only after adaptation is complete. A regression test checks this ordering.
 4. CI now installs the runtime dependencies and imports both PMME modules through the integration test rather than relying on `py_compile` alone.
 
 **Verified CI run:** [GitHub Actions run](https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/43031478916), commit `2cae7bdedf635305b220b5131db4a085ebfcf725`. It passed Python compilation, shell/source-split checks, 6 adapter tests, and 2 production-path integration tests. The integration log includes a completed Stage-II step with finite loss and non-zero adapter gradient.
@@ -217,3 +217,10 @@ The raw v2 logs, checkpoint, and per-query retrieval diagnostics were not suppli
 The new gate is intended to learn when each retrieved horizon is useful, using only the target three-day support set. It should preserve the SOFTS forecast when similarity is weak, candidate futures disagree, or the query history is unstable, while allowing stronger retrieval use where support-set evidence justifies it.
 
 The hypothesis is falsified if, under the same Stage-I checkpoint, seed, data split, 300-epoch budget, and test script, the gate version fails to improve the average MAE/RMSE over v2 RAFT or fails to match the Stage-I/PMME baseline. Report gate means for 0–12, 12–24, and 24–36 steps, base-only MAE/RMSE, retrieved-only MAE/RMSE, fused MAE/RMSE, gradient norms, and whether gate parameters actually update. Do not tune against target test labels.
+
+
+## Test-protocol correction (main, 2026-11-11)
+
+The runner previously computed Stage-I-only test metrics before Stage-II training. Although those metrics did not feed the optimizer, this made it too easy to inspect held-out target results during adaptation. The runner now delays constructing the explicit `test_dataset` and all `test_evaluation` calls until after the Stage-II loop. It then reports both RAFT-Stage-II and Stage-I-only metrics on the same held-out split, without selecting checkpoints or epochs from either result.
+
+**Remaining preprocessing caveat:** `traffic_dataset` still computes target-city global mean/std before truncating to the three-day support period. This means the existing PMME Stage-I checkpoint and current Stage-II comparison inherit full-series target normalization statistics. Fixing that requires changing the normalization protocol and retraining Stage-I; this iteration deliberately preserves the existing checkpoint-compatible preprocessing.

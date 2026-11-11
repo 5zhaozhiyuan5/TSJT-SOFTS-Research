@@ -114,7 +114,7 @@ if __name__ == '__main__':
         log_verbose(args,"source dataset has {}. X : {}, y : {}".format(data,source_dataset.x_list[data].shape,source_dataset.y_list[data].shape))
     print('data_args', data_args)
     finetune_dataset = traffic_dataset(data_args, task_args['target_few_shot'], data_list, 'target_maml', test_data=args.test_dataset)
-    test_dataset = traffic_dataset(data_args, task_args['source'], data_list, 'test', test_data=args.test_dataset)
+    # Construct the held-out target test split only after Stage-II adaptation.
     log_verbose(args,"data args : {}\ntask_args : {}\nmodel_args : {}\nPatchFSL_cfg : {}\nSTmodel : {}".format(data_args, task_args, model_args, PatchFSL_cfg, args.STmodel))
 
     rep_model = STRep(args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio, 0, args.projection, args.model_name, args.DA, data_args, task_args, model_args, PatchFSL_cfg, args) 
@@ -228,54 +228,10 @@ if __name__ == '__main__':
 
     if task_args['source']['finetune_epochs']>0:
     
-        rep_model = PMME_2ndStage.STRep(args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio, 0, 0, args.model_name, data_args, task_args, model_args, PatchFSL_cfg, args) 
-        
-        print()
-        print('Begin ckpt check!!!!!')
-        print()
-        
-        model_path = f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth"   
-        
-        ckpt = torch.load(model_path, map_location=args.device)
-        old_state = ckpt['model_state_dict']    
-    
-        filtered_state_dict = {}
-        for full_key, tensor in old_state.items():
-            if full_key.startswith("model."):
-                new_key = full_key[len("model."):]
-                filtered_state_dict[new_key] = tensor
-        old_state = filtered_state_dict
-        
-        new_state = rep_model.model.state_dict()
-        
-        filtered = {k: v for k, v in old_state.items() if k in new_state}
-        
-        for i in old_state:
-            print(i)
-        print('------------------------------------')
-        for i in new_state:
-            print(i)
-        print('------------------------------------')
-        for i in filtered:
-            print(i)
-            
-        new_state.update(filtered)
-        
-        rep_model.model.load_state_dict(new_state)
-        
-    
-        testing_score = rep_model.test_evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
-        indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35] 
-        current_testing_score = [testing_score[i] for i in indices] 
-        print('current_testing_score', current_testing_score) 
-        print('sum(current_testing_score)',sum(current_testing_score))
-        
-        print('####################')
-        print('####################')
-        print('####################')
-        print('####################')
-        print('####################')
-    
+        # Load the Stage-I checkpoint directly into the Stage-II model.
+        # The held-out target test set is not evaluated before adaptation.
+        model_path = f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth"
+
         rep_model = PMME_2ndStage.STRep(args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio, args.MemSize, 1, args.model_name, data_args, task_args, model_args, PatchFSL_cfg, args) # args.temperature
     
         model_path = f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth" 
@@ -388,6 +344,14 @@ if __name__ == '__main__':
         }
         torch.save(final_state, f"l2_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
 
+        # Only after adaptation is complete do we construct/read the held-out test split.
+        test_dataset = traffic_dataset(
+            data_args,
+            task_args['source'],
+            data_list,
+            'test',
+            test_data=args.test_dataset,
+        )
         final_testing_score = rep_model.test_evaluation(
             finetune_dataset,
             test_dataset,
@@ -397,6 +361,34 @@ if __name__ == '__main__':
         selected_test_scores = [final_testing_score[j] for j in indices]
         print("[Stage-II][RAFT] final held-out test MAE:", selected_test_scores)
         print("[Stage-II][RAFT] sum(final held-out test MAE):", sum(selected_test_scores))
+
+        # Evaluate Stage-I-only SOFTS on the same held-out split after adaptation,
+        # solely for reporting and never for checkpoint/epoch selection.
+        baseline_model = PMME_2ndStage.STRep(
+            args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio,
+            0, 0, args.model_name, data_args, task_args, model_args, PatchFSL_cfg, args
+        )
+        baseline_ckpt = torch.load(model_path, map_location=args.device)
+        baseline_state = {
+            key[len("model."):]: value
+            for key, value in baseline_ckpt['model_state_dict'].items()
+            if key.startswith("model.")
+        }
+        baseline_model_state = baseline_model.model.state_dict()
+        baseline_model_state.update({
+            key: value for key, value in baseline_state.items()
+            if key in baseline_model_state
+        })
+        baseline_model.model.load_state_dict(baseline_model_state)
+        baseline_testing_score = baseline_model.test_evaluation(
+            finetune_dataset,
+            test_dataset,
+            task_args['source']['finetune_epochs'],
+        )
+        baseline_selected_scores = [baseline_testing_score[j] for j in indices]
+        print("[Stage-I-only] final held-out test MAE:", baseline_selected_scores)
+        print("[Stage-I-only] sum(final held-out test MAE):", sum(baseline_selected_scores))
+        del baseline_model
 
         print('2ndStage Source training Ending!!!')
     # del rep_model

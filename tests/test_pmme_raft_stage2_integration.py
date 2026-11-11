@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -42,6 +43,16 @@ def write_synthetic_city(root, city, mean, std, length, nodes=2, seed=0):
 
 
 class PmmeRaftStage2IntegrationTest(unittest.TestCase):
+    def test_heldout_test_evaluation_is_deferred_until_after_stage2(self):
+        runner = (Path(ROOT) / "train_DA_OT.py").read_text(encoding="utf-8")
+        adaptation_start = runner.index(
+            "for i in range(task_args['source']['finetune_epochs']):"
+        )
+        test_dataset_creation = runner.index("test_dataset = traffic_dataset")
+        self.assertGreater(test_dataset_creation, adaptation_start)
+        self.assertNotIn(".test_evaluation(", runner[:adaptation_start])
+        self.assertEqual(runner.count(".test_evaluation("), 2)
+
     def test_real_dataset_loader_bank_build_and_one_stage2_step(self):
         torch.manual_seed(11)
         with tempfile.TemporaryDirectory() as root:
