@@ -92,7 +92,22 @@ if __name__ == '__main__':
     }
 
     ## dataset
-    source_dataset = traffic_dataset(data_args, task_args['source'], data_list, "source", test_data=args.test_dataset)#####
+    # Stage-II source batches must never sample the target city. Pass a copy
+    # and disable the dataset helper's default target append to avoid leakage.
+    source_dataset = traffic_dataset(
+        data_args,
+        task_args['source'],
+        data_list.copy(),
+        "source",
+        test_data=args.test_dataset,
+        add_target=False,
+    )
+    if args.test_dataset in source_dataset.data_list:
+        raise RuntimeError(
+            f"Target city {args.test_dataset} leaked into the source dataset: "
+            f"{source_dataset.data_list}"
+        )
+    log_verbose(args, f"Verified source-only training cities: {source_dataset.data_list}")
     ## check source dataset
 
     for data in source_dataset.data_list:

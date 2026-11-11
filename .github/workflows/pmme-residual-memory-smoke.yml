@@ -36,6 +36,7 @@ jobs:
       - name: Check PMME launch scripts
         run: |
           bash -n PMME.sh train_one_OT-pems.sh train_one_OT-chengdu.sh train_one_OT-metr.sh train_one_OT-shenzhen.sh
+          grep -Fq 'add_target=False' train_DA_OT.py || { echo "Source dataset must exclude the target city"; exit 1; }
           if grep -n -- "--config_file " train_one_OT-*.sh; then
             echo "Found unsupported --config_file option; train_DA_OT.py expects --config_filename"
             exit 1
