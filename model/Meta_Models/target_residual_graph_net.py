@@ -78,7 +78,9 @@ class BackcastForecastBlock(nn.Module):
         self.backcast_head = nn.Linear(hidden_dim, self.history_len)
         self.forecast_head = nn.Linear(hidden_dim, self.forecast_knots)
 
-        # Small initial forecasts make Stage-II start close to the frozen baseline.
+        # Keep both paths small initially so Stage-II starts close to Stage-I.
+        nn.init.normal_(self.backcast_head.weight, mean=0.0, std=1e-3)
+        nn.init.zeros_(self.backcast_head.bias)
         nn.init.normal_(self.forecast_head.weight, mean=0.0, std=1e-3)
         nn.init.zeros_(self.forecast_head.bias)
 
@@ -115,9 +117,9 @@ class TargetResidualGraphNet(nn.Module):
         d_model: int = 128,
         history_len: int = 288,
         pred_len: int = 36,
-        hidden_dim: int = 64,
+        hidden_dim: int = 32,
         forecast_knots=(3, 9, 36),
-        dropout: float = 0.05,
+        dropout: float = 0.1,
     ):
         super().__init__()
         self.d_model = int(d_model)
