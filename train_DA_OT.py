@@ -298,9 +298,10 @@ if __name__ == '__main__':
             # The Stage-I forecasting backbone remains frozen throughout adaptation.
             epoch_stats = []
             for target_batch_index in range(len(finetune_dataset)):
-                target_data, target_graph = finetune_dataset[target_batch_index]
+                target_data, _ = finetune_dataset[target_batch_index]
+                # The temporal residual network does not consume the target graph.
                 stats = rep_model.meta_train_revise(
-                    target_data, target_graph, i, target=True
+                    target_data, None, i, target=True
                 )
                 epoch_stats.append(stats)
 
