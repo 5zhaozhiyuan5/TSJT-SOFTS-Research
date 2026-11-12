@@ -1,5 +1,7 @@
 # PMME Stage-II: target-support initialized horizon-conditioned residual memory
 
+> **Legacy reference only (2026-11-12):** This document describes the former horizon-conditioned memory implementation. It is no longer the default Stage-II path on `main`. The active target-only residual architecture is documented in [stage2_target_residual_graph.md](stage2_target_residual_graph.md); the old `horizon_residual_memory.py` is retained only for historical comparison/ablation.
+
 ## Decision
 
 The RAFT-style future-trajectory retrieval experiment is no longer the active Stage-II model. It is replaced by a PMME-native horizon-conditioned residual-memory design, using the user's earlier V1 layout as the empirical starting point.
