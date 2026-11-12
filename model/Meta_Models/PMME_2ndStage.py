@@ -169,6 +169,7 @@ class STRep(nn.Module):
         self.model_name = args.STmodel
         self.device = PatchFSL_cfg['device']
         self.current_epoch = 0
+        self.last_stage2_loss_components = None
 
         self.model = PatchFSL(data_args, model_args, task_args, memory_size_args, temperature_args, model_name, PatchFSL_cfg, args).to(self.device)
          
@@ -299,6 +300,15 @@ class STRep(nn.Module):
         grad_norm = torch.nn.utils.clip_grad_norm_(self.trainable_params, max_norm=1.0)
         self.main_optim.step()
 
+        # Keep detached scalar components for one consolidated log line per epoch.
+        self.last_stage2_loss_components = {
+            "total_loss": float(total_loss.detach().cpu().item()),
+            "residual_loss": float(residual_loss.detach().cpu().item()),
+            "forecast_loss": float(forecast_loss.detach().cpu().item()),
+            "correction_l2": float(correction_penalty.detach().cpu().item()),
+            "grad_norm": float(grad_norm.detach().cpu().item()),
+        }
+
         MSE, RMSE, MAE, MAPE = calc_metric(out.detach(), y.detach())
         if epoch % 25 == 0:
             pred_len = out.shape[-1]
@@ -326,7 +336,7 @@ class STRep(nn.Module):
             )
 
         return (
-            forecast_loss.detach().cpu().numpy(),
+            total_loss.detach().cpu().numpy(),
             MSE.detach().cpu().numpy(),
             RMSE.detach().cpu().numpy(),
             MAE.detach().cpu().numpy(),
