@@ -108,7 +108,7 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
                 for name, value in trainer.model.forecasting_model.state_dict().items()
             }
             stats = trainer.meta_train_revise(
-                [target_data, target_data], [None, None], epoch=0
+                [target_data, target_data], epoch=0
             )
             self.assertEqual(len(stats), 5)
             self.assertTrue(
@@ -195,7 +195,6 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
                 means=target_dataset.means_list["target"],
                 stds=target_dataset.stds_list["target"],
             )
-            target_adjacency = None
             backbone_before = {
                 name: value.detach().clone()
                 for name, value in trainer.model.forecasting_model.state_dict().items()
@@ -206,7 +205,7 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
             }
 
             stats = trainer.meta_train_revise(
-                target_data, target_adjacency, epoch=0, target=True
+                target_data, epoch=0, target=True
             )
 
             self.assertEqual(len(stats), 5)
