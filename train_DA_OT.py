@@ -293,8 +293,8 @@ if __name__ == '__main__':
                 log_verbose(args, '----------------------')
             time_1 = time.time()
 
-            # Train the target-only residual graph network using every target support batch.
-            # The shared memory was initialized once from target-support representations above.
+            # Train the target-only residual graph network using only target support batches.
+            # The Stage-I forecasting backbone remains frozen throughout adaptation.
             epoch_stats = []
             for target_batch_index in range(len(finetune_dataset)):
                 target_data, target_graph = finetune_dataset[target_batch_index]
