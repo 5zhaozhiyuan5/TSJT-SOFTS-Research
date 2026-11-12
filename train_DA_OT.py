@@ -289,14 +289,14 @@ if __name__ == '__main__':
     
         yaml.dump([dict(vars(args)), config], open(os.path.join(args.save_dir, "config.yaml"), "w"))
         
-        for i in range(task_args['source']['finetune_epochs']):
-            if i % 25 == 0:
-                log_verbose(args, '----------------------')
+        total_stage2_epochs = task_args['source']['finetune_epochs']
+        for i in range(total_stage2_epochs):
             time_1 = time.time()
 
-            # Train the target-only residual graph network using only target support batches.
+            # Train the target-only temporal residual network using only target support batches.
             # The Stage-I forecasting backbone remains frozen throughout adaptation.
             epoch_stats = []
+            epoch_loss_components = []
             for target_batch_index in range(len(finetune_dataset)):
                 target_data, _ = finetune_dataset[target_batch_index]
                 # The temporal residual network does not consume a target graph.
@@ -305,25 +305,46 @@ if __name__ == '__main__':
                 )
                 epoch_stats.append(stats)
 
+                components = rep_model.last_stage2_loss_components
+                if components is not None:
+                    epoch_loss_components.append(dict(components))
+
             if not epoch_stats:
                 raise RuntimeError("The 3-day target support set produced no training batches.")
+            if len(epoch_loss_components) != len(epoch_stats):
+                raise RuntimeError(
+                    "Stage-II did not report loss components for every target batch."
+                )
 
             model_loss, mse_loss, rmse_loss, mae_loss, mape_loss = [
                 float(np.mean([batch_stats[j] for batch_stats in epoch_stats]))
                 for j in range(5)
             ]
 
-            if i % 25 == 0:
-                log_verbose(args, 'Epochs {}/{}'.format(i, task_args['source']['finetune_epochs']))
-                log_verbose(
-                    args,
-                    'Stage-II target-only temporal residual adaptation '
-                    'Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, '
-                    'MAPE: {:.5f}, loss : {:.5f}.'.format(
-                        mse_loss, rmse_loss, mae_loss, mape_loss, model_loss
-                    )
+            def mean_epoch_component(name):
+                return float(np.mean([batch[name] for batch in epoch_loss_components]))
+
+            epoch_number = i + 1
+            log_verbose(
+                args,
+                "[Stage-II][Epoch {}/{}] "
+                "total_loss={:.6f} residual_loss={:.6f} "
+                "forecast_loss={:.6f} correction_l2={:.6f} "
+                "train_MAE={:.5f} train_RMSE={:.5f} train_MAPE={:.5f} "
+                "grad_norm={:.6f} time={:.3f}s".format(
+                    epoch_number,
+                    total_stage2_epochs,
+                    mean_epoch_component("total_loss"),
+                    mean_epoch_component("residual_loss"),
+                    mean_epoch_component("forecast_loss"),
+                    mean_epoch_component("correction_l2"),
+                    mae_loss,
+                    rmse_loss,
+                    mape_loss,
+                    mean_epoch_component("grad_norm"),
+                    time.time() - time_1,
                 )
-            log_verbose(args, "This epoch cost {:.3}s.".format(time.time() - time_1))
+            )
 
             # Save progress without using the target support set as a validation
             # set or repeatedly inspecting the held-out test set.
