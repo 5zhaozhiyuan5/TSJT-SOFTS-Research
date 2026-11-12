@@ -53,6 +53,17 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
         self.assertEqual(runner.count(".test_evaluation("), 2)
         self.assertNotIn("initialize_horizon_memory", runner)
         self.assertIn("TargetResidualTemporal", runner)
+        self.assertIn("[Stage-II][Epoch {}/{}", runner)
+        self.assertIn('mean_epoch_component("residual_loss")', runner)
+        for launcher in (
+            "train_one_OT-pems.sh",
+            "train_one_OT-chengdu.sh",
+            "train_one_OT-metr.sh",
+            "train_one_OT-shenzhen.sh",
+        ):
+            launcher_text = (Path(ROOT) / launcher).read_text(encoding="utf-8")
+            self.assertIn("finetune_epochs=300", launcher_text)
+            self.assertNotIn("finetune_epochs=6000", launcher_text)
 
     def test_stage1_pcgrad_training_path_is_preserved(self):
         torch.manual_seed(13)
@@ -211,6 +222,21 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
             self.assertEqual(len(stats), 5)
             self.assertTrue(
                 all(torch.isfinite(torch.as_tensor(value)).all() for value in stats)
+            )
+            loss_components = trainer.last_stage2_loss_components
+            self.assertIsNotNone(loss_components)
+            for key in (
+                "total_loss",
+                "residual_loss",
+                "forecast_loss",
+                "correction_l2",
+                "grad_norm",
+            ):
+                self.assertTrue(np.isfinite(loss_components[key]))
+            self.assertAlmostEqual(
+                float(np.asarray(stats[0]).item()),
+                loss_components["total_loss"],
+                places=5,
             )
             self.assertTrue(any(
                 not torch.equal(residual_before[name], value.detach())
