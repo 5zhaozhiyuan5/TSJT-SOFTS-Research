@@ -79,10 +79,15 @@ class PatchFSL(nn.Module):
             )
 
     def forward(self, data_i, matrix=None, stage='train', return_base=False):
-        # Stage-I is always frozen/evaluated. Only the target residual network
-        # changes during Stage-II adaptation.
-        self.forecasting_model.eval()
-        if self.residual_net is not None:
+        # Preserve the original Stage-I training behavior. During Stage-II,
+        # freeze/evaluate SOFTS and train only the target residual network.
+        if self.residual_net is None:
+            if stage == 'train':
+                self.forecasting_model.train()
+            else:
+                self.forecasting_model.eval()
+        else:
+            self.forecasting_model.eval()
             if stage == 'train':
                 self.residual_net.train()
             else:
@@ -181,10 +186,91 @@ class STRep(nn.Module):
                 self.trainable_params, lr=self.lr, weight_decay=1e-2
             )
     
+    def _meta_train_stage1(self, data, epoch):
+        """Original source/target PCGrad training path for Stage-I."""
+        source_losses = []
+        source_metrics = {"mse": [], "rmse": [], "mae": [], "mape": []}
+        target_loss = None
+
+        self.model.train()
+        for task_index, data_i in enumerate(data):
+            out, y, _, _, _ = self.model(data_i, stage='train')
+            task_loss = self.loss_criterion(out, y)
+
+            if task_index == 0:
+                target_loss = task_loss
+            else:
+                source_losses.append(task_loss)
+                mse, rmse, mae, mape = calc_metric(out, y)
+                source_metrics["mse"].append(mse.detach().cpu().numpy())
+                source_metrics["rmse"].append(rmse.detach().cpu().numpy())
+                source_metrics["mae"].append(mae.detach().cpu().numpy())
+                source_metrics["mape"].append(mape.detach().cpu().numpy())
+
+        if target_loss is None or not source_losses:
+            raise RuntimeError(
+                "Stage-I PCGrad requires one target task followed by at least one source task."
+            )
+
+        source_loss = torch.stack(source_losses).sum()
+        self.main_optim.zero_grad(set_to_none=True)
+        source_loss.backward(retain_graph=True)
+
+        def flatten_grads(params):
+            flat, mapping, offset = [], [], 0
+            for parameter in params:
+                count = parameter.numel()
+                grad = (
+                    torch.zeros(count, device=parameter.device, dtype=parameter.dtype)
+                    if parameter.grad is None
+                    else parameter.grad.detach().reshape(-1).clone()
+                )
+                flat.append(grad)
+                mapping.append((parameter, offset, count))
+                offset += count
+            return torch.cat(flat), mapping
+
+        flat_source, mapping = flatten_grads(self.model.parameters())
+        self.main_optim.zero_grad(set_to_none=True)
+        target_loss.backward(retain_graph=True)
+        flat_target, _ = flatten_grads(self.model.parameters())
+
+        dot = torch.dot(flat_source, flat_target)
+        if dot < 0:
+            flat_source = flat_source - (
+                dot / (flat_target.norm().square() + 1e-8)
+            ) * flat_target
+
+        for parameter, start, count in mapping:
+            parameter.grad = flat_source[start:start + count].view_as(parameter).clone()
+
+        self.main_optim.step()
+        self.main_optim.zero_grad(set_to_none=True)
+
+        def mean_metric(key):
+            values = source_metrics[key]
+            return float(np.mean(values)) if values else float("nan")
+
+        if epoch % 25 == 0:
+            print(
+                f"[Stage-I][PCGrad] epoch={epoch} "
+                f"source_loss={source_loss.item():.6f} "
+                f"target_loss={target_loss.item():.6f} "
+                f"gradient_dot={dot.item():.6f}"
+            )
+
+        return (
+            source_loss.detach().cpu().numpy(),
+            mean_metric("mse"),
+            mean_metric("rmse"),
+            mean_metric("mae"),
+            mean_metric("mape"),
+        )
+
     def meta_train_revise(self, data, matrix, epoch, target=False):
-        """Adapt the target-only temporal residual predictor."""
+        """Use original PCGrad for Stage-I and target-only residual loss for Stage-II."""
         if self.model.residual_net is None:
-            raise RuntimeError("Stage-II target residual network is disabled.")
+            return self._meta_train_stage1(data, epoch)
 
         data_i = data[0] if isinstance(data, (list, tuple)) else data
         self.model.train()
@@ -272,7 +358,7 @@ class STRep(nn.Module):
                 if B==0:
                     break
                     
-                out, y, rep, y_unscale, correction = self.model(data_i, matrix=A, stage='test')
+                out, y, rep, y_unscale, correction = self.model(data_i, stage='test')
             
                 MSE,RMSE,MAE,MAPE = calc_metric(out, y, stage='test')
                 total_mse.append((MSE.cpu().detach().numpy(), len(out)))
