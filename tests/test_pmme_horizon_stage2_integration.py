@@ -41,7 +41,7 @@ def write_synthetic_city(root, city, mean, std, length, nodes=2, seed=0):
     }
 
 
-class PmmeHorizonStage2IntegrationTest(unittest.TestCase):
+class PmmeTargetResidualGraphIntegrationTest(unittest.TestCase):
     def test_heldout_test_evaluation_is_deferred_until_after_stage2(self):
         runner = (Path(ROOT) / "train_DA_OT.py").read_text(encoding="utf-8")
         adaptation_start = runner.index(
@@ -51,8 +51,10 @@ class PmmeHorizonStage2IntegrationTest(unittest.TestCase):
         self.assertGreater(test_dataset_creation, adaptation_start)
         self.assertNotIn(".test_evaluation(", runner[:adaptation_start])
         self.assertEqual(runner.count(".test_evaluation("), 2)
+        self.assertNotIn("initialize_horizon_memory", runner)
+        self.assertIn("TargetResidualGraph", runner)
 
-    def test_target_support_initialization_and_one_stage2_optimizer_step(self):
+    def test_target_only_residual_network_trains_and_keeps_stage1_frozen(self):
         torch.manual_seed(11)
         with tempfile.TemporaryDirectory() as root:
             data_args = {
@@ -102,7 +104,7 @@ class PmmeHorizonStage2IntegrationTest(unittest.TestCase):
                 test_dataset="target",
                 STmodel="SOFTS",
                 save_dir=root,
-                stage2_query_chunk=8,
+                stage2_residual_hidden=32,
             )
             model_args = {"STnet": {"lr": 1e-3}}
             patch_cfg = {"device": torch.device("cpu")}
@@ -113,17 +115,13 @@ class PmmeHorizonStage2IntegrationTest(unittest.TestCase):
                 data_args, task_args, model_args, patch_cfg, args,
             )
 
-            # The memory is seeded from target support representations only.
-            support_feature_count = trainer.model.initialize_horizon_memory(
-                target_dataset, seed=11
+            self.assertIsNotNone(trainer.model.residual_net)
+            self.assertTrue(
+                all(not p.requires_grad for p in trainer.model.forecasting_model.parameters())
             )
-            self.assertEqual(support_feature_count, 46 * 2)
-            self.assertTrue(bool(trainer.model.horizon_memory.memory_initialized.item()))
-            self.assertEqual(
-                int(trainer.model.horizon_memory.initialization_feature_count.item()),
-                46 * 2,
+            self.assertTrue(
+                all(p.requires_grad for p in trainer.model.residual_net.parameters())
             )
-            self.assertEqual(trainer.model.horizon_memory.memory.shape[0], 12)
 
             target_data = SimpleNamespace(
                 x=target_dataset.x_list["target"][:2],
@@ -131,33 +129,28 @@ class PmmeHorizonStage2IntegrationTest(unittest.TestCase):
                 means=target_dataset.means_list["target"],
                 stds=target_dataset.stds_list["target"],
             )
+            target_adjacency = target_dataset.A_list["target"]
             backbone_before = {
                 name: value.detach().clone()
                 for name, value in trainer.model.forecasting_model.state_dict().items()
             }
-            memory_before = trainer.model.horizon_memory.memory.detach().clone()
-            embedding_before = (
-                trainer.model.horizon_memory.horizon_embeddings.detach().clone()
-            )
+            residual_before = {
+                name: value.detach().clone()
+                for name, value in trainer.model.residual_net.state_dict().items()
+            }
 
-            stats = trainer.meta_train_revise(target_data, None, epoch=0)
+            stats = trainer.meta_train_revise(
+                target_data, target_adjacency, epoch=0, target=True
+            )
 
             self.assertEqual(len(stats), 5)
             self.assertTrue(
                 all(torch.isfinite(torch.as_tensor(value)).all() for value in stats)
             )
-            self.assertFalse(
-                torch.equal(
-                    memory_before,
-                    trainer.model.horizon_memory.memory.detach(),
-                )
-            )
-            self.assertFalse(
-                torch.equal(
-                    embedding_before,
-                    trainer.model.horizon_memory.horizon_embeddings.detach(),
-                )
-            )
+            self.assertTrue(any(
+                not torch.equal(residual_before[name], value.detach())
+                for name, value in trainer.model.residual_net.state_dict().items()
+            ))
             for name, value in trainer.model.forecasting_model.state_dict().items():
                 self.assertTrue(torch.equal(backbone_before[name], value.detach()))
 
