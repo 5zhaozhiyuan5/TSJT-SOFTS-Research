@@ -45,7 +45,7 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
     def test_heldout_test_evaluation_is_deferred_until_after_stage2(self):
         runner = (Path(ROOT) / "train_DA_OT.py").read_text(encoding="utf-8")
         adaptation_start = runner.index(
-            "for i in range(task_args['source']['finetune_epochs']):"
+            "for i in range(total_stage2_epochs):"
         )
         test_dataset_creation = runner.index("test_dataset = traffic_dataset")
         self.assertGreater(test_dataset_creation, adaptation_start)
