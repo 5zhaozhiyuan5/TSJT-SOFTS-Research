@@ -74,7 +74,7 @@ class PatchFSL(nn.Module):
                 d_model=128,
                 history_len=288,
                 pred_len=int(task_args['source']['pred_num']),
-                hidden_dim=getattr(args, 'stage2_residual_hidden', 64),
+                hidden_dim=getattr(args, 'stage2_residual_hidden', 32),
                 forecast_knots=(3, 9, int(task_args['source']['pred_num'])),
             )
 
