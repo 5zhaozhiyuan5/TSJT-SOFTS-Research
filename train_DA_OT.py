@@ -258,18 +258,13 @@ if __name__ == '__main__':
         
         rep_model.model.load_state_dict(new_state)
 
-        # Initialize the shared Stage-II memory from frozen SOFTS
-        # representations of the authorized three-day target support set.
-        # Only support inputs are used for initialization; labels and the
-        # held-out target test split are not read by this step.
-        support_feature_count = rep_model.model.initialize_horizon_memory(
-            finetune_dataset, seed=seed
-        )
+        # Stage-II now learns a target-city-only residual predictor.
+        # It uses target support windows and the frozen Stage-I forecast/representation;
+        # no source-city residual bank, memory initialization, or retrieval is used.
         log_verbose(
             args,
-            f"[Stage-II][HorizonMemory] initialized {args.MemSize} shared slots "
-            f"from {support_feature_count} target-support representations; "
-            f"three horizon-conditioned queries enabled."
+            "[Stage-II][TargetResidualGraph] enabled target-only graph-temporal "
+            "residual forecasting; Stage-I forecasting backbone remains frozen."
         )
 
         # Do not inspect the held-out test set before Stage-II adaptation.
@@ -298,7 +293,7 @@ if __name__ == '__main__':
                 log_verbose(args, '----------------------')
             time_1 = time.time()
 
-            # Adapt the three horizon-conditioned residual-memory queries using every target support batch.
+            # Train the target-only residual graph network using every target support batch.
             # The shared memory was initialized once from target-support representations above.
             epoch_stats = []
             for target_batch_index in range(len(finetune_dataset)):
@@ -320,7 +315,7 @@ if __name__ == '__main__':
                 log_verbose(args, 'Epochs {}/{}'.format(i, task_args['source']['finetune_epochs']))
                 log_verbose(
                     args,
-                    'Stage-II horizon-conditioned residual-memory adaptation '
+                    'Stage-II target-only graph-temporal residual adaptation '
                     'Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, '
                     'MAPE: {:.5f}, loss : {:.5f}.'.format(
                         mse_loss, rmse_loss, mae_loss, mape_loss, model_loss
@@ -337,7 +332,7 @@ if __name__ == '__main__':
                     'optimizer_state_dict': rep_model.main_optim.state_dict(),
                 }
                 torch.save(state, f"l2_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
-                print(f"[Stage-II][HorizonMemory] checkpoint saved at epoch {i}")
+                print(f"[Stage-II][TargetResidualGraph] checkpoint saved at epoch {i}")
 
         # This protocol has no target validation split: all three target days
         # are support data. Save the final adapter and evaluate the held-out
@@ -364,8 +359,8 @@ if __name__ == '__main__':
         )
         indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]
         selected_test_scores = [final_testing_score[j] for j in indices]
-        print("[Stage-II][HorizonMemory] final held-out test MAE:", selected_test_scores)
-        print("[Stage-II][HorizonMemory] sum(final held-out test MAE):", sum(selected_test_scores))
+        print("[Stage-II][TargetResidualGraph] final held-out test MAE:", selected_test_scores)
+        print("[Stage-II][TargetResidualGraph] sum(final held-out test MAE):", sum(selected_test_scores))
 
         # Evaluate Stage-I-only SOFTS on the same held-out split after adaptation,
         # solely for reporting and never for checkpoint/epoch selection.
