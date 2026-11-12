@@ -27,14 +27,14 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 try:
-    from .horizon_residual_memory import (
-        HorizonConditionedResidualMemory,
-        configure_horizon_stage2_parameters,
+    from .target_residual_graph_net import (
+        TargetResidualGraphNet,
+        configure_target_residual_parameters,
     )
 except ImportError:
-    from horizon_residual_memory import (
-        HorizonConditionedResidualMemory,
-        configure_horizon_stage2_parameters,
+    from target_residual_graph_net import (
+        TargetResidualGraphNet,
+        configure_target_residual_parameters,
     )
 
 def log_verbose(args, msg):
@@ -66,54 +66,27 @@ class PatchFSL(nn.Module):
         else:
             raise ValueError(f"Unsupported PMME forecasting model: {model_name}")
 
-        self.horizon_memory = None
+        # Stage-II is target-city-only: no source residual bank and no retrieval.
+        # Positive legacy MemSize/temperature flags simply enable the new residual net.
+        self.residual_net = None
         if self.temperature_args > 0 and self.memory_size_args > 0:
-            self.horizon_memory = HorizonConditionedResidualMemory(
+            self.residual_net = TargetResidualGraphNet(
                 d_model=128,
+                history_len=288,
                 pred_len=int(task_args['source']['pred_num']),
-                memory_size=self.memory_size_args,
-                num_bands=3,
-                query_chunk=getattr(args, 'stage2_query_chunk', 256),
+                hidden_dim=getattr(args, 'stage2_residual_hidden', 64),
+                forecast_knots=(3, 9, int(task_args['source']['pred_num'])),
             )
 
-    @torch.no_grad()
-    def initialize_horizon_memory(self, target_support_dataset, seed=1):
-        """Initialize memory from target-support SOFTS representations only.
-
-        This pass reads support inputs to obtain representations. It does not
-        use target labels to initialize slots and does not construct/read the
-        held-out target test split.
-        """
-        if self.horizon_memory is None:
-            raise RuntimeError("Horizon memory is disabled; set MemSize > 0 and temperature > 0.")
-
-        feature_parts = []
-        for index in range(len(target_support_dataset)):
-            data_i, _ = target_support_dataset[index]
-            _, _, representation, _, _, _, _ = self(
-                data_i, stage='test', return_base=True
-            )
-            feature_parts.append(representation.reshape(-1, representation.shape[-1]))
-
-        if not feature_parts:
-            raise RuntimeError("Target support dataset produced no representations.")
-        features = torch.cat(feature_parts, dim=0)
-        count = self.horizon_memory.initialize_from_features(features, seed=seed)
-        return count
-
-    def forward(self, data_i, stage='train', return_base=False):
-        # STAR in SOFTS has train/eval-dependent behavior. Keep Stage-I fixed
-        # and deterministic while adapting only the Stage-II memory.
-        if self.horizon_memory is not None:
-            self.forecasting_model.eval()
+    def forward(self, data_i, matrix=None, stage='train', return_base=False):
+        # Stage-I is always frozen/evaluated. Only the target residual network
+        # changes during Stage-II adaptation.
+        self.forecasting_model.eval()
+        if self.residual_net is not None:
             if stage == 'train':
-                self.horizon_memory.train()
+                self.residual_net.train()
             else:
-                self.horizon_memory.eval()
-        elif stage == 'train':
-            self.forecasting_model.train()
-        else:
-            self.forecasting_model.eval()
+                self.residual_net.eval()
 
         x, y, means, stds = data_i.x, data_i.y, data_i.means, data_i.stds
         device = self.PatchFSL_cfg['device']
@@ -122,15 +95,15 @@ class PatchFSL(nn.Module):
         means = torch.as_tensor(means, dtype=torch.float32, device=device)
         stds = torch.as_tensor(stds, dtype=torch.float32, device=device)
 
-        # Preserve the PMME/SOFTS RevIN preprocessing exactly.
+        # Preserve the original PMME/SOFTS RevIN preprocessing.
         x = x.permute(0, 1, 3, 2)
         x = x[:, :, 0, -288:]
         eps = 1e-9
         revin_mean = x.mean(dim=2, keepdim=True).detach()
         revin_var = x.var(dim=2, keepdim=True, unbiased=False).detach()
         revin_std = torch.sqrt(revin_var + eps)
-        x_normalized = (x - revin_mean) / revin_std
-        x_normalized = x_normalized.permute(0, 2, 1)
+        history_normalized = (x - revin_mean) / revin_std
+        x_normalized = history_normalized.permute(0, 2, 1)
         if self.model_name == 'MLP':
             x_normalized = x_normalized.permute(0, 2, 1)
 
@@ -142,9 +115,13 @@ class PatchFSL(nn.Module):
         base_out = unnorm(base_revin, means, stds)
 
         correction = None
-        attention_entropy = None
-        if self.horizon_memory is not None:
-            correction, attention_entropy = self.horizon_memory(representation)
+        if self.residual_net is not None:
+            correction = self.residual_net(
+                history_normalized,
+                representation,
+                base_normalized,
+                matrix,
+            )
             corrected_normalized = base_normalized + correction
             corrected_revin = corrected_normalized * revin_std + revin_mean
             out = unnorm(corrected_revin, means, stds)
@@ -157,7 +134,7 @@ class PatchFSL(nn.Module):
         if return_base:
             return (
                 out, y, representation, y_unscale,
-                correction, base_out, attention_entropy,
+                correction, base_out, None,
             )
         return out, y, representation, y_unscale, correction
 
@@ -192,10 +169,10 @@ class STRep(nn.Module):
         log_verbose(args,"model params: {}".format(count_parameters(self.model)))
 
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
-        if self.model.horizon_memory is not None:
-            # Only the three horizon-conditioned memory queries/generators and
-            # shared memory are trainable; all Stage-I SOFTS weights are frozen.
-            self.trainable_params = configure_horizon_stage2_parameters(self.model)
+        if self.model.residual_net is not None:
+            # Stage-I SOFTS is frozen; only the target-only graph-temporal
+            # residual forecasting network is trainable.
+            self.trainable_params = configure_target_residual_parameters(self.model)
             self.main_optim = optim.AdamW(
                 self.trainable_params, lr=self.lr, weight_decay=1e-4
             )
@@ -206,28 +183,27 @@ class STRep(nn.Module):
             )
     
     def meta_train_revise(self, data, matrix, epoch, target=False):
-        """Few-shot target adaptation of the horizon-conditioned residual memory."""
-        memory = self.model.horizon_memory
-        if memory is None:
-            raise RuntimeError("Stage-II requires HorizonConditionedResidualMemory.")
-        if not bool(memory.memory_initialized.item()):
-            raise RuntimeError(
-                "Horizon memory has not been initialized. Call "
-                "model.initialize_horizon_memory(target_support_dataset) first."
-            )
+        """Adapt the target-only graph-temporal residual predictor."""
+        if self.model.residual_net is None:
+            raise RuntimeError("Stage-II target residual network is disabled.")
 
         data_i = data[0] if isinstance(data, (list, tuple)) else data
         self.model.train()
         self.main_optim.zero_grad(set_to_none=True)
 
-        out, y, _, _, correction, base_out, attention_entropy = self.model(
-            data_i, stage='train', return_base=True
+        out, y, _, _, correction, base_out, _ = self.model(
+            data_i, matrix=matrix, stage='train', return_base=True
         )
         forecast_loss = self.loss_criterion(out, y)
         if not torch.isfinite(forecast_loss):
-            raise RuntimeError("Non-finite PMME Stage-II horizon-memory loss.")
+            raise RuntimeError("Non-finite PMME Stage-II residual loss.")
 
-        forecast_loss.backward()
+        # A small shrinkage term discourages unnecessarily large corrections
+        # in the three-day target-only setting.
+        correction_penalty = correction.square().mean()
+        total_loss = forecast_loss + 1e-4 * correction_penalty
+
+        total_loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self.trainable_params, max_norm=1.0)
         self.main_optim.step()
 
@@ -238,7 +214,7 @@ class STRep(nn.Module):
             band_stats = []
             for band in range(3):
                 left = band * band_width
-                right = (band + 1) * band_width
+                right = (band + 1) * band_width if band < 2 else pred_len
                 base_mae = torch.mean(torch.abs(base_out[..., left:right] - y[..., left:right]))
                 final_mae = torch.mean(torch.abs(out[..., left:right] - y[..., left:right]))
                 correction_norm = correction[..., left:right].abs().mean()
@@ -246,17 +222,13 @@ class STRep(nn.Module):
                     f"{base_mae.item():.4f}->{final_mae.item():.4f}"
                     f"(d={correction_norm.item():.4f})"
                 )
-            entropy_values = "/".join(
-                f"{value:.3f}" for value in attention_entropy.detach().cpu().tolist()
-            )
             print(
-                f"[Stage-II][HorizonMemory] epoch={epoch} "
-                f"loss={forecast_loss.item():.6f} "
+                f"[Stage-II][TargetResidualGraph] epoch={epoch} "
+                f"loss={total_loss.item():.6f} "
                 f"short/mid/long(base->final,|delta|)={' | '.join(band_stats)} "
-                f"attention_entropy={entropy_values} "
+                f"correction_l2={correction_penalty.item():.6f} "
                 f"grad_norm={float(grad_norm):.6f} "
-                f"memory_slots={memory.memory.shape[0]} "
-                f"support_features={int(memory.initialization_feature_count.item())}"
+                f"trainable_params={sum(p.numel() for p in self.trainable_params)}"
             )
 
         return (
@@ -268,8 +240,11 @@ class STRep(nn.Module):
         )
 
     def forward(self, data, matrix):
-        out, meta_graph = self.model(data)
-        return out, meta_graph
+        data_i = data[0] if isinstance(data, (list, tuple)) else data
+        out, y, representation, y_unscale, correction = self.model(
+            data_i, matrix=matrix, stage='test'
+        )
+        return out, correction
 
     def test_batch(self,start,end,source_dataset,stage = "test"):  
         total_loss = []
@@ -292,7 +267,7 @@ class STRep(nn.Module):
                 if B==0:
                     break
                     
-                out, y, rep, y_unscale, normed_memory = self.model(data_i, stage='test') # KL=0
+                out, y, rep, y_unscale, correction = self.model(data_i, matrix=A, stage='test')
             
                 MSE,RMSE,MAE,MAPE = calc_metric(out, y, stage='test')
                 total_mse.append((MSE.cpu().detach().numpy(), len(out)))
