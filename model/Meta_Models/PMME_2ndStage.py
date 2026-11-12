@@ -78,7 +78,7 @@ class PatchFSL(nn.Module):
                 forecast_knots=(3, 9, int(task_args['source']['pred_num'])),
             )
 
-    def forward(self, data_i, matrix=None, stage='train', return_base=False):
+    def forward(self, data_i, stage='train', return_base=False):
         # Preserve the original Stage-I training behavior. During Stage-II,
         # freeze/evaluate SOFTS and train only the target residual network.
         if self.residual_net is None:
@@ -270,7 +270,7 @@ class STRep(nn.Module):
             mean_metric("mape"),
         )
 
-    def meta_train_revise(self, data, matrix, epoch, target=False):
+    def meta_train_revise(self, data, epoch, target=False):
         """Use original PCGrad for Stage-I and target-only residual loss for Stage-II."""
         if self.model.residual_net is None:
             return self._meta_train_stage1(data, epoch)
