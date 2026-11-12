@@ -3,7 +3,7 @@ threads=$2
 gpu=$3
 
 train_epochs=3000 #1000
-finetune_epochs=0 #6000 ##500 #500
+finetune_epochs=300
 
 if [ ${test_dataset} == 'chengdu_m' ]; then
     data_list='shenzhen_pems_metr'
@@ -25,7 +25,7 @@ mkdir -p ./out/${data_list}
 mkdir -p ./out_COT/${data_list}
 
 
-finetune_epochs=6000 
+finetune_epochs=300
 for model_name in 'SOFTS'; do  #  
     for projection in 1; do 
         for DAcoef in 0.01; do  #
