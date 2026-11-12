@@ -27,13 +27,13 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 try:
-    from .target_residual_graph_net import (
-        TargetResidualGraphNet,
+    from .target_residual_temporal_net import (
+        TargetResidualTemporalNet,
         configure_target_residual_parameters,
     )
 except ImportError:
-    from target_residual_graph_net import (
-        TargetResidualGraphNet,
+    from target_residual_temporal_net import (
+        TargetResidualTemporalNet,
         configure_target_residual_parameters,
     )
 
@@ -70,7 +70,7 @@ class PatchFSL(nn.Module):
         # Positive legacy MemSize/temperature flags simply enable the new residual net.
         self.residual_net = None
         if self.temperature_args > 0 and self.memory_size_args > 0:
-            self.residual_net = TargetResidualGraphNet(
+            self.residual_net = TargetResidualTemporalNet(
                 d_model=128,
                 history_len=288,
                 pred_len=int(task_args['source']['pred_num']),
@@ -120,7 +120,6 @@ class PatchFSL(nn.Module):
                 history_normalized,
                 representation,
                 base_normalized,
-                matrix,
             )
             corrected_normalized = base_normalized + correction
             corrected_revin = corrected_normalized * revin_std + revin_mean
@@ -134,7 +133,7 @@ class PatchFSL(nn.Module):
         if return_base:
             return (
                 out, y, representation, y_unscale,
-                correction, base_out, None,
+                correction, base_out, base_normalized,
             )
         return out, y, representation, y_unscale, correction
 
@@ -170,7 +169,7 @@ class STRep(nn.Module):
 
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
         if self.model.residual_net is not None:
-            # Stage-I SOFTS is frozen; only the target-only graph-temporal
+            # Stage-I SOFTS is frozen; only the target-only temporal
             # residual forecasting network is trainable.
             self.trainable_params = configure_target_residual_parameters(self.model)
             self.main_optim = optim.AdamW(
@@ -183,7 +182,7 @@ class STRep(nn.Module):
             )
     
     def meta_train_revise(self, data, matrix, epoch, target=False):
-        """Adapt the target-only graph-temporal residual predictor."""
+        """Adapt the target-only temporal residual predictor."""
         if self.model.residual_net is None:
             raise RuntimeError("Stage-II target residual network is disabled.")
 
@@ -191,17 +190,21 @@ class STRep(nn.Module):
         self.model.train()
         self.main_optim.zero_grad(set_to_none=True)
 
-        out, y, _, _, correction, base_out, _ = self.model(
-            data_i, matrix=matrix, stage='train', return_base=True
+        out, y, _, y_unscale, correction, base_out, base_normalized = self.model(
+            data_i, stage='train', return_base=True
         )
+        # Explicit residual supervision in the same per-window RevIN space
+        # used by the Stage-II correction output.
+        residual_target = y_unscale - base_normalized
+        residual_loss = self.loss_criterion(correction, residual_target)
         forecast_loss = self.loss_criterion(out, y)
-        if not torch.isfinite(forecast_loss):
-            raise RuntimeError("Non-finite PMME Stage-II residual loss.")
+        if not torch.isfinite(residual_loss) or not torch.isfinite(forecast_loss):
+            raise RuntimeError("Non-finite PMME Stage-II residual/forecast loss.")
 
-        # A small shrinkage term discourages unnecessarily large corrections
-        # in the three-day target-only setting.
+        # Residual prediction is the primary objective; final forecasting is
+        # retained as a light auxiliary objective and corrections are shrunk.
         correction_penalty = correction.square().mean()
-        total_loss = forecast_loss + 1e-4 * correction_penalty
+        total_loss = residual_loss + 0.1 * forecast_loss + 1e-4 * correction_penalty
 
         total_loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self.trainable_params, max_norm=1.0)
@@ -223,9 +226,11 @@ class STRep(nn.Module):
                     f"(d={correction_norm.item():.4f})"
                 )
             print(
-                f"[Stage-II][TargetResidualGraph] epoch={epoch} "
+                f"[Stage-II][TargetResidualTemporal] epoch={epoch} "
                 f"loss={total_loss.item():.6f} "
                 f"short/mid/long(base->final,|delta|)={' | '.join(band_stats)} "
+                f"residual_loss={residual_loss.item():.6f} "
+                f"forecast_loss={forecast_loss.item():.6f} "
                 f"correction_l2={correction_penalty.item():.6f} "
                 f"grad_norm={float(grad_norm):.6f} "
                 f"trainable_params={sum(p.numel() for p in self.trainable_params)}"
@@ -242,7 +247,7 @@ class STRep(nn.Module):
     def forward(self, data, matrix):
         data_i = data[0] if isinstance(data, (list, tuple)) else data
         out, y, representation, y_unscale, correction = self.model(
-            data_i, matrix=matrix, stage='test'
+            data_i, stage='test'
         )
         return out, correction
 
