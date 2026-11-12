@@ -41,7 +41,7 @@ def write_synthetic_city(root, city, mean, std, length, nodes=2, seed=0):
     }
 
 
-class PmmeTargetResidualGraphIntegrationTest(unittest.TestCase):
+class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
     def test_heldout_test_evaluation_is_deferred_until_after_stage2(self):
         runner = (Path(ROOT) / "train_DA_OT.py").read_text(encoding="utf-8")
         adaptation_start = runner.index(
@@ -52,7 +52,7 @@ class PmmeTargetResidualGraphIntegrationTest(unittest.TestCase):
         self.assertNotIn(".test_evaluation(", runner[:adaptation_start])
         self.assertEqual(runner.count(".test_evaluation("), 2)
         self.assertNotIn("initialize_horizon_memory", runner)
-        self.assertIn("TargetResidualGraph", runner)
+        self.assertIn("TargetResidualTemporal", runner)
 
     def test_target_only_residual_network_trains_and_keeps_stage1_frozen(self):
         torch.manual_seed(11)
@@ -116,6 +116,7 @@ class PmmeTargetResidualGraphIntegrationTest(unittest.TestCase):
             )
 
             self.assertIsNotNone(trainer.model.residual_net)
+            self.assertNotIn("adjacency", trainer.model.residual_net.forward.__code__.co_varnames)
             self.assertTrue(
                 all(not p.requires_grad for p in trainer.model.forecasting_model.parameters())
             )
@@ -129,7 +130,7 @@ class PmmeTargetResidualGraphIntegrationTest(unittest.TestCase):
                 means=target_dataset.means_list["target"],
                 stds=target_dataset.stds_list["target"],
             )
-            target_adjacency = target_dataset.A_list["target"]
+            target_adjacency = None
             backbone_before = {
                 name: value.detach().clone()
                 for name, value in trainer.model.forecasting_model.state_dict().items()
