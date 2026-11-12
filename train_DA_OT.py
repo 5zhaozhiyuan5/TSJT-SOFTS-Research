@@ -330,14 +330,15 @@ if __name__ == '__main__':
                 "[Stage-II][Epoch {}/{}] "
                 "total_loss={:.6f} residual_loss={:.6f} "
                 "forecast_loss={:.6f} correction_l2={:.6f} "
-                "train_MAE={:.5f} train_RMSE={:.5f} train_MAPE={:.5f} "
+                "train_MSE={:.5f} train_MAE={:.5f} train_RMSE={:.5f} train_MAPE={:.5f} "
                 "grad_norm={:.6f} time={:.3f}s".format(
                     epoch_number,
                     total_stage2_epochs,
-                    mean_epoch_component("total_loss"),
+                    model_loss,
                     mean_epoch_component("residual_loss"),
                     mean_epoch_component("forecast_loss"),
                     mean_epoch_component("correction_l2"),
+                    mse_loss,
                     mae_loss,
                     rmse_loss,
                     mape_loss,
