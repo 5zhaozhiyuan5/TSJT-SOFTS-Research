@@ -54,6 +54,71 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
         self.assertNotIn("initialize_horizon_memory", runner)
         self.assertIn("TargetResidualTemporal", runner)
 
+    def test_stage1_pcgrad_training_path_is_preserved(self):
+        torch.manual_seed(13)
+        with tempfile.TemporaryDirectory() as root:
+            data_args = {
+                "data_keys": ["target"],
+                "target": write_synthetic_city(root, "target", 55.0, 9.0, 864, seed=4),
+            }
+            task_args = {
+                "source": {
+                    "his_num": 288,
+                    "pred_num": 36,
+                    "batch_size": 16,
+                    "task_num": 2,
+                    "finetune_epochs": 1,
+                },
+                "target_few_shot": {
+                    "his_num": 288,
+                    "pred_num": 36,
+                    "batch_size": 46,
+                    "task_num": 2,
+                },
+            }
+            target_dataset = traffic_dataset(
+                data_args,
+                task_args["target_few_shot"],
+                ["target"],
+                "target_maml",
+                test_data="target",
+                target_days=3,
+            )
+            args = SimpleNamespace(
+                test_dataset="target",
+                STmodel="SOFTS",
+                save_dir=root,
+                stage2_residual_hidden=32,
+            )
+            trainer = PMME_2ndStage.STRep(
+                0.3, 50000, 0.1, 10.0,
+                0, 0, "SOFTS",
+                data_args, task_args, {"STnet": {"lr": 1e-3}},
+                {"device": torch.device("cpu")}, args,
+            )
+            self.assertIsNone(trainer.model.residual_net)
+            target_data = SimpleNamespace(
+                x=target_dataset.x_list["target"][:2],
+                y=target_dataset.y_list["target"][:2],
+                means=target_dataset.means_list["target"],
+                stds=target_dataset.stds_list["target"],
+            )
+            before = {
+                name: value.detach().clone()
+                for name, value in trainer.model.forecasting_model.state_dict().items()
+            }
+            stats = trainer.meta_train_revise(
+                [target_data, target_data], [None, None], epoch=0
+            )
+            self.assertEqual(len(stats), 5)
+            self.assertTrue(
+                all(torch.isfinite(torch.as_tensor(value)).all() for value in stats)
+            )
+            self.assertTrue(any(
+                not torch.equal(before[name], value.detach())
+                for name, value in trainer.model.forecasting_model.state_dict().items()
+            ))
+
     def test_target_only_residual_network_trains_and_keeps_stage1_frozen(self):
         torch.manual_seed(11)
         with tempfile.TemporaryDirectory() as root:
