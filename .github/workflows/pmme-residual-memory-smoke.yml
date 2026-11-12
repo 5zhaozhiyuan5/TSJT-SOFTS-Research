@@ -9,7 +9,6 @@ on:
       - "model/Meta_Models/PMME_2ndStage.py"
       - "model/Meta_Models/target_residual_temporal_net.py"
       - "tests/test_pmme_horizon_stage2_integration.py"
-      - "tests/test_pmme_horizon_stage2_integration.py"
       - "train_DA_OT.py"
       - "train_one_OT-*.sh"
       - "PMME.sh"
@@ -19,7 +18,6 @@ on:
       - "datasets.py"
       - "model/Meta_Models/PMME_2ndStage.py"
       - "model/Meta_Models/target_residual_temporal_net.py"
-      - "tests/test_pmme_horizon_stage2_integration.py"
       - "tests/test_pmme_horizon_stage2_integration.py"
       - "train_DA_OT.py"
       - "train_one_OT-*.sh"
@@ -46,7 +44,5 @@ jobs:
             echo "Found unsupported --config_file option; train_DA_OT.py expects --config_filename"
             exit 1
           fi
-      - name: Run target-only temporal residual unit tests
-        run: python tests/test_pmme_horizon_stage2_integration.py
-      - name: Run PMME temporal residual Stage-II integration tests
+      - name: Run PMME target-only temporal residual Stage-II integration tests
         run: python tests/test_pmme_horizon_stage2_integration.py
