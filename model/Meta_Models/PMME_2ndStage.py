@@ -113,8 +113,11 @@ class PatchFSL(nn.Module):
             x_normalized = x_normalized.permute(0, 2, 1)
 
         representation, base_normalized = self.forecasting_model(x_normalized)
-        representation = representation.detach()
-        base_normalized = base_normalized.detach()
+        if self.residual_net is not None:
+            # Stage-II freezes Stage-I outputs; Stage-I pretraining must retain
+            # the computation graph so the forecasting backbone can learn.
+            representation = representation.detach()
+            base_normalized = base_normalized.detach()
 
         base_revin = base_normalized * revin_std + revin_mean
         base_out = unnorm(base_revin, means, stds)
