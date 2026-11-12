@@ -167,7 +167,7 @@ if __name__ == '__main__':
             idx+=1
         
         if True:
-            model_loss ,mse_loss, rmse_loss, mae_loss, mape_loss = rep_model.meta_train_revise(data, matrix, i)
+            model_loss ,mse_loss, rmse_loss, mae_loss, mape_loss = rep_model.meta_train_revise(data, i)
     
             if i%25==0:
                 log_verbose(args,'Epochs {}/{}'.format(i,task_args['source']['train_epochs']))
@@ -299,9 +299,9 @@ if __name__ == '__main__':
             epoch_stats = []
             for target_batch_index in range(len(finetune_dataset)):
                 target_data, _ = finetune_dataset[target_batch_index]
-                # The temporal residual network does not consume the target graph.
+                # The temporal residual network does not consume a target graph.
                 stats = rep_model.meta_train_revise(
-                    target_data, None, i, target=True
+                    target_data, i, target=True
                 )
                 epoch_stats.append(stats)
 
