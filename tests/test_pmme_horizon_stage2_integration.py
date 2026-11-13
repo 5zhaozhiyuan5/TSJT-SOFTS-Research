@@ -41,18 +41,18 @@ def write_synthetic_city(root, city, mean, std, length, nodes=2, seed=0):
     }
 
 
-class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
+class PmmeTargetResidualLowRankIntegrationTest(unittest.TestCase):
     def test_heldout_test_evaluation_is_deferred_until_after_stage2(self):
         runner = (Path(ROOT) / "train_DA_OT.py").read_text(encoding="utf-8")
         adaptation_start = runner.index(
-            "for i in range(total_stage2_epochs):"
+            "adapter_stats = rep_model.fit_target_residual_adapter(finetune_dataset)"
         )
         test_dataset_creation = runner.index("test_dataset = traffic_dataset")
         self.assertGreater(test_dataset_creation, adaptation_start)
         self.assertNotIn(".test_evaluation(", runner[:adaptation_start])
         self.assertEqual(runner.count(".test_evaluation("), 2)
         self.assertNotIn("initialize_horizon_memory", runner)
-        self.assertIn("TargetResidualLowRankAdapter", runner)
+        self.assertIn("LowRankResidualAdapter", runner)
         self.assertIn("[Stage-II][LowRankResidualAdapter] fit_complete", runner)
         self.assertIn("fit_target_residual_adapter(finetune_dataset)", runner)
         self.assertNotIn("total_stage2_epochs", runner)
