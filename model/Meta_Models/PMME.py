@@ -297,11 +297,9 @@ class STRep(nn.Module):
                 shared_x1.detach(), shared_x2.detach())
             # Source-level transfer confidence complements sample-level weights.
             # It is detached so the model cannot game the gate by shrinking features.
-            target_center = shared_x2.detach().mean(dim=0, keepdim=True)
-            source_center = shared_x1.detach().mean(dim=0, keepdim=True)
-            target_var = shared_x2.detach().var(dim=0, unbiased=False, keepdim=True).clamp_min(1e-6)
-            source_to_target_shift = ((source_center - target_center).pow(2) / target_var).mean()
-            source_quality_scores.append(torch.exp(-source_to_target_shift).clamp_min(0.05))
+            source_quality_scores.append(
+                self.stage1_transfer.source_quality(shared_x1.detach(), shared_x2.detach())
+            )
             alpha = torch.full((size1,), 1.0 / max(size1, 1), device=self.device)
             beta = torch.full((size2,), 1.0 / max(size2, 1), device=self.device)
             
