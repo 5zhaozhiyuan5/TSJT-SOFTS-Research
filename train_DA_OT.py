@@ -270,7 +270,7 @@ if __name__ == '__main__':
         print('####################')
         print('####################')
     
-        # Stage-II: iterative training of compact horizon-conditioned residual memory.
+        # Stage-II: budgeted HMRM-Mamba training.
         rep_model = PMME_2ndStage.STRep(
             args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio,
             args.MemSize, 1, args.model_name, data_args, task_args,
