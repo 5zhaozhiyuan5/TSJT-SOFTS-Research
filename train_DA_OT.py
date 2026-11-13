@@ -308,7 +308,7 @@ if __name__ == '__main__':
         target_batch_size = int(
             task_args["target_few_shot"].get("batch_size", args.batch_size)
         )
-        stage2_source_batch_size = min(16, max(target_batch_size, 2 * target_batch_size))
+        stage2_source_batch_size = min(64, max(target_batch_size, 2 * target_batch_size))
         source_dataset.task_args = dict(source_dataset.task_args)
         source_dataset.task_args["batch_size"] = stage2_source_batch_size
 
