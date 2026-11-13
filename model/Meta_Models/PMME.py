@@ -385,6 +385,18 @@ class STRep(nn.Module):
             alpha = alpha / alpha.sum().clamp_min(1e-8)
             beta = beta / beta.sum().clamp_min(1e-8)
 
+            if epoch % 25 == 0:
+                source_eff = 1.0 / alpha.pow(2).sum().clamp_min(1e-8)
+                target_eff = 1.0 / beta.pow(2).sum().clamp_min(1e-8)
+                print(
+                    "[Stage-I][SharedPrivate] decomp={:.6f}, "
+                    "source_reliability_eff={:.1f}/{}, target_reliability_eff={:.1f}/{}".format(
+                        float(decomposition_losses[-1].detach().cpu()),
+                        float(source_eff.detach().cpu()), size1,
+                        float(target_eff.detach().cpu()), size2
+                    )
+                )
+
             if self.DA == 'OT':
                 if (epoch>=self.DAepoch_args): 
                     
