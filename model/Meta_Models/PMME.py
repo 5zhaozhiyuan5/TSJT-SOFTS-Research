@@ -253,6 +253,7 @@ class STRep(nn.Module):
         print(shape0_list)
 
         DA_losses = []
+        source_quality_scores = []
         y_norm_sources = []
         y_norm_targets = []
         
@@ -294,6 +295,13 @@ class STRep(nn.Module):
             # distance (O(ND), not an N_source x N_target pairwise matrix).
             reliability_source, reliability_target = self.stage1_transfer.reliability_weights(
                 shared_x1.detach(), shared_x2.detach())
+            # Source-level transfer confidence complements sample-level weights.
+            # It is detached so the model cannot game the gate by shrinking features.
+            target_center = shared_x2.detach().mean(dim=0, keepdim=True)
+            source_center = shared_x1.detach().mean(dim=0, keepdim=True)
+            target_var = shared_x2.detach().var(dim=0, unbiased=False, keepdim=True).clamp_min(1e-6)
+            source_to_target_shift = ((source_center - target_center).pow(2) / target_var).mean()
+            source_quality_scores.append(torch.exp(-source_to_target_shift).clamp_min(0.05))
             alpha = torch.full((size1,), 1.0 / max(size1, 1), device=self.device)
             beta = torch.full((size2,), 1.0 / max(size2, 1), device=self.device)
             
@@ -439,7 +447,13 @@ class STRep(nn.Module):
         if len(DA_losses) == 0:
             DA_loss = 0
         else:
-            DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
+            source_quality = torch.stack(source_quality_scores[:len(DA_losses)])
+            source_quality = source_quality / source_quality.sum().clamp_min(1e-8)
+            # Preserve the original sum-scale when all three source domains
+            # receive equal confidence, while down-weighting mismatched sources.
+            DA_loss = len(DA_losses) * sum(
+                weight * loss for weight, loss in zip(source_quality, DA_losses)
+            )
         
         decomposition_loss = torch.stack(decomposition_losses).mean() if decomposition_losses else 0.0
         model_loss += (task_loss + DA_loss + 0.1 * decomposition_loss) 
