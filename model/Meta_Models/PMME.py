@@ -25,6 +25,7 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
+from stage1_transfer import SharedPrivateReliabilityTransfer
 
 def log_verbose(args, msg):
     print(msg)
@@ -140,7 +141,11 @@ class STRep(nn.Module):
         # print(self.model)
         log_verbose(args,"model params: {}".format(count_parameters(self.model)))
 
-        self.main_optim = optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=1e-2)
+        # Stage-I only: decompose latent representations into transferable and
+        # city-specific components. The module starts as an identity partition.
+        self.stage1_transfer = SharedPrivateReliabilityTransfer(input_dim=36).to(self.device)
+        stage1_parameters = list(self.model.parameters()) + list(self.stage1_transfer.parameters())
+        self.main_optim = optim.AdamW(stage1_parameters, lr=self.lr, weight_decay=1e-2)
         
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
         
@@ -189,6 +194,7 @@ class STRep(nn.Module):
         rep_target = []
         y_source = []
         y_target = []
+        decomposition_losses = []
 
         target_task_loss = 0
         for i in range(len(data)):  
@@ -276,6 +282,20 @@ class STRep(nn.Module):
             x2 = x2.view(-1, x2.size(-1))
             y1 = y1.view(-1, y1.size(-1))
             y2 = y2.view(-1, y2.size(-1))
+
+            # Stage-I representation disentanglement: only the shared branch
+            # participates in cross-city alignment; private information is
+            # retained through reconstruction and orthogonality constraints.
+            shared_x1, private_x1, reconstructed_x1, decomp1 = self.stage1_transfer(x1)
+            shared_x2, private_x2, reconstructed_x2, decomp2 = self.stage1_transfer(x2)
+            decomposition_losses.append(0.5 * (decomp1 + decomp2))
+
+            # Reliability is estimated with cross-domain standardized centroid
+            # distance (O(ND), not an N_source x N_target pairwise matrix).
+            reliability_source, reliability_target = self.stage1_transfer.reliability_weights(
+                shared_x1.detach(), shared_x2.detach())
+            alpha = torch.full((size1,), 1.0 / max(size1, 1), device=self.device)
+            beta = torch.full((size2,), 1.0 / max(size2, 1), device=self.device)
             
 
             if self.classifier_args>1e-6:
@@ -343,8 +363,8 @@ class STRep(nn.Module):
                         return torch.where(x > thresh, x, torch.tensor(0.0, device=x.device))
                     
                     prob1, prob2 = threshold(prob1).detach(), threshold(prob2).detach() 
-                    alpha = (prob1/torch.sum(prob1)).detach()
-                    beta = (prob2/torch.sum(prob2)).detach()
+                    alpha = (prob1 / torch.sum(prob1).clamp_min(1e-8)).detach()
+                    beta = (prob2 / torch.sum(prob2).clamp_min(1e-8)).detach()
                     
                    
                     OT_loss_scale = torch.sqrt(((prob1.mean())*(prob2.mean())).detach())
@@ -357,14 +377,22 @@ class STRep(nn.Module):
                 beta = torch.ones(size2, device=self.device)/size2  
                 OT_loss_scale = 1
 
+            # Fuse classifier confidence with geometric cross-domain reliability.
+            # Normalization keeps the Sinkhorn marginals valid and prevents a
+            # small number of unreliable samples from dominating transport.
+            alpha = (alpha * reliability_source).clamp_min(1e-12)
+            beta = (beta * reliability_target).clamp_min(1e-12)
+            alpha = alpha / alpha.sum().clamp_min(1e-8)
+            beta = beta / beta.sum().clamp_min(1e-8)
+
             if self.DA == 'OT':
                 if (epoch>=self.DAepoch_args): 
                     
                     x_y_scale = math.sqrt(self.xySquaredRatio_args)
                     y1, y2 = y1*x_y_scale, y2*x_y_scale
                     
-                    x = torch.cat((x1,y1),dim=-1) 
-                    y = torch.cat((x2,y2),dim=-1) # y: target  
+                    x = torch.cat((shared_x1, y1), dim=-1)
+                    y = torch.cat((shared_x2, y2), dim=-1)  # target shared-pattern space
                     
                     if (ratio1>0.00 and ratio2>0.00):
                         OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args *OT_loss_scale
@@ -374,7 +402,7 @@ class STRep(nn.Module):
 
             elif self.DA == 'CMMD':
                 if (epoch>=self.DAepoch_args): 
-                    sigma_x = compute_initial_bandwidth_full(x1, x2)
+                    sigma_x = compute_initial_bandwidth_full(shared_x1, shared_x2)
                     sigma_y = compute_initial_bandwidth_full(y1, y2)
             
                     cmmd = CMMDLoss(sigma_x=sigma_x, sigma_y=sigma_y)
@@ -386,13 +414,13 @@ class STRep(nn.Module):
                     
                     sigma = compute_initial_bandwidth_full(x1, x2)
                     mmd = MMDLoss(sigma=sigma)
-                    DA_losses.append(mmd(x1, x2)*self.DAcoef_args)
+                    DA_losses.append(mmd(shared_x1, shared_x2)*self.DAcoef_args)
                 
     
             elif self.DA == 'CORAL':
                 if (epoch>=self.DAepoch_args):
                     coral = CORALLoss()
-                    DA_losses.append(coral(x1, x2)*self.DAcoef_args)
+                    DA_losses.append(coral(shared_x1, shared_x2)*self.DAcoef_args)
             
                     
         task_loss = task_losses[0] + task_losses[1] + task_losses[2]
@@ -401,7 +429,8 @@ class STRep(nn.Module):
         else:
             DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
         
-        model_loss += (task_loss + DA_loss) 
+        decomposition_loss = torch.stack(decomposition_losses).mean() if decomposition_losses else 0.0
+        model_loss += (task_loss + DA_loss + 0.1 * decomposition_loss) 
 
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
             
@@ -443,12 +472,12 @@ class STRep(nn.Module):
             self.main_optim.zero_grad()
             model_loss.backward(retain_graph=True)
             
-            flat_A, mapping = flatten_and_pad_grads(self.model.parameters())
+            flat_A, mapping = flatten_and_pad_grads(list(self.model.parameters()) + list(self.stage1_transfer.parameters()))
             
             self.main_optim.zero_grad()
             target_task_loss.backward(retain_graph=True)
             
-            flat_B, _ = flatten_and_pad_grads(self.model.parameters())
+            flat_B, _ = flatten_and_pad_grads(list(self.model.parameters()) + list(self.stage1_transfer.parameters()))
             
             flat_proj_A = pcgrad_one_sided(flat_A, flat_B)
             
