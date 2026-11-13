@@ -104,7 +104,9 @@ class PatchFSL(nn.Module):
         base_revin = base_normalized * revin_std + revin_mean
         base_out = unnorm(base_revin, means, stds)
         y_unscale = norm(y, means, stds)
-        y_unscale = (y_unscale - revin_mean) / revin_std
+        # Kept only for legacy return compatibility; Stage-II fitting uses
+        # physical-space residuals and never depends on this RevIN division.
+        y_unscale = (y_unscale - revin_mean) / revin_std.clamp_min(1e-4)
 
         return {
             "history_normalized": history_normalized,
