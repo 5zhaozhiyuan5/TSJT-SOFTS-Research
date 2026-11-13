@@ -64,6 +64,16 @@ class SharedPrivateReliabilityTransfer(nn.Module):
         disentanglement_loss = reconstruction + 0.05 * orthogonality
         return shared, private, reconstructed, disentanglement_loss
 
+
+    @torch.no_grad()
+    def source_quality(self, source_shared, target_shared):
+        """Scalar target-conditioned source-domain relevance in [0.05, 1]."""
+        target_center = target_shared.mean(dim=0, keepdim=True)
+        source_center = source_shared.mean(dim=0, keepdim=True)
+        target_var = target_shared.var(dim=0, unbiased=False, keepdim=True).clamp_min(1e-6)
+        shift = ((source_center - target_center).pow(2) / target_var).mean()
+        return torch.exp(-shift).clamp_min(0.05)
+
     @torch.no_grad()
     def reliability_weights(self, source_shared, target_shared):
         """Linear-memory reliability from cross-domain standardized centroid distance."""
