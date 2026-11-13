@@ -317,8 +317,9 @@ if __name__ == '__main__':
         # during the final 40%, adapt on target batches only. This avoids adding
         # a second full training schedule and cycles through every target batch.
         stage2_epochs = max(1, int(task_args["source"]["finetune_epochs"]))
-        source_pretrain_epochs = min(
-            stage2_epochs, max(1, int(round(stage2_epochs * 0.60)))
+        source_pretrain_epochs = (
+            min(stage2_epochs - 1, max(1, int(round(stage2_epochs * 0.60))))
+            if stage2_epochs > 1 else 0
         )
         stage2_start = time.time()
         source_length = len(source_dataset)
