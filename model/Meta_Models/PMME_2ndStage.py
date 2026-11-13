@@ -27,15 +27,9 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 try:
-    from .target_residual_temporal_net import (
-        TargetResidualTemporalNet,
-        configure_target_residual_parameters,
-    )
+    from .target_residual_lowrank_adapter import TargetResidualLowRankAdapter
 except ImportError:
-    from target_residual_temporal_net import (
-        TargetResidualTemporalNet,
-        configure_target_residual_parameters,
-    )
+    from target_residual_lowrank_adapter import TargetResidualLowRankAdapter
 
 def log_verbose(args, msg):
     print(msg)
@@ -43,7 +37,7 @@ def log_verbose(args, msg):
         f.write(str(msg) + "\n")
 
 class PatchFSL(nn.Module):
-    """PMME Stage-II wrapper with a frozen Stage-I forecasting backbone."""
+    """PMME wrapper with a frozen Stage-I backbone and optional Stage-II adapter."""
 
     def __init__(self, data_args, model_args, task_args, memory_size_args,
                  temperature_args, model_name, PatchFSL_cfg, args, model='GWN'):
@@ -66,33 +60,21 @@ class PatchFSL(nn.Module):
         else:
             raise ValueError(f"Unsupported PMME forecasting model: {model_name}")
 
-        # Stage-II is target-city-only: no source residual bank and no retrieval.
-        # Positive legacy MemSize/temperature flags simply enable the new residual net.
+        # Stage-II uses a closed-form target-only residual adapter. Legacy
+        # positive MemSize/temperature flags continue to enable Stage-II.
         self.residual_net = None
         if self.temperature_args > 0 and self.memory_size_args > 0:
-            self.residual_net = TargetResidualTemporalNet(
-                d_model=128,
+            self.residual_net = TargetResidualLowRankAdapter(
                 history_len=288,
                 pred_len=int(task_args['source']['pred_num']),
-                hidden_dim=getattr(args, 'stage2_residual_hidden', 32),
-                forecast_knots=(3, 9, int(task_args['source']['pred_num'])),
+                feature_bins=getattr(args, 'stage2_feature_bins', 12),
+                rank=getattr(args, 'stage2_residual_rank', 6),
+                smooth_rank=getattr(args, 'stage2_residual_smooth_rank', 3),
+                ridge_alpha=getattr(args, 'stage2_residual_ridge', 10.0),
             )
 
-    def forward(self, data_i, stage='train', return_base=False):
-        # Preserve the original Stage-I training behavior. During Stage-II,
-        # freeze/evaluate SOFTS and train only the target residual network.
-        if self.residual_net is None:
-            if stage == 'train':
-                self.forecasting_model.train()
-            else:
-                self.forecasting_model.eval()
-        else:
-            self.forecasting_model.eval()
-            if stage == 'train':
-                self.residual_net.train()
-            else:
-                self.residual_net.eval()
-
+    def prepare_stage2(self, data_i):
+        """Compute frozen Stage-I outputs and target-normalized supervision once."""
         x, y, means, stds = data_i.x, data_i.y, data_i.means, data_i.stds
         device = self.PatchFSL_cfg['device']
         x = torch.as_tensor(x, dtype=torch.float32, device=device)
@@ -112,31 +94,67 @@ class PatchFSL(nn.Module):
         if self.model_name == 'MLP':
             x_normalized = x_normalized.permute(0, 2, 1)
 
-        representation, base_normalized = self.forecasting_model(x_normalized)
         if self.residual_net is not None:
-            # Stage-II freezes Stage-I outputs; Stage-I pretraining must retain
-            # the computation graph so the forecasting backbone can learn.
-            representation = representation.detach()
-            base_normalized = base_normalized.detach()
+            # Stage-II never updates or backpropagates through Stage-I.
+            self.forecasting_model.eval()
+            with torch.no_grad():
+                representation, base_normalized = self.forecasting_model(x_normalized)
+        else:
+            representation, base_normalized = self.forecasting_model(x_normalized)
 
         base_revin = base_normalized * revin_std + revin_mean
         base_out = unnorm(base_revin, means, stds)
+        y_unscale = norm(y, means, stds)
+        y_unscale = (y_unscale - revin_mean) / revin_std
+
+        return {
+            "history_normalized": history_normalized,
+            "representation": representation,
+            "base_normalized": base_normalized,
+            "base_out": base_out,
+            "y": y,
+            "y_unscale": y_unscale,
+            "revin_mean": revin_mean,
+            "revin_std": revin_std,
+            "means": means,
+            "stds": stds,
+        }
+
+    def forward(self, data_i, stage='train', return_base=False):
+        if self.residual_net is None:
+            if stage == 'train':
+                self.forecasting_model.train()
+            else:
+                self.forecasting_model.eval()
+        else:
+            self.forecasting_model.eval()
+            self.residual_net.eval()
+
+        prepared = self.prepare_stage2(data_i)
+        history_normalized = prepared["history_normalized"]
+        representation = prepared["representation"]
+        base_normalized = prepared["base_normalized"]
+        base_out = prepared["base_out"]
+        y = prepared["y"]
+        y_unscale = prepared["y_unscale"]
 
         correction = None
         if self.residual_net is not None:
+            if not self.residual_net.is_fitted:
+                raise RuntimeError(
+                    "Stage-II low-rank residual adapter has not been fitted on target support data."
+                )
             correction = self.residual_net(
-                history_normalized,
-                representation,
-                base_normalized,
+                history_normalized, base_normalized
             )
             corrected_normalized = base_normalized + correction
-            corrected_revin = corrected_normalized * revin_std + revin_mean
-            out = unnorm(corrected_revin, means, stds)
+            corrected_revin = (
+                corrected_normalized * prepared["revin_std"]
+                + prepared["revin_mean"]
+            )
+            out = unnorm(corrected_revin, prepared["means"], prepared["stds"])
         else:
             out = base_out
-
-        y_unscale = norm(y, means, stds)
-        y_unscale = (y_unscale - revin_mean) / revin_std
 
         if return_base:
             return (
