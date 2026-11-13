@@ -311,9 +311,6 @@ if __name__ == '__main__':
         current_state.update(compatible_state)
         rep_model.model.load_state_dict(current_state, strict=True)
 
-        # Match source-task batch size to the few-shot target batch during Stage-II.
-        # This prevents the large Stage-I source batch (often >100) from dominating
-        # the residual-memory adaptation cost. Stage-I has already completed.
         # Stage-II uses micro-batches to keep the 10k-slot memory readers bounded.
         # The default target batch of 4 uses small updates; the final partial batch is retained.
         stage2_target_batch_size = max(1, int(args.stage2_target_batch_size))
@@ -370,7 +367,7 @@ if __name__ == '__main__':
             stage2_tasks = [target_data]
 
             if phase == "cross_city_pretrain":
-                # The source dataset is instantiated with add_target=False.
+                # The target city was removed from source_dataset.data_list after Stage-I.
                 source_data, _ = source_dataset[epoch % source_length]
                 stage2_tasks.append(source_data)
 
