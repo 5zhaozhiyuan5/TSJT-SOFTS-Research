@@ -98,7 +98,10 @@ if __name__ == '__main__':
     }
 
     ## dataset
-    source_dataset = traffic_dataset(data_args, task_args['source'], data_list, "source", test_data=args.test_dataset)#####
+    source_dataset = traffic_dataset(
+        data_args, task_args['source'], data_list, "source",
+        test_data=args.test_dataset, add_target=False
+    )
     ## check source dataset
 
     for data in source_dataset.data_list:
@@ -299,69 +302,73 @@ if __name__ == '__main__':
         current_state.update(compatible_state)
         rep_model.model.load_state_dict(current_state, strict=True)
 
+        # Keep the total Stage-II update budget unchanged. The first 60% of
+        # updates use one target + one source batch (target-guided source learning);
+        # the final 40% use target-only adaptation. Target windows are cycled
+        # sequentially so the full three-day support set is covered.
         stage2_epochs = max(1, int(task_args["source"]["finetune_epochs"]))
+        source_pretrain_epochs = max(1, int(round(stage2_epochs * 0.60)))
+        source_pretrain_epochs = min(source_pretrain_epochs, stage2_epochs)
         stage2_start = time.time()
-        source_count = max(1, int(args.target_days))
         source_length = len(source_dataset)
+        target_length = len(finetune_dataset)
         if source_length <= 0:
-            raise RuntimeError("Stage-II requires at least one source training task.")
+            raise RuntimeError("Stage-II requires source training data.")
+        if target_length <= 0:
+            raise RuntimeError("Stage-II requires target support windows.")
 
         log_verbose(
             args,
-            "[Stage-II][HMRM] start iterative training: epochs={}, memory_size={}, "
-            "trainable_parameters={}".format(
-                stage2_epochs,
-                rep_model.model.residual_net.memory_size,
-                sum(p.numel() for p in rep_model.trainable_params),
+            "[Stage-II][HMRM-Mamba] fixed update budget: total_epochs={}, "
+            "cross_city_epochs={}, target_adapt_epochs={}, target_batches={}, "
+            "source_batches_per_cross_city_epoch=1".format(
+                stage2_epochs, source_pretrain_epochs,
+                stage2_epochs - source_pretrain_epochs, target_length,
             )
         )
 
         for epoch in range(stage2_epochs):
-            target_item = finetune_dataset[0]
-            target_data = target_item[0] if isinstance(target_item, (tuple, list)) else target_item
+            epoch_start = time.time()
+            target_item = finetune_dataset[epoch % target_length]
+            target_data = (
+                target_item[0]
+                if isinstance(target_item, (tuple, list)) else target_item
+            )
+            phase = (
+                "cross_city_pretrain"
+                if epoch < source_pretrain_epochs else "target_adapt"
+            )
             stage2_tasks = [target_data]
-            stage2_matrices = [target_item[1] if isinstance(target_item, (tuple, list)) and len(target_item) > 1 else None]
-            seen_node_counts = {int(stage2_matrices[0].shape[1])} if stage2_matrices[0] is not None else set()
 
-            cursor = (epoch * source_count) % source_length
-            attempts = 0
-            while len(stage2_tasks) < source_count + 1 and attempts < source_length:
-                data_i, matrix_i = source_dataset[(cursor + attempts) % source_length]
-                node_count = int(matrix_i.shape[1])
-                if node_count not in seen_node_counts:
-                    stage2_tasks.append(data_i)
-                    stage2_matrices.append(matrix_i)
-                    seen_node_counts.add(node_count)
-                attempts += 1
-
-            # If source tasks share node counts, still use available source data
-            # rather than silently dropping the source-domain objective.
-            if len(stage2_tasks) == 1:
-                fallback_data, fallback_matrix = source_dataset[cursor]
-                stage2_tasks.append(fallback_data)
-                stage2_matrices.append(fallback_matrix)
+            if phase == "cross_city_pretrain":
+                # source_dataset is constructed with add_target=False, so this
+                # batch is guaranteed to come from one of the source cities.
+                source_data, _ = source_dataset[epoch % source_length]
+                stage2_tasks.append(source_data)
 
             train_stats = rep_model.meta_train_revise(
-                stage2_tasks, stage2_matrices, epoch
+                stage2_tasks, epoch=epoch, phase=phase
             )
             if epoch % 10 == 0 or epoch == stage2_epochs - 1:
                 log_verbose(
                     args,
-                    "[Stage-II][HMRM] epoch {}/{} source_MAE={:.6f} "
-                    "source_RMSE={:.6f} loss={:.6f}".format(
-                        epoch + 1, stage2_epochs,
-                        float(train_stats[3]), float(train_stats[2]),
-                        float(train_stats[0]),
+                    "[Stage-II][HMRM-Mamba] epoch {}/{} phase={} "
+                    "target_MAE={:.6f} source_MAE={:.6f} "
+                    "target_loss={:.6f} epoch_seconds={:.3f}".format(
+                        epoch + 1, stage2_epochs, phase,
+                        train_stats["target_mae"], train_stats["source_mae"],
+                        train_stats["target_loss"], time.time() - epoch_start,
                     )
                 )
 
             if (epoch + 1) % 25 == 0 or epoch == stage2_epochs - 1:
                 stage2_path = (
-                    f"stage2_hmrm_{args.test_dataset}_{args.model_name}_seed{seed}.pth"
+                    f"stage2_hmamba_{args.test_dataset}_{args.model_name}_seed{seed}.pth"
                 )
                 torch.save(
                     {
                         "epoch": epoch + 1,
+                        "phase": phase,
                         "model_state_dict": rep_model.state_dict(),
                         "optimizer_state_dict": rep_model.main_optim.state_dict(),
                         "stage1_checkpoint": model_path,
@@ -372,7 +379,7 @@ if __name__ == '__main__':
         fit_seconds = time.time() - stage2_start
         log_verbose(
             args,
-            f"[Stage-II][HMRM] iterative training finished in {fit_seconds:.2f}s"
+            f"[Stage-II][HMRM-Mamba] iterative training finished in {fit_seconds:.2f}s"
         )
 
         testing_score = rep_model.test_evaluation(
@@ -380,9 +387,9 @@ if __name__ == '__main__':
         )
         indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]
         current_testing_score = [testing_score[index] for index in indices]
-        print("[Stage-II][HMRM] test MAE by selected horizons:", current_testing_score)
-        print("[Stage-II][HMRM] sum of selected horizon MAE:", sum(current_testing_score))
-        print("[Stage-II][HMRM] iterative training complete.")
+        print("[Stage-II][HMRM-Mamba] test MAE by selected horizons:", current_testing_score)
+        print("[Stage-II][HMRM-Mamba] sum of selected horizon MAE:", sum(current_testing_score))
+        print("[Stage-II][HMRM-Mamba] iterative training complete.")
 
 
     # del rep_model
