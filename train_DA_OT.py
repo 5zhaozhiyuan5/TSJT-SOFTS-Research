@@ -39,6 +39,12 @@ parser.add_argument('--DAcoef',default=0.1,type=float)
 parser.add_argument('--DAepoch',default=50000,type=int)
 parser.add_argument('--MemSize',default=10000,type=int)
 parser.add_argument('--projection',default=0,type=float)
+parser.add_argument(
+    '--profile_coef',
+    default=0.1,
+    type=float,
+    help='Stage-I multi-horizon traffic response profile supervision weight; set 0 to disable.',
+)
 parser.add_argument('--model_name',default='SOFTS',type=str)
 parser.add_argument('--DA',default='OT',type=str)
 args = parser.parse_args()
