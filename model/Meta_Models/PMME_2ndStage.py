@@ -365,9 +365,8 @@ class STRep(nn.Module):
             for parameter, gs, gt in zip(params, source_grads, target_grads):
                 parameter.grad = gt + gs
         else:
+            # No source task: keep the already-computed target gradient.
             dot = torch.tensor(0.0, device=self.device)
-            self.main_optim.zero_grad(set_to_none=True)
-            target_loss.backward()
 
         torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
         self.main_optim.step()
