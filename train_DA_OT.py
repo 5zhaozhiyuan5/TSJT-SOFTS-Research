@@ -302,6 +302,15 @@ if __name__ == '__main__':
         current_state.update(compatible_state)
         rep_model.model.load_state_dict(current_state, strict=True)
 
+        # Match source-task batch size to the few-shot target batch during Stage-II.
+        # This prevents the large Stage-I source batch (often >100) from dominating
+        # the residual-memory adaptation cost. Stage-I has already completed.
+        stage2_source_batch_size = int(
+            task_args["target_few_shot"].get("batch_size", args.batch_size)
+        )
+        source_dataset.task_args = dict(source_dataset.task_args)
+        source_dataset.task_args["batch_size"] = stage2_source_batch_size
+
         # Fixed Stage-II budget: retain the configured epoch count. During the
         # first 60% of updates, train on one target batch plus one source batch;
         # during the final 40%, adapt on target batches only. This avoids adding
@@ -322,9 +331,10 @@ if __name__ == '__main__':
             args,
             "[Stage-II][HMRM-Mamba] fixed budget: epochs={}, "
             "target-guided source phase={}, target-adaptation phase={}, "
-            "target_support_batches={}, max_source_batches_per_epoch=1".format(
+            "target_support_batches={}, source_batch_size={}, max_source_batches_per_epoch=1".format(
                 stage2_epochs, source_pretrain_epochs,
                 stage2_epochs - source_pretrain_epochs, target_length,
+                stage2_source_batch_size,
             )
         )
 
