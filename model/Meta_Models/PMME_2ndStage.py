@@ -190,23 +190,37 @@ class STRep(nn.Module):
         self.last_stage2_loss_components = None
 
         self.model = PatchFSL(data_args, model_args, task_args, memory_size_args, temperature_args, model_name, PatchFSL_cfg, args).to(self.device)
-         
-        # print(self.model)
-        log_verbose(args,"model params: {}".format(count_parameters(self.model)))
 
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
         if self.model.residual_net is not None:
-            # Stage-I SOFTS is frozen; only the target-only temporal
-            # residual forecasting network is trainable.
-            self.trainable_params = configure_target_residual_parameters(self.model)
-            self.main_optim = optim.AdamW(
-                self.trainable_params, lr=self.lr, weight_decay=1e-4
+            # The Stage-II adapter has buffers only and is solved in closed form.
+            # Freeze every Stage-I parameter; no optimizer or epoch loop is needed.
+            for parameter in self.model.parameters():
+                parameter.requires_grad_(False)
+            self.trainable_params = []
+            self.main_optim = None
+            log_verbose(
+                args,
+                "[Stage-II][LowRankResidualAdapter] frozen Stage-I; "
+                "trainable adapter parameters=0 (closed-form ridge fit)."
             )
         else:
             self.trainable_params = [p for p in self.model.parameters() if p.requires_grad]
             self.main_optim = optim.AdamW(
                 self.trainable_params, lr=self.lr, weight_decay=1e-2
             )
+
+        total_params = sum(parameter.numel() for parameter in self.model.parameters())
+        trainable_params = sum(
+            parameter.numel() for parameter in self.model.parameters()
+            if parameter.requires_grad
+        )
+        log_verbose(
+            args,
+            "model params total: {}, trainable: {}".format(
+                total_params, trainable_params
+            )
+        )
     
     def _meta_train_stage1(self, data, epoch):
         """Original source/target PCGrad training path for Stage-I."""
@@ -289,14 +303,137 @@ class STRep(nn.Module):
             mean_metric("mape"),
         )
 
+    def fit_target_residual_adapter(self, target_dataset):
+        """Fit the Stage-II low-rank adapter once from target support windows."""
+        adapter = self.model.residual_net
+        if adapter is None:
+            raise RuntimeError("Stage-II low-rank residual adapter is disabled.")
+
+        if hasattr(target_dataset, "x"):
+            data_items = [target_dataset]
+        elif (
+            isinstance(target_dataset, tuple)
+            and len(target_dataset) > 0
+            and hasattr(target_dataset[0], "x")
+        ):
+            data_items = [target_dataset[0]]
+        elif (
+            isinstance(target_dataset, list)
+            and target_dataset
+            and hasattr(target_dataset[0], "x")
+        ):
+            data_items = target_dataset
+        else:
+            data_items = []
+            for index in range(len(target_dataset)):
+                item = target_dataset[index]
+                data_i = item[0] if isinstance(item, (tuple, list)) else item
+                if hasattr(data_i, "x"):
+                    data_items.append(data_i)
+
+        if not data_items:
+            raise RuntimeError("The target support dataset contains no usable batches.")
+
+        self.model.eval()
+        start_time = time.time()
+        prepared_batches = []
+        feature_batches = []
+        residual_batches = []
+        with torch.no_grad():
+            for data_i in data_items:
+                prepared = self.model.prepare_stage2(data_i)
+                features = adapter.extract_features(
+                    prepared["history_normalized"],
+                    prepared["base_normalized"],
+                )
+                residual_target = (
+                    prepared["y_unscale"] - prepared["base_normalized"]
+                )
+                if not torch.isfinite(features).all() or not torch.isfinite(residual_target).all():
+                    raise RuntimeError(
+                        "Non-finite target support features/residuals during Stage-II fitting."
+                    )
+                prepared_batches.append(prepared)
+                feature_batches.append(features)
+                residual_batches.append(residual_target)
+
+            fit_summary = adapter.fit_from_features(
+                torch.cat(feature_batches, dim=0),
+                torch.cat(residual_batches, dim=0),
+            )
+
+            corrected_outputs = []
+            target_outputs = []
+            predicted_residuals = []
+            target_residuals = []
+            for prepared, features, residual_target in zip(
+                prepared_batches, feature_batches, residual_batches
+            ):
+                correction = adapter.predict_from_features(features)
+                corrected_normalized = prepared["base_normalized"] + correction
+                corrected_revin = (
+                    corrected_normalized * prepared["revin_std"]
+                    + prepared["revin_mean"]
+                )
+                corrected_output = unnorm(
+                    corrected_revin, prepared["means"], prepared["stds"]
+                )
+                corrected_outputs.append(corrected_output)
+                target_outputs.append(prepared["y"])
+                predicted_residuals.append(correction)
+                target_residuals.append(residual_target)
+
+        output_all = torch.cat(corrected_outputs, dim=0)
+        target_all = torch.cat(target_outputs, dim=0)
+        predicted_residual_all = torch.cat(predicted_residuals, dim=0)
+        target_residual_all = torch.cat(target_residuals, dim=0)
+
+        residual_loss = F.smooth_l1_loss(
+            predicted_residual_all, target_residual_all, beta=5e-4
+        )
+        forecast_loss = F.smooth_l1_loss(
+            output_all, target_all, beta=5e-4
+        )
+        correction_penalty = predicted_residual_all.square().mean()
+        total_loss = residual_loss + 0.1 * forecast_loss + 1e-4 * correction_penalty
+        mse, rmse, mae, mape = calc_metric(output_all, target_all)
+
+        stats = {
+            **fit_summary,
+            "fit_seconds": float(time.time() - start_time),
+            "total_loss": float(total_loss.detach().cpu().item()),
+            "residual_loss": float(residual_loss.detach().cpu().item()),
+            "forecast_loss": float(forecast_loss.detach().cpu().item()),
+            "correction_l2": float(correction_penalty.detach().cpu().item()),
+            "train_MSE": float(mse.detach().cpu().item()),
+            "train_RMSE": float(rmse.detach().cpu().item()),
+            "train_MAE": float(mae.detach().cpu().item()),
+            "train_MAPE": float(mape.detach().cpu().item()),
+        }
+        self.last_stage2_loss_components = {
+            key: stats[key]
+            for key in (
+                "total_loss",
+                "residual_loss",
+                "forecast_loss",
+                "correction_l2",
+            )
+        }
+        return stats
+
     def meta_train_revise(self, data, epoch, target=False):
-        """Use original PCGrad for Stage-I and target-only residual loss for Stage-II."""
+        """Keep the Stage-I PCGrad path; Stage-II uses one closed-form support fit."""
         if self.model.residual_net is None:
             return self._meta_train_stage1(data, epoch)
 
-        data_i = data[0] if isinstance(data, (list, tuple)) else data
-        self.model.train()
-        self.main_optim.zero_grad(set_to_none=True)
+        stats = self.fit_target_residual_adapter(data)
+        return (
+            np.asarray(stats["total_loss"]),
+            np.asarray(stats["train_MSE"]),
+            np.asarray(stats["train_RMSE"]),
+            np.asarray(stats["train_MAE"]),
+            np.asarray(stats["train_MAPE"]),
+        )
 
         out, y, _, y_unscale, correction, base_out, base_normalized = self.model(
             data_i, stage='train', return_base=True
