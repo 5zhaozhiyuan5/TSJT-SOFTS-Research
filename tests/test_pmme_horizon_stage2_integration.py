@@ -184,7 +184,7 @@ class PmmeTargetResidualLowRankIntegrationTest(unittest.TestCase):
                 for name, value in trainer.model.forecasting_model.state_dict().items()
             ))
 
-    def test_target_only_residual_network_trains_and_keeps_stage1_frozen(self):
+    def test_target_only_lowrank_adapter_fits_and_keeps_stage1_frozen(self):
         torch.manual_seed(11)
         with tempfile.TemporaryDirectory() as root:
             data_args = {
@@ -234,7 +234,10 @@ class PmmeTargetResidualLowRankIntegrationTest(unittest.TestCase):
                 test_dataset="target",
                 STmodel="SOFTS",
                 save_dir=root,
-                stage2_residual_hidden=32,
+                stage2_feature_bins=12,
+                stage2_residual_rank=6,
+                stage2_residual_smooth_rank=3,
+                stage2_residual_ridge=10.0,
             )
             model_args = {"STnet": {"lr": 1e-3}}
             patch_cfg = {"device": torch.device("cpu")}
