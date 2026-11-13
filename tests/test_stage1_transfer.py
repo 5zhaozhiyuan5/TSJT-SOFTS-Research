@@ -30,6 +30,17 @@ class SharedPrivateReliabilityTransferTest(unittest.TestCase):
         self.assertAlmostEqual(float(source_weights.sum()), 1.0, places=5)
         self.assertAlmostEqual(float(target_weights.sum()), 1.0, places=5)
 
+    def test_source_quality_is_target_conditioned(self):
+        module = SharedPrivateReliabilityTransfer(input_dim=36)
+        target = torch.randn(64, 24)
+        near_source = target.mean(dim=0, keepdim=True) + 0.01 * torch.randn(40, 24)
+        far_source = near_source + 4.0
+        near_score = module.source_quality(near_source, target)
+        far_score = module.source_quality(far_source, target)
+        self.assertGreaterEqual(float(near_score), float(far_score))
+        self.assertGreaterEqual(float(far_score), 0.05)
+        self.assertLessEqual(float(near_score), 1.0)
+
     def test_gradient_flow(self):
         module = SharedPrivateReliabilityTransfer(input_dim=36)
         x = torch.randn(32, 36, requires_grad=True)
