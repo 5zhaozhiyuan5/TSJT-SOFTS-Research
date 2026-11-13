@@ -17,27 +17,51 @@ import torch.nn.functional as F
 
 
 class MultiHeadMemoryReader(nn.Module):
-    def __init__(self, dim=128, heads=4, dropout=0.1):
+    def __init__(self, dim=128, heads=4, dropout=0.1, query_chunk_size=512):
         super().__init__()
         if dim % heads:
             raise ValueError("dim must be divisible by heads")
         self.dim = dim
         self.heads = heads
         self.head_dim = dim // heads
+        self.query_chunk_size = int(query_chunk_size)
         self.query = nn.Linear(dim, dim, bias=False)
         self.key = nn.Linear(dim, dim, bias=False)
         self.value = nn.Linear(dim, dim, bias=False)
         self.output = nn.Sequential(nn.Linear(dim, dim), nn.Dropout(dropout), nn.LayerNorm(dim))
 
-    def forward(self, query, memory_keys, memory_values):
-        # query: [B*N,D], memory: [M,D]
+    def _read_context(self, q, k, v):
+        scores = torch.einsum("bhd,mhd->bhm", q, k) / math.sqrt(self.head_dim)
+        attention = torch.softmax(scores, dim=-1)
+        context = torch.einsum("bhm,mhd->bhd", attention, v)
+        return context.reshape(q.shape[0], self.dim)
+
+    def forward(self, query, memory_keys, memory_values, return_attention=False):
+        # Chunk queries to avoid materializing [B*N, heads, memory_slots] for
+        # every city node at once. Checkpointing recomputes attention on backward.
         batch = query.shape[0]
         q = self.query(query).view(batch, self.heads, self.head_dim)
         k = self.key(memory_keys).view(-1, self.heads, self.head_dim)
         v = self.value(memory_values).view(-1, self.heads, self.head_dim)
-        scores = torch.einsum("bhd,mhd->bhm", q, k) / math.sqrt(self.head_dim)
-        attention = torch.softmax(scores, dim=-1)
-        context = torch.einsum("bhm,mhd->bhd", attention, v).reshape(batch, self.dim)
+
+        attention = None
+        if return_attention:
+            scores = torch.einsum("bhd,mhd->bhm", q, k) / math.sqrt(self.head_dim)
+            attention = torch.softmax(scores, dim=-1)
+            context = torch.einsum("bhm,mhd->bhd", attention, v).reshape(batch, self.dim)
+        else:
+            from torch.utils.checkpoint import checkpoint
+            contexts = []
+            for q_chunk in q.split(self.query_chunk_size, dim=0):
+                if self.training and torch.is_grad_enabled():
+                    context_chunk = checkpoint(
+                        self._read_context, q_chunk, k, v, use_reentrant=False
+                    )
+                else:
+                    context_chunk = self._read_context(q_chunk, k, v)
+                contexts.append(context_chunk)
+            context = torch.cat(contexts, dim=0)
+
         return self.output(context), attention
 
 
@@ -247,6 +271,7 @@ class MultiScaleHorizonResidualMemory(nn.Module):
             global_query,
             self.memory_keys[:self.global_slots],
             self.memory_values[:self.global_slots],
+            return_attention=return_aux,
         )
 
         # Level 2: separate residual memories for short / medium / long ranges.
@@ -268,6 +293,7 @@ class MultiScaleHorizonResidualMemory(nn.Module):
                 band_query,
                 self.memory_keys[memory_start:memory_end],
                 self.memory_values[memory_start:memory_end],
+                return_attention=return_aux,
             )
             band_contexts.append(context)
             band_attentions.append(attention)
