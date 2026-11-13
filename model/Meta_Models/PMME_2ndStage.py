@@ -27,9 +27,9 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 try:
-    from .target_residual_lowrank_adapter import TargetResidualLowRankAdapter
+    from .target_residual_calibrator import HorizonWiseResidualCalibrator
 except ImportError:
-    from target_residual_lowrank_adapter import TargetResidualLowRankAdapter
+    from target_residual_calibrator import HorizonWiseResidualCalibrator
 
 def log_verbose(args, msg):
     print(msg)
@@ -60,17 +60,16 @@ class PatchFSL(nn.Module):
         else:
             raise ValueError(f"Unsupported PMME forecasting model: {model_name}")
 
-        # Stage-II uses a closed-form target-only residual adapter. Legacy
+        # Stage-II uses bounded horizon-wise robust residual calibration. Legacy
         # positive MemSize/temperature flags continue to enable Stage-II.
         self.residual_net = None
         if self.temperature_args > 0 and self.memory_size_args > 0:
-            self.residual_net = TargetResidualLowRankAdapter(
-                history_len=288,
+            self.residual_net = HorizonWiseResidualCalibrator(
                 pred_len=int(task_args['source']['pred_num']),
-                feature_bins=getattr(args, 'stage2_feature_bins', 12),
-                rank=getattr(args, 'stage2_residual_rank', 6),
-                smooth_rank=getattr(args, 'stage2_residual_smooth_rank', 3),
-                ridge_alpha=getattr(args, 'stage2_residual_ridge', 10.0),
+                horizon_bands=3,
+                max_correction_ratio=getattr(args, 'stage2_max_correction_ratio', 0.25),
+                purge_windows=3,
+                min_calibration_windows=4,
             )
 
     def prepare_stage2(self, data_i):
@@ -142,17 +141,12 @@ class PatchFSL(nn.Module):
         if self.residual_net is not None:
             if not self.residual_net.is_fitted:
                 raise RuntimeError(
-                    "Stage-II low-rank residual adapter has not been fitted on target support data."
+                    "Stage-II residual calibrator has not been fitted on target support data."
                 )
-            correction = self.residual_net(
-                history_normalized, base_normalized
-            )
-            corrected_normalized = base_normalized + correction
-            corrected_revin = (
-                corrected_normalized * prepared["revin_std"]
-                + prepared["revin_mean"]
-            )
-            out = unnorm(corrected_revin, prepared["means"], prepared["stds"])
+            # Correct directly in the same physical output space as base_out.
+            # No RevIN-scale residual is added or inverted here.
+            correction = self.residual_net(base_out)
+            out = base_out + correction
         else:
             out = base_out
 
@@ -201,8 +195,8 @@ class STRep(nn.Module):
             self.main_optim = None
             log_verbose(
                 args,
-                "[Stage-II][LowRankResidualAdapter] frozen Stage-I; "
-                "trainable adapter parameters=0 (closed-form ridge fit)."
+                "[Stage-II][HRRC] frozen Stage-I; "
+                "trainable adapter parameters=0 (robust bias + support reliability calibration)."
             )
         else:
             self.trainable_params = [p for p in self.model.parameters() if p.requires_grad]
@@ -304,10 +298,10 @@ class STRep(nn.Module):
         )
 
     def fit_target_residual_adapter(self, target_dataset):
-        """Fit the Stage-II low-rank adapter once from target support windows."""
-        adapter = self.model.residual_net
-        if adapter is None:
-            raise RuntimeError("Stage-II low-rank residual adapter is disabled.")
+        """Fit horizon-wise robust residual calibration once on target support."""
+        calibrator = self.model.residual_net
+        if calibrator is None:
+            raise RuntimeError("Stage-II residual calibrator is disabled.")
 
         if hasattr(target_dataset, "x"):
             data_items = [target_dataset]
@@ -336,58 +330,37 @@ class STRep(nn.Module):
 
         self.model.eval()
         start_time = time.time()
-        prepared_batches = []
-        feature_batches = []
-        residual_batches = []
+        base_batches = []
+        target_batches = []
         with torch.no_grad():
             for data_i in data_items:
                 prepared = self.model.prepare_stage2(data_i)
-                features = adapter.extract_features(
-                    prepared["history_normalized"],
-                    prepared["base_normalized"],
-                )
-                residual_target = (
-                    prepared["y_unscale"] - prepared["base_normalized"]
-                )
-                if not torch.isfinite(features).all() or not torch.isfinite(residual_target).all():
+                base_prediction = prepared["base_out"]
+                target_values = prepared["y"]
+                residual_target = target_values - base_prediction
+                if (
+                    not torch.isfinite(base_prediction).all()
+                    or not torch.isfinite(target_values).all()
+                    or not torch.isfinite(residual_target).all()
+                ):
                     raise RuntimeError(
-                        "Non-finite target support features/residuals during Stage-II fitting."
+                        "Non-finite physical-space base predictions/target residuals."
                     )
-                prepared_batches.append(prepared)
-                feature_batches.append(features)
-                residual_batches.append(residual_target)
+                base_batches.append(base_prediction)
+                target_batches.append(target_values)
 
-            fit_summary = adapter.fit_from_features(
-                torch.cat(feature_batches, dim=0),
-                torch.cat(residual_batches, dim=0),
+            base_all = torch.cat(base_batches, dim=0)
+            target_all = torch.cat(target_batches, dim=0)
+            residual_all = target_all - base_all
+            fit_summary = calibrator.fit_from_residuals(
+                residual_all, target_all
             )
 
-            corrected_outputs = []
-            target_outputs = []
-            predicted_residuals = []
-            target_residuals = []
-            for prepared, features, residual_target in zip(
-                prepared_batches, feature_batches, residual_batches
-            ):
-                correction = adapter.predict_from_features(features)
-                corrected_normalized = prepared["base_normalized"] + correction
-                corrected_revin = (
-                    corrected_normalized * prepared["revin_std"]
-                    + prepared["revin_mean"]
-                )
-                corrected_output = unnorm(
-                    corrected_revin, prepared["means"], prepared["stds"]
-                )
-                corrected_outputs.append(corrected_output)
-                target_outputs.append(prepared["y"])
-                predicted_residuals.append(correction)
-                target_residuals.append(residual_target)
+            correction = calibrator(base_all)
+            output_all = base_all + correction
+            target_residual_all = residual_all
 
-        output_all = torch.cat(corrected_outputs, dim=0)
-        target_all = torch.cat(target_outputs, dim=0)
-        predicted_residual_all = torch.cat(predicted_residuals, dim=0)
-        target_residual_all = torch.cat(target_residuals, dim=0)
-
+        predicted_residual_all = correction
         residual_loss = F.smooth_l1_loss(
             predicted_residual_all, target_residual_all, beta=5e-4
         )
@@ -398,6 +371,8 @@ class STRep(nn.Module):
         total_loss = residual_loss + 0.1 * forecast_loss + 1e-4 * correction_penalty
         mse, rmse, mae, mape = calc_metric(output_all, target_all)
 
+        # Also report the uncorrected support baseline for direct comparison.
+        base_mse, base_rmse, base_mae, base_mape = calc_metric(base_all, target_all)
         stats = {
             **fit_summary,
             "fit_seconds": float(time.time() - start_time),
@@ -405,6 +380,8 @@ class STRep(nn.Module):
             "residual_loss": float(residual_loss.detach().cpu().item()),
             "forecast_loss": float(forecast_loss.detach().cpu().item()),
             "correction_l2": float(correction_penalty.detach().cpu().item()),
+            "base_train_MAE": float(base_mae.detach().cpu().item()),
+            "base_train_RMSE": float(base_rmse.detach().cpu().item()),
             "train_MSE": float(mse.detach().cpu().item()),
             "train_RMSE": float(rmse.detach().cpu().item()),
             "train_MAE": float(mae.detach().cpu().item()),
