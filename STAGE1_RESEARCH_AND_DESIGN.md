@@ -87,7 +87,8 @@ The first implementation adds a compact **Shared–Private Reliability Transfer 
 2. **Disentanglement preservation.** Reconstruction loss preserves information, while normalized cross-covariance penalizes leakage between shared and private components.
 3. **Shared-only distribution alignment.** OT, CMMD, MMD, and CORAL alignment operate on the shared representation. The prediction backbone and its output contract are unchanged.
 4. **Target-guided reliability weighting.** Each source/target sample receives a weight based on its standardized distance to the opposite domain's feature centroid. These weights are fused with the existing GP confidence weights and normalized into valid transport marginals. This is O((Ns+Nt)D) rather than constructing a dense Ns-by-Nt distance matrix.
-5. **Gradient projection coverage.** When the existing one-sided gradient projection is enabled, the new Stage-I parameters are included in the same projection operation and optimizer.
+5. **Multi-source relevance gating.** A detached source-level score estimates standardized source-to-target centroid shift. The three source alignment losses are reweighted by these scores, preserving the original summed-loss scale when all source domains are equally relevant.
+6. **Gradient projection coverage.** When the existing one-sided gradient projection is enabled, the new Stage-I parameters are included in the same projection operation and optimizer.
 
 ## Important novelty caveat
 
