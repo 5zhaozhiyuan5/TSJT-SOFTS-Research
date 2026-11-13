@@ -305,9 +305,10 @@ if __name__ == '__main__':
         # Match source-task batch size to the few-shot target batch during Stage-II.
         # This prevents the large Stage-I source batch (often >100) from dominating
         # the residual-memory adaptation cost. Stage-I has already completed.
-        stage2_source_batch_size = int(
+        target_batch_size = int(
             task_args["target_few_shot"].get("batch_size", args.batch_size)
         )
+        stage2_source_batch_size = min(16, max(target_batch_size, 2 * target_batch_size))
         source_dataset.task_args = dict(source_dataset.task_args)
         source_dataset.task_args["batch_size"] = stage2_source_batch_size
 
