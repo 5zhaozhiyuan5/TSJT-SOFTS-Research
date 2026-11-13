@@ -302,13 +302,14 @@ if __name__ == '__main__':
         current_state.update(compatible_state)
         rep_model.model.load_state_dict(current_state, strict=True)
 
-        # Keep the total Stage-II update budget unchanged. The first 60% of
-        # updates use one target + one source batch (target-guided source learning);
-        # the final 40% use target-only adaptation. Target windows are cycled
-        # sequentially so the full three-day support set is covered.
+        # Fixed Stage-II budget: retain the configured epoch count. During the
+        # first 60% of updates, train on one target batch plus one source batch;
+        # during the final 40%, adapt on target batches only. This avoids adding
+        # a second full training schedule and cycles through every target batch.
         stage2_epochs = max(1, int(task_args["source"]["finetune_epochs"]))
-        source_pretrain_epochs = max(1, int(round(stage2_epochs * 0.60)))
-        source_pretrain_epochs = min(source_pretrain_epochs, stage2_epochs)
+        source_pretrain_epochs = min(
+            stage2_epochs, max(1, int(round(stage2_epochs * 0.60)))
+        )
         stage2_start = time.time()
         source_length = len(source_dataset)
         target_length = len(finetune_dataset)
@@ -319,9 +320,9 @@ if __name__ == '__main__':
 
         log_verbose(
             args,
-            "[Stage-II][HMRM-Mamba] fixed update budget: total_epochs={}, "
-            "cross_city_epochs={}, target_adapt_epochs={}, target_batches={}, "
-            "source_batches_per_cross_city_epoch=1".format(
+            "[Stage-II][HMRM-Mamba] fixed budget: epochs={}, "
+            "target-guided source phase={}, target-adaptation phase={}, "
+            "target_support_batches={}, max_source_batches_per_epoch=1".format(
                 stage2_epochs, source_pretrain_epochs,
                 stage2_epochs - source_pretrain_epochs, target_length,
             )
@@ -341,8 +342,7 @@ if __name__ == '__main__':
             stage2_tasks = [target_data]
 
             if phase == "cross_city_pretrain":
-                # source_dataset is constructed with add_target=False, so this
-                # batch is guaranteed to come from one of the source cities.
+                # The source dataset is instantiated with add_target=False.
                 source_data, _ = source_dataset[epoch % source_length]
                 stage2_tasks.append(source_data)
 
