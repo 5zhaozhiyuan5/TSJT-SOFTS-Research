@@ -16,7 +16,7 @@ from utils import *
 import datetime
 from block import *
 
-from geomloss import SamplesLoss 
+from geomloss.samples_loss import SamplesLoss 
 from torch.utils.data import TensorDataset, DataLoader
 from gpytorch.mlls.variational_elbo import VariationalELBO
 from gpytorch.likelihoods import BernoulliLikelihood, LaplaceLikelihood
@@ -353,8 +353,8 @@ class STRep(nn.Module):
                         print('OT_loss_scale', OT_loss_scale)
             
             else:
-                alpha = torch.ones(size1, device=self.device)/size1  
-                beta = torch.ones(size2, device=self.device)/size2  
+                alpha = torch.ones(size1, device='cuda')/size1  
+                beta = torch.ones(size2, device='cuda')/size2  
                 OT_loss_scale = 1
 
             if self.DA == 'OT':
