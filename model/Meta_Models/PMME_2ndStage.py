@@ -70,7 +70,8 @@ class PatchFSL(nn.Module):
                 horizon_dim=128,
                 decoder_dim=256,
                 heads=4,
-                decoder_layers=2,
+                mamba_inner_dim=64,
+                mamba_state_dim=8,
                 max_correction_ratio=getattr(args, 'stage2_max_correction_ratio', 0.5),
                 dropout=getattr(args, 'stage2_dropout', 0.1),
             )
@@ -189,15 +190,30 @@ class STRep(nn.Module):
         self.model = PatchFSL(data_args, model_args, task_args, memory_size_args, temperature_args, model_name, PatchFSL_cfg, args).to(self.device)
 
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
+        base_lr = getattr(args, 'stage2_lr', self.lr)
+        residual = self.model.residual_net
+        if residual is not None:
+            key_params = [residual.memory_keys]
+            value_params = [residual.memory_values]
+            excluded = {id(p) for p in key_params + value_params}
+            other_params = [p for p in residual.parameters() if id(p) not in excluded]
+            self.main_optim = optim.AdamW(
+                [
+                    {"params": key_params, "lr": base_lr * 0.25},
+                    {"params": value_params, "lr": base_lr * 0.5},
+                    {"params": other_params, "lr": base_lr},
+                ],
+                weight_decay=getattr(args, 'stage2_weight_decay', 1e-4),
+            )
+        else:
+            self.main_optim = optim.AdamW(
+                self.model.parameters(), lr=base_lr,
+                weight_decay=getattr(args, 'stage2_weight_decay', 1e-4),
+            )
         self.trainable_params = [
             parameter for parameter in self.model.parameters()
             if parameter.requires_grad
         ]
-        self.main_optim = optim.AdamW(
-            self.trainable_params,
-            lr=getattr(args, 'stage2_lr', self.lr),
-            weight_decay=getattr(args, 'stage2_weight_decay', 1e-4),
-        )
         if self.model.residual_net is not None:
             log_verbose(
                 args,
@@ -300,110 +316,117 @@ class STRep(nn.Module):
         )
 
 
-    def _meta_train_stage2(self, data, epoch):
-        """Train only the compact residual memory with target-protected PCGrad."""
-        if not data:
-            raise RuntimeError("Stage-II received an empty task list.")
-        self.model.eval()
-        source_losses = []
-        source_metrics = {"mse": [], "rmse": [], "mae": [], "mape": []}
-        target_loss = None
-        total_task_losses = []
-
-        for task_index, data_i in enumerate(data):
-            out, y, _, _, correction = self.model(data_i, stage='train')
-            forecast_loss = self.loss_criterion(out, y)
-            residual_target = (y - (out - correction)).detach()
-            residual_loss = self.loss_criterion(correction, residual_target)
-            correction_reg = self.model.residual_net.regularization_loss()
-            correction_smooth = (
-                correction[:, :, 2:] - 2 * correction[:, :, 1:-1] + correction[:, :, :-2]
-            ).abs().mean()
-            task_loss = (
-                forecast_loss + 0.2 * residual_loss
-                + 0.01 * correction_smooth + 1e-4 * correction_reg
-            )
-            total_task_losses.append(task_loss)
-
-            if task_index == 0:
-                target_loss = task_loss
-            else:
-                source_losses.append(task_loss)
-                mse, rmse, mae, mape = calc_metric(out, y)
-                source_metrics["mse"].append(float(mse.detach().cpu()))
-                source_metrics["rmse"].append(float(rmse.detach().cpu()))
-                source_metrics["mae"].append(float(mae.detach().cpu()))
-                source_metrics["mape"].append(float(mape.detach().cpu()))
-
-        if target_loss is None:
-            raise RuntimeError("Stage-II requires the target support task at index 0.")
-
-        params = self.trainable_params
-        self.main_optim.zero_grad(set_to_none=True)
-        target_loss.backward(retain_graph=bool(source_losses))
-        target_grads = [
-            torch.zeros_like(p) if p.grad is None else p.grad.detach().clone()
-            for p in params
+    def set_stage2_phase(self, phase):
+        """Pretrain all memory parameters, then freeze memory keys for target adaptation."""
+        if self.model.residual_net is None:
+            return
+        if phase not in ("cross_city_pretrain", "target_adapt"):
+            raise ValueError(f"Unknown Stage-II phase: {phase}")
+        self.model.residual_net.memory_keys.requires_grad_(
+            phase == "cross_city_pretrain"
+        )
+        self.trainable_params = [
+            parameter for parameter in self.model.parameters()
+            if parameter.requires_grad
         ]
 
-        if source_losses:
-            self.main_optim.zero_grad(set_to_none=True)
-            source_loss = torch.stack(source_losses).mean()
-            source_loss.backward()
-            source_grads = [
-                torch.zeros_like(p) if p.grad is None else p.grad.detach().clone()
-                for p in params
-            ]
-            dot = sum((gs * gt).sum() for gs, gt in zip(source_grads, target_grads))
-            target_norm_sq = sum(gt.square().sum() for gt in target_grads)
-            if dot.item() < 0:
-                coefficient = dot / (target_norm_sq + 1e-8)
-                source_grads = [
-                    gs - coefficient * gt
-                    for gs, gt in zip(source_grads, target_grads)
-                ]
-            for parameter, gs, gt in zip(params, source_grads, target_grads):
-                parameter.grad = gt + gs
+    def _stage2_task_loss(self, data_i):
+        out, y, _, _, correction, base_out, _ = self.model(
+            data_i, stage="train", return_base=True
+        )
+        forecast_loss = self.loss_criterion(out, y)
+        residual_target = (y - base_out).detach()
+        residual_loss = self.loss_criterion(correction, residual_target)
+        correction_reg = self.model.residual_net.regularization_loss()
+        if correction.shape[-1] > 2:
+            correction_smooth = (
+                correction[:, :, 2:] - 2 * correction[:, :, 1:-1]
+                + correction[:, :, :-2]
+            ).abs().mean()
         else:
-            # No source task: keep the already-computed target gradient.
-            dot = torch.tensor(0.0, device=self.device)
+            correction_smooth = correction.new_zeros(())
+        total = (
+            forecast_loss + 0.2 * residual_loss
+            + 0.01 * correction_smooth + 1e-4 * correction_reg
+        )
+        return total, out, y
+
+    def _meta_train_stage2(self, data, epoch, phase="cross_city_pretrain"):
+        """Budgeted two-phase Stage-II: source-target learning, then target adaptation."""
+        if not data:
+            raise RuntimeError("Stage-II received an empty task list.")
+        self.set_stage2_phase(phase)
+        self.model.eval()
+        self.main_optim.zero_grad(set_to_none=True)
+
+        target_loss, target_out, target_y = self._stage2_task_loss(data[0])
+        params = self.trainable_params
+        if len(data) > 1:
+            source_losses = []
+            source_mae = []
+            for source_data in data[1:]:
+                source_loss, source_out, source_y = self._stage2_task_loss(source_data)
+                source_losses.append(source_loss)
+                _, _, mae, _ = calc_metric(source_out, source_y)
+                source_mae.append(float(mae.detach().cpu()))
+
+            target_grads = torch.autograd.grad(
+                target_loss, params, retain_graph=True, allow_unused=True
+            )
+            source_loss = torch.stack(source_losses).mean()
+            source_grads = torch.autograd.grad(
+                source_loss, params, allow_unused=True
+            )
+            merged = []
+            dot = target_loss.new_zeros(())
+            target_norm = target_loss.new_zeros(())
+            for gt, gs, parameter in zip(target_grads, source_grads, params):
+                gt = torch.zeros_like(parameter) if gt is None else gt
+                gs = torch.zeros_like(parameter) if gs is None else gs
+                dot = dot + (gt * gs).sum()
+                target_norm = target_norm + gt.square().sum()
+                merged.append((gt, gs))
+            conflict = dot.item() < 0
+            coefficient = dot / (target_norm + 1e-8) if conflict else dot.new_zeros(())
+            for parameter, (gt, gs) in zip(params, merged):
+                parameter.grad = gt + (gs - coefficient * gt if conflict else gs)
+            source_loss_value = float(source_loss.detach().cpu())
+            mean_source_mae = float(np.mean(source_mae)) if source_mae else float("nan")
+        else:
+            target_loss.backward()
+            dot = target_loss.new_zeros(())
+            source_loss_value = float("nan")
+            mean_source_mae = float("nan")
 
         torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
         self.main_optim.step()
         self.main_optim.zero_grad(set_to_none=True)
 
         with torch.no_grad():
-            metric_values = {
-                key: float(np.mean(values)) if values else float("nan")
-                for key, values in source_metrics.items()
+            _, rmse, mae, mape = calc_metric(target_out, target_y)
+            metrics = {
+                "target_loss": float(target_loss.detach().cpu()),
+                "target_mae": float(mae.detach().cpu()),
+                "target_rmse": float(rmse.detach().cpu()),
+                "target_mape": float(mape.detach().cpu()),
+                "source_loss": source_loss_value,
+                "source_mae": mean_source_mae,
+                "gradient_dot": float(dot.detach().cpu()),
             }
-            source_loss_value = (
-                float(torch.stack(source_losses).mean().detach().cpu())
-                if source_losses else float(target_loss.detach().cpu())
-            )
-            target_loss_value = float(target_loss.detach().cpu())
-
         if epoch % 10 == 0:
             print(
-                f"[Stage-II][HMRM] epoch={epoch} "
-                f"source_loss={source_loss_value:.6f} "
-                f"target_loss={target_loss_value:.6f} "
-                f"gradient_dot={float(dot.detach().cpu()):.6f}"
+                f"[Stage-II][HMRM-Mamba] phase={phase} epoch={epoch} "
+                f"target_MAE={metrics['target_mae']:.6f} "
+                f"source_MAE={metrics['source_mae']:.6f} "
+                f"gradient_dot={metrics['gradient_dot']:.6f}"
             )
+        return metrics
 
-        return (
-            source_loss_value,
-            metric_values["mse"],
-            metric_values["rmse"],
-            metric_values["mae"],
-            metric_values["mape"],
-        )
-
-    def meta_train_revise(self, data, matrix=None, epoch=0, target=False):
-        """Dispatch to original Stage-I training or trainable Stage-II HMRM."""
+    def meta_train_revise(self, data, matrix=None, epoch=0, target=False, phase="cross_city_pretrain"):
+        """Dispatch to original Stage-I training or budgeted HMRM-Mamba Stage-II."""
         if self.model.residual_net is None:
             return self._meta_train_stage1(data, epoch)
-        return self._meta_train_stage2(data, epoch)
+        return self._meta_train_stage2(data, epoch, phase=phase)
 
     def forward(self, data, matrix):
         data_i = data[0] if isinstance(data, (list, tuple)) else data
