@@ -17,7 +17,7 @@ sys.path.append('../../')
 from utils import *
 import datetime
 
-from geomloss.samples_loss import SamplesLoss 
+from geomloss import SamplesLoss 
 from torch.utils.data import TensorDataset, DataLoader
 #from gpytorch.likelihoods import BernoulliLikelihood
 from gpytorch.mlls.variational_elbo import VariationalELBO
@@ -26,134 +26,142 @@ from gpytorch.likelihoods import BernoulliLikelihood, LaplaceLikelihood
 from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
+try:
+    from .target_residual_lowrank_adapter import TargetResidualLowRankAdapter
+except ImportError:
+    from target_residual_lowrank_adapter import TargetResidualLowRankAdapter
+
 def log_verbose(args, msg):
     print(msg)
     with open(os.path.join(args.save_dir, "log.txt"), "a") as f:
         f.write(str(msg) + "\n")
 
 class PatchFSL(nn.Module):
-    """
-    Full PatchFSL Model
-    """
-    def __init__(self, data_args, model_args, task_args, memory_size_args, temperature_args, model_name, PatchFSL_cfg, args, model='GWN'):
-        super(PatchFSL,self).__init__()
+    """PMME wrapper with a frozen Stage-I backbone and optional Stage-II adapter."""
 
-        self.data_args, self.model_args, self.task_args, self.memory_size_args, self.temperature_args, self.model_name, self.PatchFSL_cfg = data_args, model_args, task_args, memory_size_args, temperature_args, model_name, PatchFSL_cfg
-        
-        num_model = 1
-        #########
-        
+    def __init__(self, data_args, model_args, task_args, memory_size_args,
+                 temperature_args, model_name, PatchFSL_cfg, args, model='GWN'):
+        super(PatchFSL, self).__init__()
+        self.data_args = data_args
+        self.model_args = model_args
+        self.task_args = task_args
+        self.memory_size_args = int(memory_size_args)
+        self.temperature_args = temperature_args
+        self.model_name = model_name
+        self.PatchFSL_cfg = PatchFSL_cfg
+        self.args = args
+
         if model_name == 'SOFTS':
             self.forecasting_model = softs()
-        if model_name == 'iTransformer':
+        elif model_name == 'iTransformer':
             self.forecasting_model = iTransformer()
-        elif model_name in ['MLP']:  
+        elif model_name == 'MLP':
             self.forecasting_model = MLP(288, 36)
-        
-        self.memory = None 
-        
-        if self.temperature_args>0:
-            
-            self.memory = nn.Parameter(torch.randn(memory_size_args, 128)) 
-            print('self.memory.shape', self.memory.shape)
-            D, D_out, H_w, H_b = 128, 36, 256, 256
-            
-            self.bias_mlp = nn.Sequential(
-                
-                nn.Linear(D, D_out),
-                # nn.Tanh()
-            )
-            
-            self.gating_mlp = nn.Sequential(
-                nn.Linear(memory_size_args, H_b),
-                #nn.ReLU(inplace=True),
-                nn.GELU(),
-                nn.Linear(H_b, H_b),
-                nn.GELU(),
-                nn.Linear(H_b, 1),
-                nn.Sigmoid()
-            )
-
-            d_model = D
-            self.Wq = nn.Linear(d_model, d_model, bias=False)
-            self.Wk = nn.Linear(d_model, d_model, bias=False)
-            self.Wv = nn.Linear(d_model, d_model, bias=False)
-            
-    
-    def forward(self, data_i, stage = 'train'):  
-        
-        if(stage == 'train'):
-            
-            self.forecasting_model.train()
-            if self.temperature_args>0:
-                self.bias_mlp.train()
-                self.gating_mlp.train()
-                self.Wq.train()
-                self.Wk.train()
-                self.Wv.train()
         else:
-            
-            self.forecasting_model.eval()
-            if self.temperature_args>0:
-                self.bias_mlp.eval()
-                self.gating_mlp.eval()
-                self.Wq.eval()
-                self.Wk.eval()
-                self.Wv.eval()
-            
+            raise ValueError(f"Unsupported PMME forecasting model: {model_name}")
+
+        # Stage-II uses a closed-form target-only residual adapter. Legacy
+        # positive MemSize/temperature flags continue to enable Stage-II.
+        self.residual_net = None
+        if self.temperature_args > 0 and self.memory_size_args > 0:
+            self.residual_net = TargetResidualLowRankAdapter(
+                history_len=288,
+                pred_len=int(task_args['source']['pred_num']),
+                feature_bins=getattr(args, 'stage2_feature_bins', 12),
+                rank=getattr(args, 'stage2_residual_rank', 6),
+                smooth_rank=getattr(args, 'stage2_residual_smooth_rank', 3),
+                ridge_alpha=getattr(args, 'stage2_residual_ridge', 10.0),
+            )
+
+    def prepare_stage2(self, data_i):
+        """Compute frozen Stage-I outputs and target-normalized supervision once."""
         x, y, means, stds = data_i.x, data_i.y, data_i.means, data_i.stds
-        # print("x shape is : {}, y shape is : {}".format(x.shape, y.shape))
-        x, y, means, stds = torch.tensor(x).to(self.PatchFSL_cfg['device']), torch.tensor(y).to(self.PatchFSL_cfg['device']),torch.tensor(means).to(self.PatchFSL_cfg['device']),torch.tensor(stds).to(self.PatchFSL_cfg['device']) #,torch.tensor(A,dtype=torch.float32).to(self.PatchFSL_cfg['device'])
-        # remember that the input of TSFormer is [B, N, 2, L]
-        x = x.permute(0,1,3,2)
+        device = self.PatchFSL_cfg['device']
+        x = torch.as_tensor(x, dtype=torch.float32, device=device)
+        y = torch.as_tensor(y, dtype=torch.float32, device=device)
+        means = torch.as_tensor(means, dtype=torch.float32, device=device)
+        stds = torch.as_tensor(stds, dtype=torch.float32, device=device)
 
-        # ############
+        # Preserve the original PMME/SOFTS RevIN preprocessing.
+        x = x.permute(0, 1, 3, 2)
+        x = x[:, :, 0, -288:]
+        eps = 1e-9
+        revin_mean = x.mean(dim=2, keepdim=True).detach()
+        revin_var = x.var(dim=2, keepdim=True, unbiased=False).detach()
+        revin_std = torch.sqrt(revin_var + eps)
+        history_normalized = (x - revin_mean) / revin_std
+        x_normalized = history_normalized.permute(0, 2, 1)
+        if self.model_name == 'MLP':
+            x_normalized = x_normalized.permute(0, 2, 1)
 
-        x = x[:,:,0, -288:]
-        self.eps = 1e-9
-        self.RevIn_mean = x.mean(dim=2, keepdim=True).detach()         # [B,D,1]
-        var = x.var(dim=2, keepdim=True, unbiased=False).detach()                     
-        self.RevIn_std  = torch.sqrt(var + self.eps)      
-        x = (x - self.RevIn_mean) / self.RevIn_std
-        # y = (y - self.RevIn_mean) / self.RevIn_std 
+        if self.residual_net is not None:
+            # Stage-II never updates or backpropagates through Stage-I.
+            self.forecasting_model.eval()
+            with torch.no_grad():
+                representation, base_normalized = self.forecasting_model(x_normalized)
+        else:
+            representation, base_normalized = self.forecasting_model(x_normalized)
 
-        x = x.permute(0,2,1) # # [B, D, T] -> [B, T, D]
-
-        if self.model_name in ['MLP']:
-            x = x.permute(0,2,1)
-        rep, out = self.forecasting_model(x) 
-
-        out = out.detach()
-        rep = rep.detach()
-
-        B, N, D = rep.shape
-        
-        normed_memory = None
-        if self.temperature_args>0:
-            normed_memory = self.memory 
-            r = rep.view(B*N, D)  # 
-            q = self.Wq(r)                          # (B, d)
-            K = self.Wk(self.memory)                # (N, d)
-            V = self.Wv(self.memory)                # (N, d)
-
-            scores = torch.matmul(q, K.t())     # (B, N)
-            scores = scores / (D ** 0.5)       
-            
-            alpha = torch.softmax(scores, dim=1)  # (B, N)
-            retrieved = torch.matmul(alpha, V)      # (B, d)
-            delta_b  = self.bias_mlp(retrieved)       # [(B*N), D_out]
-
-            delta_b = delta_b.view(B, N, -1) #/10    # [B, N, D_out]     
-            out = out + delta_b # 
-            
-        out = out * self.RevIn_std + self.RevIn_mean
-        out = unnorm(out, means, stds)
-
-        #y_unscale = y * self.RevIn_std + self.RevIn_mean
+        base_revin = base_normalized * revin_std + revin_mean
+        base_out = unnorm(base_revin, means, stds)
         y_unscale = norm(y, means, stds)
-        y_unscale = (y_unscale - self.RevIn_mean) / self.RevIn_std 
+        y_unscale = (y_unscale - revin_mean) / revin_std
 
-        return out, y, rep, y_unscale, normed_memory
+        return {
+            "history_normalized": history_normalized,
+            "representation": representation,
+            "base_normalized": base_normalized,
+            "base_out": base_out,
+            "y": y,
+            "y_unscale": y_unscale,
+            "revin_mean": revin_mean,
+            "revin_std": revin_std,
+            "means": means,
+            "stds": stds,
+        }
+
+    def forward(self, data_i, stage='train', return_base=False):
+        if self.residual_net is None:
+            if stage == 'train':
+                self.forecasting_model.train()
+            else:
+                self.forecasting_model.eval()
+        else:
+            self.forecasting_model.eval()
+            self.residual_net.eval()
+
+        prepared = self.prepare_stage2(data_i)
+        history_normalized = prepared["history_normalized"]
+        representation = prepared["representation"]
+        base_normalized = prepared["base_normalized"]
+        base_out = prepared["base_out"]
+        y = prepared["y"]
+        y_unscale = prepared["y_unscale"]
+
+        correction = None
+        if self.residual_net is not None:
+            if not self.residual_net.is_fitted:
+                raise RuntimeError(
+                    "Stage-II low-rank residual adapter has not been fitted on target support data."
+                )
+            correction = self.residual_net(
+                history_normalized, base_normalized
+            )
+            corrected_normalized = base_normalized + correction
+            corrected_revin = (
+                corrected_normalized * prepared["revin_std"]
+                + prepared["revin_mean"]
+            )
+            out = unnorm(corrected_revin, prepared["means"], prepared["stds"])
+        else:
+            out = base_out
+
+        if return_base:
+            return (
+                out, y, representation, y_unscale,
+                correction, base_out, base_normalized,
+            )
+        return out, y, representation, y_unscale, correction
 
 class STRep(nn.Module):
     """
@@ -179,148 +187,260 @@ class STRep(nn.Module):
         self.model_name = args.STmodel
         self.device = PatchFSL_cfg['device']
         self.current_epoch = 0
+        self.last_stage2_loss_components = None
 
         self.model = PatchFSL(data_args, model_args, task_args, memory_size_args, temperature_args, model_name, PatchFSL_cfg, args).to(self.device)
-         
-        # print(self.model)
-        log_verbose(args,"model params: {}".format(count_parameters(self.model)))
 
-        self.main_optim = optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=1e-2)
-        self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
-        if self.temperature_args>0:
-            param_groups = [
-                {'params': [p for name, p in self.model.named_parameters() 
-                            if name != 'log_temp'], 'lr': self.lr, 'weight_decay': 1e-2,},  
-            ]
-            
-            self.main_optim = optim.AdamW(param_groups)
+        self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
+        if self.model.residual_net is not None:
+            # The Stage-II adapter has buffers only and is solved in closed form.
+            # Freeze every Stage-I parameter; no optimizer or epoch loop is needed.
+            for parameter in self.model.parameters():
+                parameter.requires_grad_(False)
+            self.trainable_params = []
+            self.main_optim = None
+            log_verbose(
+                args,
+                "[Stage-II][LowRankResidualAdapter] frozen Stage-I; "
+                "trainable adapter parameters=0 (closed-form ridge fit)."
+            )
+        else:
+            self.trainable_params = [p for p in self.model.parameters() if p.requires_grad]
+            self.main_optim = optim.AdamW(
+                self.trainable_params, lr=self.lr, weight_decay=1e-2
+            )
+
+        total_params = sum(parameter.numel() for parameter in self.model.parameters())
+        trainable_params = sum(
+            parameter.numel() for parameter in self.model.parameters()
+            if parameter.requires_grad
+        )
+        log_verbose(
+            args,
+            "model params total: {}, trainable: {}".format(
+                total_params, trainable_params
+            )
+        )
     
-    def meta_train_revise(self, data, matrix, epoch, target=False): # matrix没有用到
-        
-        total_mae = []
-        total_mse = []
-        total_rmse = []
-        total_mape = []
-        
-        task_losses = []
-        rep_source = []
-        rep_target = []
-        y_source = []
-        y_target = []
+    def _meta_train_stage1(self, data, epoch):
+        """Original source/target PCGrad training path for Stage-I."""
+        source_losses = []
+        source_metrics = {"mse": [], "rmse": [], "mae": [], "mape": []}
+        target_loss = None
 
-        target_task_loss = 0
-        #origin_normed_memory = 0
-        
+        self.model.train()
+        for task_index, data_i in enumerate(data):
+            out, y, _, _, _ = self.model(data_i, stage='train')
+            task_loss = self.loss_criterion(out, y)
 
-        for i in range(len(data)):  # self.task_num):
-            task_loss = 0
-            #  for k in range(1):
-            batch_size, node_num, seq_len, _ = data[i].x.shape
-            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train') 
-            
-            if epoch%25==0:
-                print(out.shape, rep.shape)
-            
-            if i == 0:
-                split_indices = [15, 15, rep.shape[0] - 30]
-                rep_split = torch.split(rep, split_indices, dim=0)
-                y_unscale_split = torch.split(y_unscale, split_indices, dim=0)
-                
-                rep_target.extend(rep_split)
-                y_target.extend(y_unscale_split)
-                
+            if task_index == 0:
+                target_loss = task_loss
             else:
-                rep_source.append(rep)
-                y_source.append(y_unscale) #y_unscale
-                
-            if True: 
-                if i>0: #True:  
-                    
-                    loss = self.loss_criterion(out, y)
-    
-                    task_loss = loss
-    
-                    # if(k == 0):
-                    MSE,RMSE,MAE,MAPE = calc_metric(out, y)
-                    if epoch%25==0:
-                        print('MAPE',MAPE)
-                    total_mse.append(MSE.cpu().detach().numpy())
-                    total_rmse.append(RMSE.cpu().detach().numpy())
-                    total_mae.append(MAE.cpu().detach().numpy())
-                    total_mape.append(MAPE.cpu().detach().numpy())
-    
-                    #if i>0:
-                    task_losses.append(task_loss)
+                source_losses.append(task_loss)
+                mse, rmse, mae, mape = calc_metric(out, y)
+                source_metrics["mse"].append(mse.detach().cpu().numpy())
+                source_metrics["rmse"].append(rmse.detach().cpu().numpy())
+                source_metrics["mae"].append(mae.detach().cpu().numpy())
+                source_metrics["mape"].append(mape.detach().cpu().numpy())
 
-                #elif target == True:
-                if i ==0 :
-                    loss = self.loss_criterion(out, y)
-                    target_task_loss = loss
-    
-        
-        OT_losses = []
-        y_norm_sources = []
-        y_norm_targets = []
-        
-        OT_loss_scale = 1
-        model_loss = 0
-        
-        task_loss = sum(task_losses)
+        if target_loss is None or not source_losses:
+            raise RuntimeError(
+                "Stage-I PCGrad requires one target task followed by at least one source task."
+            )
 
-        def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
-            
-            dot = torch.dot(grad_a, grad_b)
-            if dot < 0:
-                proj_coeff = dot / (grad_b.norm()**2 + eps)
-                grad_a = grad_a - proj_coeff * grad_b
-            return grad_a
-        
-        def flatten_and_pad_grads(params):
-            
-            flat_grads = []
-            mapping = []  # list of (param, start, length)
-            offset = 0
-            for p in params:
-                numel = p.numel()
-                if p.grad is None:
-                    g = torch.zeros(numel, device=p.device, dtype=p.dtype)
-                else:
-                    g = p.grad.detach().view(-1).clone()
-                flat_grads.append(g)
-                mapping.append((p, offset, numel))
-                offset += numel
-            return torch.cat(flat_grads, dim=0), mapping
-        
-        def write_back_flat_grads(flat_grads, mapping):
-            for p, start, numel in mapping:
-                sub = flat_grads[start:start+numel].view_as(p)
-            
-                p.grad = sub.clone()
-        self.main_optim.zero_grad()
-        task_loss.backward(retain_graph=True)
-        
-        flat_A, mapping = flatten_and_pad_grads(self.model.parameters())
-        self.main_optim.zero_grad()
-        target_task_loss.backward(retain_graph=True)
-        
-        flat_B, _ = flatten_and_pad_grads(self.model.parameters())
-        flat_proj_A = pcgrad_one_sided(flat_A, flat_B)
-        write_back_flat_grads(flat_proj_A, mapping)
+        source_loss = torch.stack(source_losses).sum()
+        self.main_optim.zero_grad(set_to_none=True)
+        source_loss.backward(retain_graph=True)
+
+        def flatten_grads(params):
+            flat, mapping, offset = [], [], 0
+            for parameter in params:
+                count = parameter.numel()
+                grad = (
+                    torch.zeros(count, device=parameter.device, dtype=parameter.dtype)
+                    if parameter.grad is None
+                    else parameter.grad.detach().reshape(-1).clone()
+                )
+                flat.append(grad)
+                mapping.append((parameter, offset, count))
+                offset += count
+            return torch.cat(flat), mapping
+
+        flat_source, mapping = flatten_grads(self.model.parameters())
+        self.main_optim.zero_grad(set_to_none=True)
+        target_loss.backward(retain_graph=True)
+        flat_target, _ = flatten_grads(self.model.parameters())
+
+        dot = torch.dot(flat_source, flat_target)
+        if dot < 0:
+            flat_source = flat_source - (
+                dot / (flat_target.norm().square() + 1e-8)
+            ) * flat_target
+
+        for parameter, start, count in mapping:
+            parameter.grad = flat_source[start:start + count].view_as(parameter).clone()
+
         self.main_optim.step()
-        self.main_optim.zero_grad()
+        self.main_optim.zero_grad(set_to_none=True)
 
+        def mean_metric(key):
+            values = source_metrics[key]
+            return float(np.mean(values)) if values else float("nan")
 
-        model_loss = task_loss
-        
-        if epoch%25==0:
-            print('len(task_losses), len(OT_losses)', len(task_losses), len(OT_losses))
-        
-        return model_loss.detach().cpu().numpy(),np.mean(total_mse), np.mean(total_rmse), np.mean(total_mae),np.mean(total_mape)
-        
-        
+        if epoch % 25 == 0:
+            print(
+                f"[Stage-I][PCGrad] epoch={epoch} "
+                f"source_loss={source_loss.item():.6f} "
+                f"target_loss={target_loss.item():.6f} "
+                f"gradient_dot={dot.item():.6f}"
+            )
+
+        return (
+            source_loss.detach().cpu().numpy(),
+            mean_metric("mse"),
+            mean_metric("rmse"),
+            mean_metric("mae"),
+            mean_metric("mape"),
+        )
+
+    def fit_target_residual_adapter(self, target_dataset):
+        """Fit the Stage-II low-rank adapter once from target support windows."""
+        adapter = self.model.residual_net
+        if adapter is None:
+            raise RuntimeError("Stage-II low-rank residual adapter is disabled.")
+
+        if hasattr(target_dataset, "x"):
+            data_items = [target_dataset]
+        elif (
+            isinstance(target_dataset, tuple)
+            and len(target_dataset) > 0
+            and hasattr(target_dataset[0], "x")
+        ):
+            data_items = [target_dataset[0]]
+        elif (
+            isinstance(target_dataset, list)
+            and target_dataset
+            and hasattr(target_dataset[0], "x")
+        ):
+            data_items = target_dataset
+        else:
+            data_items = []
+            for index in range(len(target_dataset)):
+                item = target_dataset[index]
+                data_i = item[0] if isinstance(item, (tuple, list)) else item
+                if hasattr(data_i, "x"):
+                    data_items.append(data_i)
+
+        if not data_items:
+            raise RuntimeError("The target support dataset contains no usable batches.")
+
+        self.model.eval()
+        start_time = time.time()
+        prepared_batches = []
+        feature_batches = []
+        residual_batches = []
+        with torch.no_grad():
+            for data_i in data_items:
+                prepared = self.model.prepare_stage2(data_i)
+                features = adapter.extract_features(
+                    prepared["history_normalized"],
+                    prepared["base_normalized"],
+                )
+                residual_target = (
+                    prepared["y_unscale"] - prepared["base_normalized"]
+                )
+                if not torch.isfinite(features).all() or not torch.isfinite(residual_target).all():
+                    raise RuntimeError(
+                        "Non-finite target support features/residuals during Stage-II fitting."
+                    )
+                prepared_batches.append(prepared)
+                feature_batches.append(features)
+                residual_batches.append(residual_target)
+
+            fit_summary = adapter.fit_from_features(
+                torch.cat(feature_batches, dim=0),
+                torch.cat(residual_batches, dim=0),
+            )
+
+            corrected_outputs = []
+            target_outputs = []
+            predicted_residuals = []
+            target_residuals = []
+            for prepared, features, residual_target in zip(
+                prepared_batches, feature_batches, residual_batches
+            ):
+                correction = adapter.predict_from_features(features)
+                corrected_normalized = prepared["base_normalized"] + correction
+                corrected_revin = (
+                    corrected_normalized * prepared["revin_std"]
+                    + prepared["revin_mean"]
+                )
+                corrected_output = unnorm(
+                    corrected_revin, prepared["means"], prepared["stds"]
+                )
+                corrected_outputs.append(corrected_output)
+                target_outputs.append(prepared["y"])
+                predicted_residuals.append(correction)
+                target_residuals.append(residual_target)
+
+        output_all = torch.cat(corrected_outputs, dim=0)
+        target_all = torch.cat(target_outputs, dim=0)
+        predicted_residual_all = torch.cat(predicted_residuals, dim=0)
+        target_residual_all = torch.cat(target_residuals, dim=0)
+
+        residual_loss = F.smooth_l1_loss(
+            predicted_residual_all, target_residual_all, beta=5e-4
+        )
+        forecast_loss = F.smooth_l1_loss(
+            output_all, target_all, beta=5e-4
+        )
+        correction_penalty = predicted_residual_all.square().mean()
+        total_loss = residual_loss + 0.1 * forecast_loss + 1e-4 * correction_penalty
+        mse, rmse, mae, mape = calc_metric(output_all, target_all)
+
+        stats = {
+            **fit_summary,
+            "fit_seconds": float(time.time() - start_time),
+            "total_loss": float(total_loss.detach().cpu().item()),
+            "residual_loss": float(residual_loss.detach().cpu().item()),
+            "forecast_loss": float(forecast_loss.detach().cpu().item()),
+            "correction_l2": float(correction_penalty.detach().cpu().item()),
+            "train_MSE": float(mse.detach().cpu().item()),
+            "train_RMSE": float(rmse.detach().cpu().item()),
+            "train_MAE": float(mae.detach().cpu().item()),
+            "train_MAPE": float(mape.detach().cpu().item()),
+        }
+        self.last_stage2_loss_components = {
+            key: stats[key]
+            for key in (
+                "total_loss",
+                "residual_loss",
+                "forecast_loss",
+                "correction_l2",
+            )
+        }
+        return stats
+
+    def meta_train_revise(self, data, epoch, target=False):
+        """Keep the Stage-I PCGrad path; Stage-II uses one closed-form support fit."""
+        if self.model.residual_net is None:
+            return self._meta_train_stage1(data, epoch)
+
+        stats = self.fit_target_residual_adapter(data)
+        return (
+            np.asarray(stats["total_loss"]),
+            np.asarray(stats["train_MSE"]),
+            np.asarray(stats["train_RMSE"]),
+            np.asarray(stats["train_MAE"]),
+            np.asarray(stats["train_MAPE"]),
+        )
+
     def forward(self, data, matrix):
-        out, meta_graph = self.model(data)
-        return out, meta_graph
+        data_i = data[0] if isinstance(data, (list, tuple)) else data
+        out, y, representation, y_unscale, correction = self.model(
+            data_i, stage='test'
+        )
+        return out, correction
 
     def test_batch(self,start,end,source_dataset,stage = "test"):  
         total_loss = []
@@ -343,7 +463,7 @@ class STRep(nn.Module):
                 if B==0:
                     break
                     
-                out, y, rep, y_unscale, normed_memory = self.model(data_i, stage='test') # KL=0
+                out, y, rep, y_unscale, correction = self.model(data_i, stage='test')
             
                 MSE,RMSE,MAE,MAPE = calc_metric(out, y, stage='test')
                 total_mse.append((MSE.cpu().detach().numpy(), len(out)))
