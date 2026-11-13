@@ -23,6 +23,8 @@ parser.add_argument('--config_filename', default='./configs/config.yaml', type=s
 parser.add_argument('--test_dataset', default='pems-bay', type=str)
 parser.add_argument('--train_epochs', default=0, type=int)
 parser.add_argument('--finetune_epochs', default=300,type=int)
+parser.add_argument('--stage2_target_batch_size', default=2, type=int)
+parser.add_argument('--stage2_source_batch_size', default=8, type=int)
 parser.add_argument('--description', default='PMME', type=str)
 
 parser.add_argument('--seed',default=7,type=int)
@@ -305,10 +307,12 @@ if __name__ == '__main__':
         # Match source-task batch size to the few-shot target batch during Stage-II.
         # This prevents the large Stage-I source batch (often >100) from dominating
         # the residual-memory adaptation cost. Stage-I has already completed.
-        target_batch_size = int(
-            task_args["target_few_shot"].get("batch_size", args.batch_size)
-        )
-        stage2_source_batch_size = min(64, max(target_batch_size, 2 * target_batch_size))
+        # Stage-II uses micro-batches to keep the 10k-slot memory readers bounded.
+        # The default target batch of 2 divides the 46 support windows in this setup.
+        stage2_target_batch_size = max(1, int(args.stage2_target_batch_size))
+        stage2_source_batch_size = max(1, int(args.stage2_source_batch_size))
+        finetune_dataset.task_args = dict(finetune_dataset.task_args)
+        finetune_dataset.task_args["batch_size"] = stage2_target_batch_size
         source_dataset.task_args = dict(source_dataset.task_args)
         source_dataset.task_args["batch_size"] = stage2_source_batch_size
 
