@@ -41,18 +41,86 @@ class MultiHeadMemoryReader(nn.Module):
         return self.output(context), attention
 
 
+class SelectiveStateSpaceDirection(nn.Module):
+    """Narrow input-selective state-space scan for one sequence direction."""
+    def __init__(self, model_dim=256, inner_dim=64, state_dim=8, conv_kernel=3):
+        super().__init__()
+        self.inner_dim = int(inner_dim)
+        self.state_dim = int(state_dim)
+        self.dt_rank = max(1, self.inner_dim // 16)
+        self.in_proj = nn.Linear(model_dim, self.inner_dim * 2, bias=False)
+        self.conv1d = nn.Conv1d(
+            self.inner_dim, self.inner_dim, kernel_size=conv_kernel,
+            groups=self.inner_dim, padding=conv_kernel - 1, bias=True
+        )
+        self.x_proj = nn.Linear(
+            self.inner_dim, self.dt_rank + 2 * self.state_dim, bias=False
+        )
+        self.dt_proj = nn.Linear(self.dt_rank, self.inner_dim, bias=True)
+        base = torch.arange(1, self.state_dim + 1, dtype=torch.float32)
+        self.A_log = nn.Parameter(base.log().view(1, -1).repeat(self.inner_dim, 1))
+        self.D = nn.Parameter(torch.ones(self.inner_dim))
+        self.out_proj = nn.Linear(self.inner_dim, model_dim, bias=False)
+
+    def forward(self, sequence):
+        batch, length, _ = sequence.shape
+        xz = self.in_proj(sequence)
+        x, z = xz.chunk(2, dim=-1)
+        x = self.conv1d(x.transpose(1, 2))[..., :length].transpose(1, 2)
+        x = F.silu(x)
+        params = self.x_proj(x)
+        dt_low, b_all, c_all = torch.split(
+            params, [self.dt_rank, self.state_dim, self.state_dim], dim=-1
+        )
+        delta = F.softplus(self.dt_proj(dt_low)).clamp(max=5.0)
+        A = -torch.exp(self.A_log).to(dtype=x.dtype)
+        state = x.new_zeros(batch, self.inner_dim, self.state_dim)
+        outputs = []
+        for step in range(length):
+            dt = delta[:, step, :]
+            b_t = b_all[:, step, :]
+            c_t = c_all[:, step, :]
+            decay = torch.exp(dt.unsqueeze(-1) * A.unsqueeze(0))
+            injection = (
+                dt.unsqueeze(-1) * x[:, step, :].unsqueeze(-1)
+                * b_t.unsqueeze(1)
+            )
+            state = decay * state + injection
+            y_t = (state * c_t.unsqueeze(1)).sum(dim=-1)
+            y_t = y_t + self.D.to(dtype=x.dtype) * x[:, step, :]
+            outputs.append(y_t)
+        y = torch.stack(outputs, dim=1)
+        return self.out_proj(y * F.silu(z))
+
+
+class BidirectionalHorizonMamba(nn.Module):
+    """One narrow forward/backward selective-SSM block with residual fusion."""
+    def __init__(self, model_dim=256, inner_dim=64, state_dim=8, dropout=0.05):
+        super().__init__()
+        self.forward_ssm = SelectiveStateSpaceDirection(
+            model_dim, inner_dim, state_dim
+        )
+        self.backward_ssm = SelectiveStateSpaceDirection(
+            model_dim, inner_dim, state_dim
+        )
+        self.fusion = nn.Linear(model_dim * 2, model_dim)
+        self.norm = nn.LayerNorm(model_dim)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, sequence):
+        forward_features = self.forward_ssm(sequence)
+        backward_features = self.backward_ssm(
+            sequence.flip(dims=[1])
+        ).flip(dims=[1])
+        fused = self.fusion(torch.cat((forward_features, backward_features), dim=-1))
+        return self.norm(sequence + self.dropout(fused))
+
+
 class MultiScaleHorizonResidualMemory(nn.Module):
     def __init__(
-        self,
-        rep_dim=128,
-        pred_len=36,
-        memory_size=10000,
-        horizon_dim=128,
-        decoder_dim=256,
-        heads=4,
-        decoder_layers=2,
-        dropout=0.1,
-        max_correction_ratio=0.5,
+        self, rep_dim=128, pred_len=36, memory_size=10000,
+        horizon_dim=128, decoder_dim=256, heads=4, dropout=0.1,
+        max_correction_ratio=0.5, mamba_inner_dim=64, mamba_state_dim=8,
     ):
         super().__init__()
         self.rep_dim = int(rep_dim)
@@ -61,25 +129,20 @@ class MultiScaleHorizonResidualMemory(nn.Module):
         self.horizon_dim = int(horizon_dim)
         self.decoder_dim = int(decoder_dim)
         self.max_correction_ratio = float(max_correction_ratio)
-
-        # Preserve approximately the official 10k-slot memory capacity.
         self.global_slots = max(1, int(round(self.memory_size * 0.4)))
         remaining = self.memory_size - self.global_slots
         self.band_slots = max(1, remaining // 3)
         self.total_slots = self.global_slots + 3 * self.band_slots
-
         self.memory_keys = nn.Parameter(
             torch.randn(self.total_slots, self.rep_dim) / math.sqrt(self.rep_dim)
         )
         self.memory_values = nn.Parameter(
             torch.randn(self.total_slots, self.rep_dim) * 0.02
         )
-
         self.global_reader = MultiHeadMemoryReader(self.rep_dim, heads, dropout)
         self.band_readers = nn.ModuleList([
             MultiHeadMemoryReader(self.rep_dim, heads, dropout) for _ in range(3)
         ])
-
         self.global_context_encoder = nn.Sequential(
             nn.Linear(4, self.rep_dim), nn.GELU(),
             nn.Linear(self.rep_dim, self.rep_dim), nn.LayerNorm(self.rep_dim)
@@ -90,47 +153,31 @@ class MultiScaleHorizonResidualMemory(nn.Module):
         )
         self.band_embedding = nn.Embedding(3, self.rep_dim)
         self.horizon_embedding = nn.Embedding(self.pred_len, self.horizon_dim)
-
         decoder_input_dim = self.rep_dim * 4 + self.horizon_dim + 2
         self.decoder_input = nn.Sequential(
             nn.Linear(decoder_input_dim, self.decoder_dim),
-            nn.LayerNorm(self.decoder_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
+            nn.LayerNorm(self.decoder_dim), nn.GELU(), nn.Dropout(dropout),
         )
-        layer = nn.TransformerEncoderLayer(
-            d_model=self.decoder_dim,
-            nhead=8,
-            dim_feedforward=self.decoder_dim * 2,
-            dropout=dropout,
-            activation="gelu",
-            batch_first=True,
-            norm_first=True,
-        )
-        self.horizon_interaction = nn.TransformerEncoder(
-            layer, num_layers=int(decoder_layers),
-            norm=nn.LayerNorm(self.decoder_dim)
+        # One narrow bidirectional Mamba-style selective SSM, sized for H=36.
+        self.horizon_interaction = BidirectionalHorizonMamba(
+            model_dim=self.decoder_dim, inner_dim=mamba_inner_dim,
+            state_dim=mamba_state_dim, dropout=dropout,
         )
         self.residual_head = nn.Sequential(
             nn.Linear(self.decoder_dim, self.decoder_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
+            nn.GELU(), nn.Dropout(dropout),
             nn.Linear(self.decoder_dim, self.decoder_dim // 2),
-            nn.GELU(),
-            nn.Linear(self.decoder_dim // 2, 1),
+            nn.GELU(), nn.Linear(self.decoder_dim // 2, 1),
         )
         self.gate_head = nn.Sequential(
             nn.Linear(self.decoder_dim, self.decoder_dim // 2),
-            nn.GELU(),
-            nn.Linear(self.decoder_dim // 2, 1),
+            nn.GELU(), nn.Linear(self.decoder_dim // 2, 1),
         )
         nn.init.constant_(self.gate_head[-1].bias, -1.0)
-
         self.register_buffer(
             "horizon_to_band",
             torch.div(
-                torch.arange(self.pred_len) * 3,
-                self.pred_len,
+                torch.arange(self.pred_len) * 3, self.pred_len,
                 rounding_mode="floor",
             ).clamp_max(2),
             persistent=False,
