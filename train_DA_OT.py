@@ -303,7 +303,7 @@ if __name__ == '__main__':
         stage2_start = time.time()
         stage2_stats = rep_model.fit_target_residual_adapter(finetune_dataset)
         stage2_stats["fit_seconds_wall"] = float(time.time() - stage2_start)
-        log_verbose(args, "[Stage-II][LowRankResidualAdapter] " + str(stage2_stats))
+        log_verbose(args, "[Stage-II][HRRC] " + str(stage2_stats))
 
         stage2_checkpoint = {
             "model_state_dict": rep_model.state_dict(),
@@ -311,7 +311,7 @@ if __name__ == '__main__':
             "stage1_checkpoint": model_path,
         }
         stage2_path = (
-            f"stage2_lowrank_{args.test_dataset}_{args.model_name}_seed{seed}.pth"
+            f"stage2_hrrc_{args.test_dataset}_{args.model_name}_seed{seed}.pth"
         )
         torch.save(stage2_checkpoint, stage2_path)
         log_verbose(args, f"[Stage-II] saved fitted adapter: {stage2_path}")
