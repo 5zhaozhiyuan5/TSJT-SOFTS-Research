@@ -1,4 +1,4 @@
-name: PMME target-only temporal Stage-II smoke tests
+name: PMME target-only low-rank Stage-II smoke tests
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
       - "datasets.py"
       - "model/Meta_Models/PMME.py"
       - "model/Meta_Models/PMME_2ndStage.py"
-      - "model/Meta_Models/target_residual_temporal_net.py"
+      - "model/Meta_Models/target_residual_lowrank_adapter.py"
       - "tests/test_pmme_horizon_stage2_integration.py"
       - "train_DA_OT.py"
       - "train_one_OT-*.sh"
@@ -17,7 +17,7 @@ on:
     paths:
       - "datasets.py"
       - "model/Meta_Models/PMME_2ndStage.py"
-      - "model/Meta_Models/target_residual_temporal_net.py"
+      - "model/Meta_Models/target_residual_lowrank_adapter.py"
       - "tests/test_pmme_horizon_stage2_integration.py"
       - "train_DA_OT.py"
       - "train_one_OT-*.sh"
@@ -25,7 +25,7 @@ on:
       - ".github/workflows/pmme-residual-memory-smoke.yml"
 
 jobs:
-  temporal-stage2-smoke:
+  lowrank-stage2-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
       - name: Install CPU test dependencies
         run: python -m pip install torch --extra-index-url https://download.pytorch.org/whl/cpu && python -m pip install numpy scikit-learn gpytorch geomloss tqdm pyyaml torch-geometric einops
       - name: Compile changed Python files
-        run: python -m py_compile datasets.py model/Meta_Models/PMME.py model/Meta_Models/PMME_2ndStage.py model/Meta_Models/target_residual_temporal_net.py train_DA_OT.py tests/test_pmme_horizon_stage2_integration.py
+        run: python -m py_compile datasets.py model/Meta_Models/PMME.py model/Meta_Models/PMME_2ndStage.py model/Meta_Models/target_residual_lowrank_adapter.py train_DA_OT.py tests/test_pmme_horizon_stage2_integration.py
       - name: Check PMME launch scripts and source-only data split
         run: |
           bash -n PMME.sh train_one_OT-pems.sh train_one_OT-chengdu.sh train_one_OT-metr.sh train_one_OT-shenzhen.sh
@@ -44,5 +44,5 @@ jobs:
             echo "Found unsupported --config_file option; train_DA_OT.py expects --config_filename"
             exit 1
           fi
-      - name: Run PMME target-only temporal residual Stage-II integration tests
+      - name: Run PMME target-only low-rank residual Stage-II integration tests
         run: python tests/test_pmme_horizon_stage2_integration.py
