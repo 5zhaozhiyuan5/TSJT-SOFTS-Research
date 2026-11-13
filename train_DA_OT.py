@@ -267,8 +267,7 @@ if __name__ == '__main__':
         print('####################')
         print('####################')
     
-        # Stage-II: one-shot target-only low-rank residual adaptation.
-        # Stage-I checkpoint is loaded into the frozen forecasting backbone.
+        # Stage-II: iterative training of compact horizon-conditioned residual memory.
         rep_model = PMME_2ndStage.STRep(
             args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio,
             args.MemSize, 1, args.model_name, data_args, task_args,
@@ -300,31 +299,91 @@ if __name__ == '__main__':
         current_state.update(compatible_state)
         rep_model.model.load_state_dict(current_state, strict=True)
 
+        stage2_epochs = max(1, int(task_args["source"]["finetune_epochs"]))
         stage2_start = time.time()
-        stage2_stats = rep_model.fit_target_residual_adapter(finetune_dataset)
-        stage2_stats["fit_seconds_wall"] = float(time.time() - stage2_start)
-        log_verbose(args, "[Stage-II][LowRankResidualAdapter] " + str(stage2_stats))
+        source_count = max(1, int(args.target_days))
+        source_length = len(source_dataset)
+        if source_length <= 0:
+            raise RuntimeError("Stage-II requires at least one source training task.")
 
-        stage2_checkpoint = {
-            "model_state_dict": rep_model.state_dict(),
-            "stage2_stats": stage2_stats,
-            "stage1_checkpoint": model_path,
-        }
-        stage2_path = (
-            f"stage2_lowrank_{args.test_dataset}_{args.model_name}_seed{seed}.pth"
+        log_verbose(
+            args,
+            "[Stage-II][HRMN] start iterative training: epochs={}, memory_size={}, "
+            "trainable_parameters={}".format(
+                stage2_epochs,
+                rep_model.model.residual_net.memory_size,
+                sum(p.numel() for p in rep_model.trainable_params),
+            )
         )
-        torch.save(stage2_checkpoint, stage2_path)
-        log_verbose(args, f"[Stage-II] saved fitted adapter: {stage2_path}")
+
+        for epoch in range(stage2_epochs):
+            target_item = finetune_dataset[0]
+            target_data = target_item[0] if isinstance(target_item, (tuple, list)) else target_item
+            stage2_tasks = [target_data]
+            stage2_matrices = [target_item[1] if isinstance(target_item, (tuple, list)) and len(target_item) > 1 else None]
+            seen_node_counts = {int(stage2_matrices[0].shape[1])} if stage2_matrices[0] is not None else set()
+
+            cursor = (epoch * source_count) % source_length
+            attempts = 0
+            while len(stage2_tasks) < source_count + 1 and attempts < source_length:
+                data_i, matrix_i = source_dataset[(cursor + attempts) % source_length]
+                node_count = int(matrix_i.shape[1])
+                if node_count not in seen_node_counts:
+                    stage2_tasks.append(data_i)
+                    stage2_matrices.append(matrix_i)
+                    seen_node_counts.add(node_count)
+                attempts += 1
+
+            # If source tasks share node counts, still use available source data
+            # rather than silently dropping the source-domain objective.
+            if len(stage2_tasks) == 1:
+                fallback_data, fallback_matrix = source_dataset[cursor]
+                stage2_tasks.append(fallback_data)
+                stage2_matrices.append(fallback_matrix)
+
+            train_stats = rep_model.meta_train_revise(
+                stage2_tasks, stage2_matrices, epoch
+            )
+            if epoch % 10 == 0 or epoch == stage2_epochs - 1:
+                log_verbose(
+                    args,
+                    "[Stage-II][HRMN] epoch {}/{} source_MAE={:.6f} "
+                    "source_RMSE={:.6f} loss={:.6f}".format(
+                        epoch + 1, stage2_epochs,
+                        float(train_stats[3]), float(train_stats[2]),
+                        float(train_stats[0]),
+                    )
+                )
+
+            if (epoch + 1) % 25 == 0 or epoch == stage2_epochs - 1:
+                stage2_path = (
+                    f"stage2_hrmn_{args.test_dataset}_{args.model_name}_seed{seed}.pth"
+                )
+                torch.save(
+                    {
+                        "epoch": epoch + 1,
+                        "model_state_dict": rep_model.state_dict(),
+                        "optimizer_state_dict": rep_model.main_optim.state_dict(),
+                        "stage1_checkpoint": model_path,
+                    },
+                    stage2_path,
+                )
+
+        fit_seconds = time.time() - stage2_start
+        log_verbose(
+            args,
+            f"[Stage-II][HRMN] iterative training finished in {fit_seconds:.2f}s"
+        )
 
         testing_score = rep_model.test_evaluation(
-            finetune_dataset, test_dataset,
-            task_args["source"]["finetune_epochs"]
+            finetune_dataset, test_dataset, stage2_epochs
         )
         indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]
         current_testing_score = [testing_score[index] for index in indices]
-        print("[Stage-II] test MAE by selected horizons:", current_testing_score)
-        print("[Stage-II] sum of selected horizon MAE:", sum(current_testing_score))
-        print("[Stage-II] one-shot target-only fitting complete.")
+        print("[Stage-II][HRMN] test MAE by selected horizons:", current_testing_score)
+        print("[Stage-II][HRMN] sum of selected horizon MAE:", sum(current_testing_score))
+        print("[Stage-II][HRMN] iterative training complete.")
+
 
     # del rep_model
     # torch.cuda.empty_cache()
