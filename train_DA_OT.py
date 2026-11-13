@@ -23,8 +23,8 @@ parser.add_argument('--config_filename', default='./configs/config.yaml', type=s
 parser.add_argument('--test_dataset', default='pems-bay', type=str)
 parser.add_argument('--train_epochs', default=0, type=int)
 parser.add_argument('--finetune_epochs', default=300,type=int)
-parser.add_argument('--stage2_target_batch_size', default=4, type=int)
-parser.add_argument('--stage2_source_batch_size', default=8, type=int)
+parser.add_argument('--stage2_target_batch_size', default=8, type=int)
+parser.add_argument('--stage2_source_batch_size', default=16, type=int)
 parser.add_argument('--description', default='PMME', type=str)
 
 parser.add_argument('--seed',default=7,type=int)
@@ -312,7 +312,7 @@ if __name__ == '__main__':
         rep_model.model.load_state_dict(current_state, strict=True)
 
         # Stage-II uses micro-batches to keep the 10k-slot memory readers bounded.
-        # The default target batch of 4 uses small updates; the final partial batch is retained.
+        # The default target batch of 8 uses bounded updates; the final partial batch is retained.
         stage2_target_batch_size = max(1, int(args.stage2_target_batch_size))
         stage2_source_batch_size = max(1, int(args.stage2_source_batch_size))
         finetune_dataset.task_args = dict(finetune_dataset.task_args)
