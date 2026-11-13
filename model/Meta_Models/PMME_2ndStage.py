@@ -26,15 +26,85 @@ from gpytorch.likelihoods import BernoulliLikelihood, LaplaceLikelihood
 from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
-try:
-    from .hierarchical_horizon_residual_memory import MultiScaleHorizonResidualMemory
-except ImportError:
-    from hierarchical_horizon_residual_memory import MultiScaleHorizonResidualMemory
 
 def log_verbose(args, msg):
     print(msg)
     with open(os.path.join(args.save_dir, "log.txt"), "a") as f:
         f.write(str(msg) + "\n")
+
+class TCFAAdapter(nn.Module):
+    """Target-statistics-conditioned, channel-wise feature adapter.
+
+    The adapter is initialized as an exact identity mapping. Statistics are
+    estimated once from the target support set and stored as buffers, so
+    inference never reads target labels or updates the adapter.
+    """
+
+    def __init__(self, dim=128, strength=0.1, eps=1e-4):
+        super().__init__()
+        self.dim = int(dim)
+        self.strength = float(strength)
+        self.eps = float(eps)
+        self.scale = nn.Parameter(torch.zeros(self.dim))
+        self.shift = nn.Parameter(torch.zeros(self.dim))
+        self.register_buffer("target_mean", torch.zeros(1, 1, self.dim))
+        self.register_buffer("target_std", torch.ones(1, 1, self.dim))
+        self.register_buffer(
+            "statistics_ready", torch.tensor(False, dtype=torch.bool)
+        )
+
+    @torch.no_grad()
+    def set_target_statistics(self, representation):
+        if representation.ndim != 3 or representation.shape[-1] != self.dim:
+            raise ValueError(
+                "TCFA expects representation [batch, nodes, {}], got {}".format(
+                    self.dim, tuple(representation.shape)
+                )
+            )
+        features = representation.detach().float()
+        mean = features.mean(dim=(0, 1), keepdim=True)
+        std = features.std(dim=(0, 1), unbiased=False, keepdim=True)
+        self.target_mean.copy_(mean.to(self.target_mean.dtype))
+        self.target_std.copy_(std.clamp_min(self.eps).to(self.target_std.dtype))
+        self.statistics_ready.fill_(True)
+
+    def forward(self, representation):
+        if not bool(self.statistics_ready.item()):
+            raise RuntimeError(
+                "TCFA target statistics are not initialized. "
+                "Call fit_target_statistics() with the target support set first."
+            )
+        if representation.shape[-1] != self.dim:
+            raise ValueError(
+                "TCFA feature dimension mismatch: expected {}, got {}".format(
+                    self.dim, representation.shape[-1]
+                )
+            )
+        normalized = (
+            representation - self.target_mean.to(representation.dtype)
+        ) / self.target_std.to(representation.dtype)
+        scale = torch.tanh(self.scale).view(1, 1, self.dim)
+        shift = torch.tanh(self.shift).view(1, 1, self.dim)
+        delta = scale * normalized + shift
+        return representation + self.strength * delta
+
+    def regularization_loss(self):
+        return self.scale.square().mean() + self.shift.square().mean()
+
+    @torch.no_grad()
+    def diagnostics(self, representation=None):
+        result = {
+            "scale_rms": float(self.scale.detach().square().mean().sqrt().cpu()),
+            "shift_rms": float(self.shift.detach().square().mean().sqrt().cpu()),
+            "statistics_ready": bool(self.statistics_ready.item()),
+        }
+        if representation is not None:
+            adapted = self.forward(representation)
+            result["feature_delta_rms"] = float(
+                (adapted - representation).detach().square().mean().sqrt().cpu()
+            )
+        return result
+
 
 class PatchFSL(nn.Module):
     """PMME wrapper with a frozen Stage-I backbone and optional Stage-II adapter."""
@@ -60,20 +130,18 @@ class PatchFSL(nn.Module):
         else:
             raise ValueError(f"Unsupported PMME forecasting model: {model_name}")
 
-        # Stage-II: compact trainable horizon-conditioned residual memory.
-        self.residual_net = None
+        # Stage-II V1: lightweight target-statistics-conditioned feature adaptation.
+        self.feature_adapter = None
         if self.temperature_args > 0 and self.memory_size_args > 0:
-            self.residual_net = MultiScaleHorizonResidualMemory(
-                rep_dim=128,
-                pred_len=int(task_args['source']['pred_num']),
-                memory_size=getattr(args, 'stage2_memory_size', 10000),
-                horizon_dim=128,
-                decoder_dim=256,
-                heads=4,
-                mamba_inner_dim=64,
-                mamba_state_dim=8,
-                max_correction_ratio=getattr(args, 'stage2_max_correction_ratio', 0.5),
-                dropout=getattr(args, 'stage2_dropout', 0.1),
+            if not hasattr(self.forecasting_model, "projection2"):
+                raise NotImplementedError(
+                    "TCFA currently requires a forecasting backbone exposing "
+                    "projection2; supported backbones are SOFTS and iTransformer."
+                )
+            self.feature_adapter = TCFAAdapter(
+                dim=128,
+                strength=getattr(args, "stage2_strength", 0.1),
+                eps=getattr(args, "stage2_stat_eps", 1e-4),
             )
             self.forecasting_model.requires_grad_(False)
 
@@ -98,8 +166,9 @@ class PatchFSL(nn.Module):
         if self.model_name == 'MLP':
             x_normalized = x_normalized.permute(0, 2, 1)
 
-        if self.residual_net is not None:
-            # Stage-II never updates or backpropagates through Stage-I.
+        if self.feature_adapter is not None:
+            # Stage-II never updates Stage-I. Gradients are needed only after
+            # projection2, with respect to the adapted representation.
             self.forecasting_model.eval()
             with torch.no_grad():
                 representation, base_normalized = self.forecasting_model(x_normalized)
@@ -124,8 +193,18 @@ class PatchFSL(nn.Module):
             "stds": stds,
         }
 
+    @torch.no_grad()
+    def fit_target_statistics(self, data_i):
+        """Estimate fixed TCFA statistics from the target support set only."""
+        if self.feature_adapter is None:
+            raise RuntimeError("TCFA is not enabled for this model.")
+        self.forecasting_model.eval()
+        prepared = self.prepare_stage2(data_i)
+        self.feature_adapter.set_target_statistics(prepared["representation"])
+        return self.feature_adapter.diagnostics()
+
     def forward(self, data_i, stage='train', return_base=False):
-        if self.residual_net is None:
+        if self.feature_adapter is None:
             if stage == 'train':
                 self.forecasting_model.train()
             else:
@@ -133,33 +212,40 @@ class PatchFSL(nn.Module):
         else:
             self.forecasting_model.eval()
             if stage == 'train':
-                self.residual_net.train()
+                self.feature_adapter.train()
             else:
-                self.residual_net.eval()
+                self.feature_adapter.eval()
 
         prepared = self.prepare_stage2(data_i)
-        history_normalized = prepared["history_normalized"]
         representation = prepared["representation"]
         base_normalized = prepared["base_normalized"]
         base_out = prepared["base_out"]
         y = prepared["y"]
         y_unscale = prepared["y_unscale"]
 
-        correction = None
-        if self.residual_net is not None:
-            correction = self.residual_net(
-                representation, base_out, prepared["stds"][0]
+        feature_delta = None
+        if self.feature_adapter is not None:
+            adapted_representation = self.feature_adapter(representation)
+            # Both supported forecasting backbones use the same 128 -> horizon
+            # projection. Reusing the frozen projection keeps Stage-I unchanged.
+            adapted_normalized = self.forecasting_model.projection2(
+                adapted_representation
             )
-            out = base_out + correction
+            adapted_revin = (
+                adapted_normalized * prepared["revin_std"]
+                + prepared["revin_mean"]
+            )
+            out = unnorm(adapted_revin, prepared["means"], prepared["stds"])
+            feature_delta = adapted_representation - representation
         else:
             out = base_out
 
         if return_base:
             return (
                 out, y, representation, y_unscale,
-                correction, base_out, base_normalized,
+                feature_delta, base_out, base_normalized,
             )
-        return out, y, representation, y_unscale, correction
+        return out, y, representation, y_unscale, feature_delta
 
 class STRep(nn.Module):
     """
@@ -190,34 +276,27 @@ class STRep(nn.Module):
         self.model = PatchFSL(data_args, model_args, task_args, memory_size_args, temperature_args, model_name, PatchFSL_cfg, args).to(self.device)
 
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
-        base_lr = getattr(args, 'stage2_lr', self.lr)
-        residual = self.model.residual_net
-        if residual is not None:
-            key_params = [residual.memory_keys]
-            value_params = [residual.memory_values]
-            excluded = {id(p) for p in key_params + value_params}
-            other_params = [p for p in residual.parameters() if id(p) not in excluded]
+        base_lr = float(getattr(args, "stage2_lr", 1e-3))
+        adapter = self.model.feature_adapter
+        if adapter is not None:
             self.main_optim = optim.AdamW(
-                [
-                    {"params": key_params, "lr": base_lr * 0.25},
-                    {"params": value_params, "lr": base_lr * 0.5},
-                    {"params": other_params, "lr": base_lr},
-                ],
-                weight_decay=getattr(args, 'stage2_weight_decay', 1e-4),
+                adapter.parameters(),
+                lr=base_lr,
+                weight_decay=float(getattr(args, "stage2_weight_decay", 1e-3)),
             )
         else:
             self.main_optim = optim.AdamW(
                 self.model.parameters(), lr=base_lr,
-                weight_decay=getattr(args, 'stage2_weight_decay', 1e-4),
+                weight_decay=float(getattr(args, "stage2_weight_decay", 1e-3)),
             )
         self.trainable_params = [
             parameter for parameter in self.model.parameters()
             if parameter.requires_grad
         ]
-        if self.model.residual_net is not None:
+        if adapter is not None:
             log_verbose(
                 args,
-                "[Stage-II][HMRM] frozen Stage-I; trainable residual-memory parameters={}".format(
+                "[Stage-II][TCFA-V1] frozen Stage-I; trainable adapter parameters={}".format(
                     sum(parameter.numel() for parameter in self.trainable_params)
                 )
             )
@@ -316,117 +395,94 @@ class STRep(nn.Module):
         )
 
 
-    def set_stage2_phase(self, phase):
-        """Pretrain all memory parameters, then freeze memory keys for target adaptation."""
-        if self.model.residual_net is None:
-            return
-        if phase not in ("cross_city_pretrain", "target_adapt"):
-            raise ValueError(f"Unknown Stage-II phase: {phase}")
-        self.model.residual_net.memory_keys.requires_grad_(
-            phase == "cross_city_pretrain"
-        )
-        self.trainable_params = [
-            parameter for parameter in self.model.parameters()
-            if parameter.requires_grad
-        ]
+    def fit_target_statistics(self, finetune_dataset):
+        """Fit fixed feature statistics from every target support window."""
+        if self.model.feature_adapter is None:
+            raise RuntimeError("TCFA is not enabled.")
+        # The target few-shot dataset contains the complete 3-day support set.
+        # Force one complete batch so no support windows are silently dropped.
+        target_name = finetune_dataset.data_list[0]
+        support_count = int(finetune_dataset.x_list[target_name].shape[0])
+        finetune_dataset.task_args = dict(finetune_dataset.task_args)
+        finetune_dataset.task_args["batch_size"] = support_count
+        data_i, _ = finetune_dataset[0]
+        stats = self.model.fit_target_statistics(data_i)
+        stats["support_samples"] = support_count
+        return stats
 
     def _stage2_task_loss(self, data_i):
-        out, y, _, _, correction, base_out, _ = self.model(
+        out, y, _, _, feature_delta, _, _ = self.model(
             data_i, stage="train", return_base=True
         )
         forecast_loss = self.loss_criterion(out, y)
-        residual_target = (y - base_out).detach()
-        residual_loss = self.loss_criterion(correction, residual_target)
-        correction_reg = self.model.residual_net.regularization_loss()
-        if correction.shape[-1] > 2:
-            correction_smooth = (
-                correction[:, :, 2:] - 2 * correction[:, :, 1:-1]
-                + correction[:, :, :-2]
-            ).abs().mean()
-        else:
-            correction_smooth = correction.new_zeros(())
-        total = (
-            forecast_loss + 0.2 * residual_loss
-            + 0.01 * correction_smooth + 1e-4 * correction_reg
-        )
-        return total, out, y
+        adapter_reg = self.model.feature_adapter.regularization_loss()
+        reg_weight = float(getattr(self.args, "stage2_adapter_reg", 1e-3))
+        total = forecast_loss + reg_weight * adapter_reg
+        with torch.no_grad():
+            delta_rms = (
+                float(feature_delta.detach().square().mean().sqrt().cpu())
+                if feature_delta is not None else 0.0
+            )
+        return total, forecast_loss, out, y, delta_rms, adapter_reg
 
-    def _meta_train_stage2(self, data, epoch, phase="cross_city_pretrain"):
-        """Budgeted two-phase Stage-II: source-target learning, then target adaptation."""
+    def _meta_train_stage2(self, data, epoch):
+        """Target-only TCFA adaptation; Stage-I remains frozen."""
         if not data:
-            raise RuntimeError("Stage-II received an empty task list.")
-        self.set_stage2_phase(phase)
+            raise RuntimeError("TCFA Stage-II received an empty target batch.")
+        if len(data) != 1:
+            raise ValueError(
+                "TCFA-V1 is target-only. Pass exactly one target support batch; "
+                "source-city batches are not used in this version."
+            )
+        if self.model.feature_adapter is None:
+            raise RuntimeError("TCFA adapter is not initialized.")
+        if not bool(self.model.feature_adapter.statistics_ready.item()):
+            raise RuntimeError(
+                "Call fit_target_statistics() before starting TCFA training."
+            )
+
         self.model.eval()
+        self.model.feature_adapter.train()
         self.main_optim.zero_grad(set_to_none=True)
-
-        target_loss, target_out, target_y = self._stage2_task_loss(data[0])
-        params = self.trainable_params
-        if len(data) > 1:
-            source_losses = []
-            source_mae = []
-            for source_data in data[1:]:
-                source_loss, source_out, source_y = self._stage2_task_loss(source_data)
-                source_losses.append(source_loss)
-                _, _, mae, _ = calc_metric(source_out, source_y)
-                source_mae.append(float(mae.detach().cpu()))
-
-            target_grads = torch.autograd.grad(
-                target_loss, params, retain_graph=True, allow_unused=True
-            )
-            source_loss = torch.stack(source_losses).mean()
-            source_grads = torch.autograd.grad(
-                source_loss, params, allow_unused=True
-            )
-            merged = []
-            dot = target_loss.new_zeros(())
-            target_norm = target_loss.new_zeros(())
-            for gt, gs, parameter in zip(target_grads, source_grads, params):
-                gt = torch.zeros_like(parameter) if gt is None else gt
-                gs = torch.zeros_like(parameter) if gs is None else gs
-                dot = dot + (gt * gs).sum()
-                target_norm = target_norm + gt.square().sum()
-                merged.append((gt, gs))
-            conflict = dot.item() < 0
-            coefficient = dot / (target_norm + 1e-8) if conflict else dot.new_zeros(())
-            for parameter, (gt, gs) in zip(params, merged):
-                parameter.grad = gt + (gs - coefficient * gt if conflict else gs)
-            source_loss_value = float(source_loss.detach().cpu())
-            mean_source_mae = float(np.mean(source_mae)) if source_mae else float("nan")
-        else:
-            target_loss.backward()
-            dot = target_loss.new_zeros(())
-            source_loss_value = float("nan")
-            mean_source_mae = float("nan")
-
-        torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
+        total_loss, forecast_loss, target_out, target_y, delta_rms, adapter_reg = (
+            self._stage2_task_loss(data[0])
+        )
+        total_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.trainable_params, max_norm=1.0)
         self.main_optim.step()
         self.main_optim.zero_grad(set_to_none=True)
 
         with torch.no_grad():
             _, rmse, mae, mape = calc_metric(target_out, target_y)
+            adapter_diag = self.model.feature_adapter.diagnostics()
             metrics = {
-                "target_loss": float(target_loss.detach().cpu()),
+                "total_loss": float(total_loss.detach().cpu()),
+                "target_loss": float(forecast_loss.detach().cpu()),
                 "target_mae": float(mae.detach().cpu()),
                 "target_rmse": float(rmse.detach().cpu()),
                 "target_mape": float(mape.detach().cpu()),
-                "source_loss": source_loss_value,
-                "source_mae": mean_source_mae,
-                "gradient_dot": float(dot.detach().cpu()),
+                "adapter_reg": float(adapter_reg.detach().cpu()),
+                "feature_delta_rms": delta_rms,
+                "adapter_scale_rms": adapter_diag["scale_rms"],
+                "adapter_shift_rms": adapter_diag["shift_rms"],
             }
-        if epoch % 10 == 0:
+        if epoch % 5 == 0:
             print(
-                f"[Stage-II][HMRM-Mamba] phase={phase} epoch={epoch} "
-                f"target_MAE={metrics['target_mae']:.6f} "
-                f"source_MAE={metrics['source_mae']:.6f} "
-                f"gradient_dot={metrics['gradient_dot']:.6f}"
+                "[Stage-II][TCFA-V1] epoch={} target_MAE={:.6f} "
+                "target_loss={:.6f} feature_delta_rms={:.6e}".format(
+                    epoch + 1, metrics["target_mae"],
+                    metrics["target_loss"], metrics["feature_delta_rms"]
+                )
             )
         return metrics
 
-    def meta_train_revise(self, data, matrix=None, epoch=0, target=False, phase="cross_city_pretrain"):
-        """Dispatch to original Stage-I training or budgeted HMRM-Mamba Stage-II."""
-        if self.model.residual_net is None:
+    def meta_train_revise(
+        self, data, matrix=None, epoch=0, target=False, phase="target_adapt"
+    ):
+        """Dispatch to original Stage-I training or target-only TCFA Stage-II."""
+        if self.model.feature_adapter is None:
             return self._meta_train_stage1(data, epoch)
-        return self._meta_train_stage2(data, epoch, phase=phase)
+        return self._meta_train_stage2(data, epoch)
 
     def forward(self, data, matrix):
         data_i = data[0] if isinstance(data, (list, tuple)) else data
