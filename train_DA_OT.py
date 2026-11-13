@@ -25,6 +25,12 @@ parser.add_argument('--train_epochs', default=0, type=int)
 parser.add_argument('--finetune_epochs', default=300,type=int)
 parser.add_argument('--stage2_target_batch_size', default=8, type=int)
 parser.add_argument('--stage2_source_batch_size', default=16, type=int)
+parser.add_argument('--stage2_epochs', default=30, type=int)
+parser.add_argument('--stage2_lr', default=1e-3, type=float)
+parser.add_argument('--stage2_weight_decay', default=1e-3, type=float)
+parser.add_argument('--stage2_adapter_reg', default=1e-3, type=float)
+parser.add_argument('--stage2_strength', default=0.1, type=float)
+parser.add_argument('--stage2_stat_eps', default=1e-4, type=float)
 parser.add_argument('--description', default='PMME', type=str)
 
 parser.add_argument('--seed',default=7,type=int)
@@ -279,7 +285,8 @@ if __name__ == '__main__':
         print('####################')
         print('####################')
     
-        # Stage-II: budgeted HMRM-Mamba training.
+        # Stage-II V1: target-statistics-conditioned feature adaptation (TCFA).
+        # Stage-I is loaded from the official checkpoint and remains fully frozen.
         rep_model = PMME_2ndStage.STRep(
             args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio,
             args.MemSize, 1, args.model_name, data_args, task_args,
@@ -290,7 +297,7 @@ if __name__ == '__main__':
         ckpt = torch.load(model_path, map_location=args.device)
         old_state = ckpt["model_state_dict"]
         stage1_state = {
-            key[len("model."):]: value
+            key[len("model.") :]: value
             for key, value in old_state.items()
             if key.startswith("model.")
         }
@@ -305,98 +312,99 @@ if __name__ == '__main__':
         ]
         if missing_backbone:
             raise RuntimeError(
-                "Stage-I checkpoint is incomplete for Stage-II backbone: "
+                "Stage-I checkpoint is incomplete for TCFA backbone: "
                 + ", ".join(missing_backbone[:10])
             )
         current_state.update(compatible_state)
         rep_model.model.load_state_dict(current_state, strict=True)
 
-        # Stage-II uses micro-batches to keep the 10k-slot memory readers bounded.
-        # The default target batch of 8 uses bounded updates; the final partial batch is retained.
-        stage2_target_batch_size = max(1, int(args.stage2_target_batch_size))
-        stage2_source_batch_size = max(1, int(args.stage2_source_batch_size))
+        # Use every target support window (46 for the current 3-day protocol).
+        target_name = finetune_dataset.data_list[0]
+        support_count = int(finetune_dataset.x_list[target_name].shape[0])
         finetune_dataset.task_args = dict(finetune_dataset.task_args)
-        finetune_dataset.task_args["batch_size"] = stage2_target_batch_size
-        source_dataset.task_args = dict(source_dataset.task_args)
-        source_dataset.task_args["batch_size"] = stage2_source_batch_size
+        finetune_dataset.task_args["batch_size"] = support_count
+        target_data, _ = finetune_dataset[0]
 
-        # Fixed Stage-II budget: retain the configured epoch count. During the
-        # first 60% of updates, train on one target batch plus one source batch;
-        # during the final 40%, adapt on target batches only. This avoids adding
-        # a second full training schedule and cycles through every target batch.
-        stage2_epochs = max(1, int(task_args["source"]["finetune_epochs"]))
-        source_pretrain_epochs = (
-            min(stage2_epochs - 1, max(1, int(round(stage2_epochs * 0.60))))
-            if stage2_epochs > 1 else 0
-        )
         stage2_start = time.time()
-        source_length = len(source_dataset)
-        target_sample_count = int(
-            finetune_dataset.x_list[finetune_dataset.data_list[0]].shape[0]
-        )
-        target_length = (
-            target_sample_count + stage2_target_batch_size - 1
-        ) // stage2_target_batch_size
-        if source_length <= 0:
-            raise RuntimeError("Stage-II requires source training data.")
-        if target_length <= 0:
-            raise RuntimeError("Stage-II requires target support windows.")
-
+        support_stats = rep_model.model.fit_target_statistics(target_data)
         log_verbose(
             args,
-            "[Stage-II][HMRM-Mamba] fixed budget: epochs={}, "
-            "target-guided source phase={}, target-adaptation phase={}, "
-            "target_support_batches={}, source_batch_size={}, max_source_batches_per_epoch=1".format(
-                stage2_epochs, source_pretrain_epochs,
-                stage2_epochs - source_pretrain_epochs, target_length,
-                stage2_source_batch_size,
+            "[Stage-II][TCFA-V1] support statistics: "
+            + str({**support_stats, "support_samples": support_count})
+        )
+
+        # Identity check: zero-initialized TCFA must reproduce Stage-I exactly.
+        with torch.no_grad():
+            identity_out, _, _, _, _, identity_base, _ = rep_model.model(
+                target_data, stage="test", return_base=True
+            )
+            identity_diff = float(
+                (identity_out - identity_base).abs().max().detach().cpu()
+            )
+        log_verbose(
+            args,
+            "[Stage-II][TCFA-V1] initial_identity_max_abs_diff={:.10e}".format(
+                identity_diff
+            )
+        )
+        if identity_diff > 1e-5:
+            raise RuntimeError(
+                "TCFA identity initialization changed Stage-I predictions: "
+                "max_abs_diff={:.8e}".format(identity_diff)
+            )
+
+        stage2_epochs = max(1, int(args.stage2_epochs))
+        log_verbose(
+            args,
+            "[Stage-II][TCFA-V1] target-only training: epochs={}, "
+            "support_samples={}, trainable_parameters={}, lr={}, strength={}, "
+            "adapter_reg={}".format(
+                stage2_epochs, support_count,
+                sum(p.numel() for p in rep_model.trainable_params),
+                args.stage2_lr, args.stage2_strength,
+                args.stage2_adapter_reg,
             )
         )
 
         for epoch in range(stage2_epochs):
-            epoch_start = time.time()
-            target_item = finetune_dataset[epoch % target_length]
-            target_data = (
-                target_item[0]
-                if isinstance(target_item, (tuple, list)) else target_item
-            )
-            phase = (
-                "cross_city_pretrain"
-                if epoch < source_pretrain_epochs else "target_adapt"
-            )
-            stage2_tasks = [target_data]
-
-            if phase == "cross_city_pretrain":
-                # The target city was removed from source_dataset.data_list after Stage-I.
-                source_data, _ = source_dataset[epoch % source_length]
-                stage2_tasks.append(source_data)
-
             train_stats = rep_model.meta_train_revise(
-                stage2_tasks, epoch=epoch, phase=phase
+                [target_data], epoch=epoch, phase="target_adapt"
             )
-            if epoch % 10 == 0 or epoch == stage2_epochs - 1:
+            if epoch % 5 == 0 or epoch == stage2_epochs - 1:
                 log_verbose(
                     args,
-                    "[Stage-II][HMRM-Mamba] epoch {}/{} phase={} "
-                    "target_MAE={:.6f} source_MAE={:.6f} "
-                    "target_loss={:.6f} epoch_seconds={:.3f}".format(
-                        epoch + 1, stage2_epochs, phase,
-                        train_stats["target_mae"], train_stats["source_mae"],
-                        train_stats["target_loss"], time.time() - epoch_start,
+                    "[Stage-II][TCFA-V1] epoch {}/{} target_MAE={:.6f} "
+                    "target_loss={:.6f} feature_delta_rms={:.6e} "
+                    "scale_rms={:.6e} shift_rms={:.6e} epoch_seconds={:.3f}".format(
+                        epoch + 1, stage2_epochs,
+                        train_stats["target_mae"], train_stats["target_loss"],
+                        train_stats["feature_delta_rms"],
+                        train_stats["adapter_scale_rms"],
+                        train_stats["adapter_shift_rms"],
+                        time.time() - stage2_start,
                     )
                 )
 
-            if (epoch + 1) % 25 == 0 or epoch == stage2_epochs - 1:
+            if (epoch + 1) % 10 == 0 or epoch == stage2_epochs - 1:
                 stage2_path = (
-                    f"stage2_hmamba_{args.test_dataset}_{args.model_name}_seed{seed}.pth"
+                    f"stage2_tcfa_{args.test_dataset}_{args.model_name}_seed{seed}.pth"
                 )
                 torch.save(
                     {
                         "epoch": epoch + 1,
-                        "phase": phase,
+                        "method": "TCFA-V1",
                         "model_state_dict": rep_model.state_dict(),
                         "optimizer_state_dict": rep_model.main_optim.state_dict(),
+                        "support_statistics": support_stats,
                         "stage1_checkpoint": model_path,
+                        "stage2_config": {
+                            "epochs": stage2_epochs,
+                            "lr": args.stage2_lr,
+                            "weight_decay": args.stage2_weight_decay,
+                            "adapter_reg": args.stage2_adapter_reg,
+                            "strength": args.stage2_strength,
+                            "stat_eps": args.stage2_stat_eps,
+                        },
                     },
                     stage2_path,
                 )
@@ -404,7 +412,9 @@ if __name__ == '__main__':
         fit_seconds = time.time() - stage2_start
         log_verbose(
             args,
-            f"[Stage-II][HMRM-Mamba] iterative training finished in {fit_seconds:.2f}s"
+            "[Stage-II][TCFA-V1] training finished in {:.2f}s".format(
+                fit_seconds
+            )
         )
 
         testing_score = rep_model.test_evaluation(
@@ -412,10 +422,9 @@ if __name__ == '__main__':
         )
         indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]
         current_testing_score = [testing_score[index] for index in indices]
-        print("[Stage-II][HMRM-Mamba] test MAE by selected horizons:", current_testing_score)
-        print("[Stage-II][HMRM-Mamba] sum of selected horizon MAE:", sum(current_testing_score))
-        print("[Stage-II][HMRM-Mamba] iterative training complete.")
-
+        print("[Stage-II][TCFA-V1] test MAE by selected horizons:", current_testing_score)
+        print("[Stage-II][TCFA-V1] sum of selected horizon MAE:", sum(current_testing_score))
+        print("[Stage-II][TCFA-V1] target-only adaptation complete.")
 
     # del rep_model
     # torch.cuda.empty_cache()
