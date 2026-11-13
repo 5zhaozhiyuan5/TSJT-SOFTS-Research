@@ -31,6 +31,37 @@ def log_verbose(args, msg):
     with open(os.path.join(args.save_dir, "log.txt"), "a") as f:
         f.write(str(msg) + "\n")
 
+
+def build_traffic_response_profile(future, eps=1e-4):
+    """Build a 9-D, three-horizon traffic response signature.
+
+    Each 12-step horizon contributes normalized net trend, first-difference
+    volatility, and second-difference curvature. The target is derived only
+    from the observed training window's future labels.
+    """
+    if future.size(-1) != 36:
+        raise ValueError(
+            "Traffic response profile expects a 36-step horizon, "
+            f"received {future.size(-1)}."
+        )
+    bands = future.reshape(*future.shape[:-1], 3, 12)
+    scale = bands.std(dim=-1, unbiased=False).clamp_min(eps)
+
+    first_diff = bands[..., 1:] - bands[..., :-1]
+    second_diff = first_diff[..., 1:] - first_diff[..., :-1]
+
+    trend = (
+        bands[..., -3:].mean(dim=-1) - bands[..., :3].mean(dim=-1)
+    ) / scale
+    volatility = first_diff.std(dim=-1, unbiased=False) / scale
+    curvature = (
+        second_diff.abs().mean(dim=-1)
+        / first_diff.abs().mean(dim=-1).clamp_min(eps)
+    )
+    return torch.stack([trend, volatility, curvature], dim=-1).flatten(-2)
+
+
+
 class PatchFSL(nn.Module):
     """
     Full PatchFSL Model
@@ -133,14 +164,30 @@ class STRep(nn.Module):
         self.current_epoch = 0
 
         self.model = PatchFSL(data_args, model_args, task_args, memory_size_args, projection_args, model_name, PatchFSL_cfg, args).to(self.device)
-        
+
+        # Stage-I-only auxiliary supervision. This head is intentionally
+        # outside PatchFSL so the official Stage-II model/checkpoint interface
+        # remains unchanged; Stage-II loads only the frozen forecasting model.
+        self.profile_coef = float(getattr(args, "profile_coef", 0.1))
+        self.response_profile_head = nn.Sequential(
+            nn.Linear(128, 32),
+            nn.GELU(),
+            nn.Linear(32, 9),
+        ).to(self.device)
+        self.profile_criterion = nn.SmoothL1Loss(reduction="mean", beta=0.05)
+        self.stage1_optim_params = (
+            list(self.model.parameters())
+            + list(self.response_profile_head.parameters())
+        )
+        self.last_response_profile_loss = 0.0
+
         for name, params in self.model.named_parameters():
             log_verbose(args,"{} : {}, require_grads : {}".format(name, params.shape,params.requires_grad))
         
         # print(self.model)
         log_verbose(args,"model params: {}".format(count_parameters(self.model)))
 
-        self.main_optim = optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=1e-2)
+        self.main_optim = optim.AdamW(self.stage1_optim_params, lr=self.lr, weight_decay=1e-2)
         
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
         
@@ -189,14 +236,22 @@ class STRep(nn.Module):
         rep_target = []
         y_source = []
         y_target = []
+        response_profile_losses = []
 
         target_task_loss = 0
         for i in range(len(data)):  
             task_loss = 0
             batch_size, node_num, seq_len, _ = data[i].x.shape
             
-            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train') 
-            
+            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train')
+
+            if self.profile_coef > 0:
+                profile_target = build_traffic_response_profile(y_unscale).detach()
+                profile_prediction = self.response_profile_head(rep)
+                response_profile_losses.append(
+                    self.profile_criterion(profile_prediction, profile_target)
+                )
+
             if epoch%25==0:
                 print(out.shape, rep.shape)
             
@@ -235,8 +290,14 @@ class STRep(nn.Module):
                 loss = self.loss_criterion(out, y)
     
                 target_task_loss = loss
-            
-            
+
+        response_profile_loss = torch.stack(response_profile_losses).mean() if response_profile_losses else torch.zeros((), device=self.device)
+        self.last_response_profile_loss = float(response_profile_loss.detach().cpu().item())
+        if response_profile_losses:
+            # Protect the target city's own forecast + response-profile task
+            # from conflicting source/transfer gradients during one-sided PCGrad.
+            target_task_loss = target_task_loss + self.profile_coef * response_profile_losses[0]
+
         model_loss = 0 
 
         DA_loss = 0
@@ -401,7 +462,10 @@ class STRep(nn.Module):
         else:
             DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
         
-        model_loss += (task_loss + DA_loss) 
+        model_loss += (task_loss + DA_loss)
+        if response_profile_losses:
+            model_loss = model_loss + self.profile_coef * response_profile_loss
+        
 
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
             
@@ -431,6 +495,12 @@ class STRep(nn.Module):
                 sub = flat_grads[start:start+numel].view_as(p)
                 p.grad = sub.clone()
 
+        if epoch % 25 == 0 and response_profile_losses:
+            print(
+                "[Stage-I][ResponseProfile] loss={:.6f} coef={:.4f}".format(
+                    self.last_response_profile_loss, self.profile_coef
+                )
+            )
         print('self.projection_args', self.projection_args)
 
 
@@ -443,12 +513,12 @@ class STRep(nn.Module):
             self.main_optim.zero_grad()
             model_loss.backward(retain_graph=True)
             
-            flat_A, mapping = flatten_and_pad_grads(self.model.parameters())
+            flat_A, mapping = flatten_and_pad_grads(self.stage1_optim_params)
             
             self.main_optim.zero_grad()
             target_task_loss.backward(retain_graph=True)
             
-            flat_B, _ = flatten_and_pad_grads(self.model.parameters())
+            flat_B, _ = flatten_and_pad_grads(self.stage1_optim_params)
             
             flat_proj_A = pcgrad_one_sided(flat_A, flat_B)
             
