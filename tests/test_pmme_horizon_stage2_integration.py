@@ -52,9 +52,11 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
         self.assertNotIn(".test_evaluation(", runner[:adaptation_start])
         self.assertEqual(runner.count(".test_evaluation("), 2)
         self.assertNotIn("initialize_horizon_memory", runner)
-        self.assertIn("TargetResidualTemporal", runner)
-        self.assertIn("[Stage-II][Epoch {}/{}", runner)
-        self.assertIn('mean_epoch_component("residual_loss")', runner)
+        self.assertIn("TargetResidualLowRankAdapter", runner)
+        self.assertIn("[Stage-II][LowRankResidualAdapter] fit_complete", runner)
+        self.assertIn("fit_target_residual_adapter(finetune_dataset)", runner)
+        self.assertNotIn("total_stage2_epochs", runner)
+        self.assertNotIn("[Stage-II][Epoch {}/{}", runner)
         for launcher in (
             "train_one_OT-pems.sh",
             "train_one_OT-chengdu.sh",
@@ -62,8 +64,57 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
             "train_one_OT-shenzhen.sh",
         ):
             launcher_text = (Path(ROOT) / launcher).read_text(encoding="utf-8")
-            self.assertIn("finetune_epochs=300", launcher_text)
+            self.assertIn("finetune_epochs=1", launcher_text)
+            self.assertNotIn("finetune_epochs=300", launcher_text)
             self.assertNotIn("finetune_epochs=6000", launcher_text)
+
+    def test_target_normalization_uses_only_three_day_support_prefix(self):
+        with tempfile.TemporaryDirectory() as root:
+            target_path = write_synthetic_city(
+                root, "target", 55.0, 9.0, 1300, seed=17
+            )
+            data_args = {
+                "data_keys": ["target"],
+                "target": target_path,
+            }
+            task_args = {
+                "his_num": 288,
+                "pred_num": 36,
+                "batch_size": 46,
+            }
+            support_dataset = traffic_dataset(
+                data_args, task_args, None, "target_maml",
+                test_data="target", target_days=3,
+            )
+            heldout_dataset = traffic_dataset(
+                data_args, task_args, None, "test",
+                test_data="target", target_days=3,
+            )
+            raw = np.load(target_path["dataset_path"])
+            expected_speed = raw[:864, :, 0].astype(np.float64)
+            expected_mean = float(expected_speed.mean())
+            expected_std = float(expected_speed.std())
+
+            self.assertAlmostEqual(
+                float(support_dataset.means_list["target"][0]),
+                expected_mean,
+                places=5,
+            )
+            self.assertAlmostEqual(
+                float(support_dataset.stds_list["target"][0]),
+                expected_std,
+                places=5,
+            )
+            self.assertAlmostEqual(
+                float(heldout_dataset.means_list["target"][0]),
+                expected_mean,
+                places=5,
+            )
+            self.assertAlmostEqual(
+                float(heldout_dataset.stds_list["target"][0]),
+                expected_std,
+                places=5,
+            )
 
     def test_stage1_pcgrad_training_path_is_preserved(self):
         torch.manual_seed(13)
@@ -99,7 +150,10 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
                 test_dataset="target",
                 STmodel="SOFTS",
                 save_dir=root,
-                stage2_residual_hidden=32,
+                stage2_feature_bins=12,
+                stage2_residual_rank=6,
+                stage2_residual_smooth_rank=3,
+                stage2_residual_ridge=10.0,
             )
             trainer = PMME_2ndStage.STRep(
                 0.3, 50000, 0.1, 10.0,
@@ -193,11 +247,11 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
 
             self.assertIsNotNone(trainer.model.residual_net)
             self.assertNotIn("adjacency", trainer.model.residual_net.forward.__code__.co_varnames)
+            self.assertEqual(sum(p.numel() for p in trainer.model.residual_net.parameters()), 0)
+            self.assertEqual(trainer.trainable_params, [])
+            self.assertIsNone(trainer.main_optim)
             self.assertTrue(
                 all(not p.requires_grad for p in trainer.model.forecasting_model.parameters())
-            )
-            self.assertTrue(
-                all(p.requires_grad for p in trainer.model.residual_net.parameters())
             )
 
             target_data = SimpleNamespace(
@@ -210,36 +264,35 @@ class PmmeTargetResidualTemporalIntegrationTest(unittest.TestCase):
                 name: value.detach().clone()
                 for name, value in trainer.model.forecasting_model.state_dict().items()
             }
-            residual_before = {
+            adapter_before = {
                 name: value.detach().clone()
                 for name, value in trainer.model.residual_net.state_dict().items()
             }
 
-            stats = trainer.meta_train_revise(
-                target_data, epoch=0, target=True
-            )
-
-            self.assertEqual(len(stats), 5)
-            self.assertTrue(
-                all(torch.isfinite(torch.as_tensor(value)).all() for value in stats)
-            )
-            loss_components = trainer.last_stage2_loss_components
-            self.assertIsNotNone(loss_components)
+            fit_stats = trainer.fit_target_residual_adapter(target_dataset)
+            self.assertTrue(trainer.model.residual_net.is_fitted)
+            self.assertEqual(fit_stats["support_rows"], 92)
+            self.assertEqual(fit_stats["feature_dim"], 40)
+            self.assertEqual(fit_stats["rank"], 6)
             for key in (
                 "total_loss",
                 "residual_loss",
                 "forecast_loss",
                 "correction_l2",
-                "grad_norm",
+                "train_MSE",
+                "train_MAE",
+                "train_RMSE",
+                "fit_seconds",
+                "captured_energy_ratio",
             ):
-                self.assertTrue(np.isfinite(loss_components[key]))
-            self.assertAlmostEqual(
-                float(np.asarray(stats[0]).item()),
-                loss_components["total_loss"],
-                places=5,
-            )
+                self.assertTrue(np.isfinite(fit_stats[key]))
+
+            out, y, _, _, correction = trainer.model(target_data, stage="test")
+            self.assertEqual(tuple(out.shape), tuple(y.shape))
+            self.assertEqual(tuple(correction.shape), tuple(y.shape))
+            self.assertTrue(torch.isfinite(out).all())
             self.assertTrue(any(
-                not torch.equal(residual_before[name], value.detach())
+                not torch.equal(adapter_before[name], value.detach())
                 for name, value in trainer.model.residual_net.state_dict().items()
             ))
             for name, value in trainer.model.forecasting_model.state_dict().items():
