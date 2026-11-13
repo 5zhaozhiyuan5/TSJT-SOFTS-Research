@@ -102,7 +102,7 @@ if __name__ == '__main__':
     ## dataset
     source_dataset = traffic_dataset(
         data_args, task_args['source'], data_list, "source",
-        test_data=args.test_dataset, add_target=False
+        test_data=args.test_dataset
     )
     ## check source dataset
 
@@ -203,6 +203,13 @@ if __name__ == '__main__':
        
                 
     print('Source training Ending!!!')
+    # Preserve the original Stage-I data construction. Only after Stage-I has
+    # finished, remove the target city from the Stage-II source sampler.
+    source_dataset.data_list = np.asarray([
+        name for name in source_dataset.data_list if name != args.test_dataset
+    ])
+    if len(source_dataset.data_list) == 0:
+        raise RuntimeError("No source cities remain for Stage-II transfer.")
     # del rep_model
     torch.cuda.empty_cache()
     
