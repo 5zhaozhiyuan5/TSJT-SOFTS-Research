@@ -406,13 +406,13 @@ class STRep(nn.Module):
                     sigma_y = compute_initial_bandwidth_full(y1, y2)
             
                     cmmd = CMMDLoss(sigma_x=sigma_x, sigma_y=sigma_y)
-                    DA_losses.append(cmmd(x1, y1, x2, y2)*self.DAcoef_args)
+                    DA_losses.append(cmmd(shared_x1, y1, shared_x2, y2)*self.DAcoef_args)
     
     
             elif self.DA == 'MMD':
                 if (epoch>=self.DAepoch_args):
                     
-                    sigma = compute_initial_bandwidth_full(x1, x2)
+                    sigma = compute_initial_bandwidth_full(shared_x1, shared_x2)
                     mmd = MMDLoss(sigma=sigma)
                     DA_losses.append(mmd(shared_x1, shared_x2)*self.DAcoef_args)
                 
