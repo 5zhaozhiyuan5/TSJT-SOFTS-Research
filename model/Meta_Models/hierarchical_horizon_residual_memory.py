@@ -4,7 +4,7 @@ This module deliberately replaces the original single-bank / single-query /
 linear-bias path with a three-level memory system:
   1) a global traffic-pattern bank,
   2) short-, medium-, and long-horizon residual banks,
-  3) a horizon-interaction Transformer decoder.
+  3) a bidirectional selective state-space (Mamba-style) horizon decoder.
 
 The total memory capacity is kept close to the official PMME setting (10,000
 slots). The Stage-I forecaster is frozen; all memory, retrieval, temporal
