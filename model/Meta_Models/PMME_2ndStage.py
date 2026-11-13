@@ -299,7 +299,7 @@ class STRep(nn.Module):
             mean_metric("mape"),
         )
 
-    def fit_target_residual_adapter(self, target_dataset):
+    def fit_target_residual_calibrator(self, target_dataset):
         """Fit horizon-wise robust residual calibration once on target support."""
         calibrator = self.model.residual_net
         if calibrator is None:
@@ -405,7 +405,7 @@ class STRep(nn.Module):
         if self.model.residual_net is None:
             return self._meta_train_stage1(data, epoch)
 
-        stats = self.fit_target_residual_adapter(data)
+        stats = self.fit_target_residual_calibrator(data)
         return (
             np.asarray(stats["total_loss"]),
             np.asarray(stats["train_MSE"]),
