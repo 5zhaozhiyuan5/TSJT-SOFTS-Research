@@ -96,37 +96,14 @@ class traffic_dataset(Dataset):
                 X = interp_X
 
             X = X.numpy()
-            # Fit speed normalization on training data only for the target city.
-            # The held-out test split reuses the same first target_days statistics.
+            # mean and std 
             X[:,0,:] = X[:,0,:].astype(np.float64)
-            use_target_prefix_stats = (
-                stage in ('target', 'target_maml', 'test')
-                or dataset_name == self.test_data
-            )
-            if use_target_prefix_stats:
-                fit_length = min(288 * self.target_days, X.shape[-1])
-            else:
-                fit_length = X.shape[-1]
-            if fit_length <= 0:
-                raise ValueError(
-                    f"No observations available to fit normalization for {dataset_name}."
-                )
-            fit_speed = X[:,0,:fit_length]
-            means = np.expand_dims(np.mean(fit_speed), 0)
-            std_value = float(np.std(fit_speed))
-            if not np.isfinite(std_value) or std_value < 1e-8:
-                std_value = 1.0
-            stds = np.asarray([std_value], dtype=np.float64)
+            # print(X.shape)
+            means = np.expand_dims(np.mean(X[:,0,:]),0)
+            X[:,0,:] = X[:,0,:] - means.reshape(1, -1, 1)
+            stds = np.expand_dims(np.std(X[:,0,:]),0)
             self.means_list[dataset_name], self.stds_list[dataset_name] = means, stds
-            X[:,0,:] = (
-                X[:,0,:] - means.reshape(1, -1, 1)
-            ) / stds.reshape(1, -1, 1)
-            if stage == 'test' and use_target_prefix_stats:
-                print(
-                    f"[INFO] {dataset_name} test normalization reuses "
-                    f"first {fit_length} training steps: mean={means[0]:.6f}, "
-                    f"std={stds[0]:.6f}"
-                )
+            X[:,0,:] = X[:,0,:] / stds.reshape(1, -1, 1)
 
             # [N, 2, L] and 0 is normalized
             if stage == 'source' or stage == 'dann' or stage == 'pretrain' or stage == 'source_train':
@@ -267,25 +244,11 @@ class traffic_dataset(Dataset):
                 #print('indices', indices)
                 x_data = self.x_list[select_dataset][indices:indices+batch_size] 
                 y_data = self.y_list[select_dataset][indices:indices+batch_size]
-
-        if torch.is_tensor(indices):
-            sample_indices = indices.detach().clone().long()
-        else:
-            sample_indices = torch.arange(
-                int(indices), int(indices) + x_data.shape[0], dtype=torch.long
-            )
-
+            
         x_data = x_data.float()
         y_data = y_data.float()
         node_num = self.A_list[select_dataset].shape[0]
-        data_i = Data(
-            node_num=node_num,
-            x=x_data,
-            y=y_data,
-            means=self.means_list[select_dataset],
-            stds=self.stds_list[select_dataset],
-            sample_index=sample_indices,
-        )
+        data_i = Data(node_num=node_num, x=x_data, y=y_data,means=self.means_list[select_dataset],stds = self.stds_list[select_dataset])
         data_i.edge_index = self.edge_index_list[select_dataset]
         data_i.data_name = select_dataset
         A_wave = self.A_list[select_dataset]

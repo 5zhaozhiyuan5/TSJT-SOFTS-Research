@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Runtime artifacts are kept in the server-side experiment directory.
+experiment_records/v*/
