@@ -119,6 +119,21 @@ class STRep(nn.Module):
         self.xySquaredRatio_args = xySquaredRatio_args
         self.projection_args = projection_args 
         self.memory_size_args = memory_size_args 
+
+        # Stage-I transport safeguards. The domain classifier is useful for
+        # ranking samples, but its probabilities must not become a hard gate:
+        # an over-confident classifier can otherwise leave OT with only a few
+        # samples from each city.
+        self.stage1_mass_temperature = max(
+            float(getattr(args, 'stage1_mass_temperature', 2.0)), 1.0
+        )
+        self.stage1_uniform_mass = min(
+            max(float(getattr(args, 'stage1_uniform_mass', 0.75)), 0.0), 1.0
+        )
+        self.stage1_reliability_mix = min(
+            max(float(getattr(args, 'stage1_reliability_mix', 0.25)), 0.0), 1.0
+        )
+        self.DAwarmup_args = max(int(getattr(args, 'DAwarmup', 500)), 0)
         
         self.model_name = model_name
         self.DA = DA
@@ -143,7 +158,14 @@ class STRep(nn.Module):
 
         # Stage-I only: decompose latent representations into transferable and
         # city-specific components. The module starts as an identity partition.
-        self.stage1_transfer = SharedPrivateReliabilityTransfer(input_dim=36).to(self.device)
+        # SOFTS exposes a 128-dimensional latent representation per node.
+        # The transfer module operates on that representation, not on the
+        # 36-step forecast horizon.
+        self.stage1_transfer = SharedPrivateReliabilityTransfer(
+            input_dim=128,
+            reliability_temperature=self.stage1_mass_temperature,
+            reliability_uniform_mix=self.stage1_uniform_mass,
+        ).to(self.device)
         stage1_parameters = list(self.model.parameters()) + list(self.stage1_transfer.parameters())
         self.main_optim = optim.AdamW(stage1_parameters, lr=self.lr, weight_decay=1e-2)
         
@@ -179,6 +201,17 @@ class STRep(nn.Module):
             {'params': self.gp3.parameters()},
             {'params': self.likelihood3.parameters()},
         ], lr=0.01)
+
+    def _stage1_da_ramp(self, epoch):
+        """Gradually enable Stage-I distribution alignment after DAepoch."""
+        if epoch < self.DAepoch_args:
+            return 0.0
+        if self.DAwarmup_args <= 0:
+            return 1.0
+        return min(
+            1.0,
+            float(epoch - self.DAepoch_args + 1) / float(self.DAwarmup_args),
+        )
         
     
     
@@ -354,40 +387,50 @@ class STRep(nn.Module):
                     print(f'Classifier_Accuracy_update: {acc:.4f}',len(prob1),len(prob2))
                     print('error_prob_mean', prob1.mean(), prob2.mean()) 
                     
-                thresh = self.classifier_args 
+                thresh = self.classifier_args
                 mask1 = prob1 > thresh
                 mask2 = prob2 > thresh
                 count1 = torch.sum(mask1).detach().cpu().numpy()
                 count2 = torch.sum(mask2).detach().cpu().numpy()
                 ratio1 = count1/len(mask1)
                 ratio2 = count2/len(mask2)
-                
-                if ratio1>0.00 and ratio2>0.00:
-                    if epoch%25==0:
-                        print('ratio1, ratio2', ratio1, ratio2)
-                    def threshold(x):   
-                        return torch.where(x > thresh, x, torch.tensor(0.0, device=x.device))
-                    
-                    prob1, prob2 = threshold(prob1).detach(), threshold(prob2).detach() 
-                    alpha = (prob1 / torch.sum(prob1).clamp_min(1e-8)).detach()
-                    beta = (prob2 / torch.sum(prob2).clamp_min(1e-8)).detach()
-                    
-                   
-                    OT_loss_scale = torch.sqrt(((prob1.mean())*(prob2.mean())).detach())
-                    
-                    if epoch%25==0:
-                        print('OT_loss_scale', OT_loss_scale)
+
+                if epoch%25==0:
+                    print('ratio1, ratio2', ratio1, ratio2)
+
+                # Do not threshold probabilities into zero/non-zero masses.
+                # Smooth the confidence and retain a large uniform component so
+                # that a near-perfect domain classifier cannot collapse OT to a
+                # few samples.
+                alpha = self.stage1_transfer.stabilize_mass(
+                    prob1,
+                    temperature=self.stage1_mass_temperature,
+                    uniform_mix=self.stage1_uniform_mass,
+                )
+                beta = self.stage1_transfer.stabilize_mass(
+                    prob2,
+                    temperature=self.stage1_mass_temperature,
+                    uniform_mix=self.stage1_uniform_mass,
+                )
+
+                OT_loss_scale = torch.sqrt(
+                    (prob1.mean() * prob2.mean()).clamp_min(1e-8)
+                ).detach()
+
+                if epoch%25==0:
+                    print('OT_loss_scale', OT_loss_scale)
             
             else:
                 alpha = torch.ones(size1, device=self.device)/size1  
                 beta = torch.ones(size2, device=self.device)/size2  
                 OT_loss_scale = 1
 
-            # Fuse classifier confidence with geometric cross-domain reliability.
-            # Normalization keeps the Sinkhorn marginals valid and prevents a
-            # small number of unreliable samples from dominating transport.
-            alpha = (alpha * reliability_source).clamp_min(1e-12)
-            beta = (beta * reliability_target).clamp_min(1e-12)
+            # Reliability is a weak geometric prior. Blend it with the
+            # classifier mass instead of multiplying two gates, which would
+            # compound their concentration and discard most samples.
+            reliability_mix = self.stage1_reliability_mix
+            alpha = (1.0 - reliability_mix) * alpha + reliability_mix * reliability_source
+            beta = (1.0 - reliability_mix) * beta + reliability_mix * reliability_target
             alpha = alpha / alpha.sum().clamp_min(1e-8)
             beta = beta / beta.sum().clamp_min(1e-8)
 
@@ -403,8 +446,9 @@ class STRep(nn.Module):
                     )
                 )
 
+            da_ramp = self._stage1_da_ramp(epoch)
             if self.DA == 'OT':
-                if (epoch>=self.DAepoch_args): 
+                if (da_ramp > 0.0):
                     
                     x_y_scale = math.sqrt(self.xySquaredRatio_args)
                     y1, y2 = y1*x_y_scale, y2*x_y_scale
@@ -412,33 +456,35 @@ class STRep(nn.Module):
                     x = torch.cat((shared_x1, y1), dim=-1)
                     y = torch.cat((shared_x2, y2), dim=-1)  # target shared-pattern space
                     
-                    if (ratio1>0.00 and ratio2>0.00):
-                        OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args *OT_loss_scale
-                    else:
-                        OT_loss = 0
+                    OT_loss = (
+                        torch.sum(criterion(alpha, x, beta, y))
+                        * self.DAcoef_args
+                        * OT_loss_scale
+                        * da_ramp
+                    )
                     DA_losses.append(OT_loss)
 
             elif self.DA == 'CMMD':
-                if (epoch>=self.DAepoch_args): 
+                if (da_ramp > 0.0):
                     sigma_x = compute_initial_bandwidth_full(shared_x1, shared_x2)
                     sigma_y = compute_initial_bandwidth_full(y1, y2)
             
                     cmmd = CMMDLoss(sigma_x=sigma_x, sigma_y=sigma_y)
-                    DA_losses.append(cmmd(shared_x1, y1, shared_x2, y2)*self.DAcoef_args)
+                    DA_losses.append(cmmd(shared_x1, y1, shared_x2, y2)*self.DAcoef_args*da_ramp)
     
     
             elif self.DA == 'MMD':
-                if (epoch>=self.DAepoch_args):
+                if (da_ramp > 0.0):
                     
                     sigma = compute_initial_bandwidth_full(shared_x1, shared_x2)
                     mmd = MMDLoss(sigma=sigma)
-                    DA_losses.append(mmd(shared_x1, shared_x2)*self.DAcoef_args)
+                    DA_losses.append(mmd(shared_x1, shared_x2)*self.DAcoef_args*da_ramp)
                 
     
             elif self.DA == 'CORAL':
-                if (epoch>=self.DAepoch_args):
+                if (da_ramp > 0.0):
                     coral = CORALLoss()
-                    DA_losses.append(coral(shared_x1, shared_x2)*self.DAcoef_args)
+                    DA_losses.append(coral(shared_x1, shared_x2)*self.DAcoef_args*da_ramp)
             
                     
         task_loss = task_losses[0] + task_losses[1] + task_losses[2]
@@ -692,4 +738,3 @@ class STRep(nn.Module):
             print('Horizon {} : Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, MAPE: {:.5f}'.format(i, total_mse, total_rmse, total_mae, total_mape))
             
         return testing_score
-    

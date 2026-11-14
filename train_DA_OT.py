@@ -37,6 +37,14 @@ parser.add_argument('--classifier',default=0.3,type=float)
 parser.add_argument('--xySquaredRatio',default=10,type=float) 
 parser.add_argument('--DAcoef',default=0.1,type=float)
 parser.add_argument('--DAepoch',default=50000,type=int)
+parser.add_argument('--DAwarmup',default=500,type=int,
+                    help='Stage-I OT warmup epochs after DAepoch.')
+parser.add_argument('--stage1_mass_temperature',default=2.0,type=float,
+                    help='Temperature for smoothing Stage-I transport masses.')
+parser.add_argument('--stage1_uniform_mass',default=0.75,type=float,
+                    help='Uniform mass mixture preventing classifier collapse.')
+parser.add_argument('--stage1_reliability_mix',default=0.25,type=float,
+                    help='Small geometric reliability mixture; avoids double gating.')
 parser.add_argument('--MemSize', default=1, type=int, help='Legacy enable flag: any value > 0 enables the target-only low-rank Stage-II adapter; no memory slots are allocated.')
 parser.add_argument('--stage2_feature_bins', default=12, type=int, help='Number of history segments used by the lightweight Stage-II adapter.')
 parser.add_argument('--stage2_residual_rank', default=6, type=int, help='Total number of low-rank residual basis vectors.')
@@ -129,8 +137,12 @@ if __name__ == '__main__':
     ## train on big dataset
     rep_tasknum = task_args['source']['task_num']
     
-    best_validation_score = [1e5,1e5,1e5]
-    best_testing_score = [1e5,1e5,1e5]
+    # Stage-I must not select a checkpoint using the held-out target test set.
+    # Use the source forecasting MAE reported by meta_train_revise instead of
+    # keeping the last checkpoint, because the source objective fluctuates
+    # after OT is enabled.
+    best_stage1_source_mae = float('inf')
+    best_stage1_epoch = -1
     
     log_verbose(args,dict(vars(args)))
     log_verbose(args,config)
@@ -170,7 +182,7 @@ if __name__ == '__main__':
             idx+=1
         
         if True:
-            model_loss ,mse_loss, rmse_loss, mae_loss, mape_loss = rep_model.meta_train_revise(data, i)
+            model_loss ,mse_loss, rmse_loss, mae_loss, mape_loss = rep_model.meta_train_revise(data, matrix, i)
     
             if i%25==0:
                 log_verbose(args,'Epochs {}/{}'.format(i,task_args['source']['train_epochs']))
@@ -183,31 +195,25 @@ if __name__ == '__main__':
                     'epoch': i,  
                     'model_state_dict': rep_model.state_dict(), 
                     'optimizer_state_dict': rep_model.main_optim.state_dict(),  
+                    'stage1_selection_metric': 'source_mae',
+                    'stage1_source_mae': float(mae_loss),
                 }
-                print('epoch:',i)
-                validation_score, testing_score = rep_model.evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
-                print('finetune_dataset[0][1].shape[1]', finetune_dataset[0][1].shape[1])
-                #print('validation_score', validation_score)
-                if i >= 0: #1000:
-                    indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35] 
-                    current_validation_score = [validation_score[i] for i in indices]  
-
-                    current_testing_score = [testing_score[i] for i in indices]                
-                    print('sum(current_validation_score),sum(best_validation_score)',sum(current_validation_score),sum(best_validation_score))
-                    #print('sum(current_testing_score),sum(best_testing_score)',sum(current_testing_score),sum(best_testing_score))
-                    if sum(current_testing_score)<sum(best_testing_score):
-                        best_testing_score = current_testing_score  # check testing score
-                    
-                    if sum(current_validation_score)<sum(best_validation_score):
-                        torch.save(state, f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
-                        best_validation_score = current_validation_score
-                        best_epoch = i
-                        print(f'epoch:{i} best!')
-                    else:
-                        print('not_best')
-                        #if (i-best_epoch)>=1000:
-                        #    print('No better epoch for over 1000 epochs!!!')
-                        #    break
+                current_source_mae = float(mae_loss)
+                if current_source_mae < best_stage1_source_mae:
+                    torch.save(state, f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
+                    best_stage1_source_mae = current_source_mae
+                    best_stage1_epoch = i
+                    print(
+                        f'best Stage-I checkpoint saved at epoch:{i}, '
+                        f'source_mae:{current_source_mae:.6f}'
+                    )
+                else:
+                    print(
+                        f'Stage-I checkpoint skipped at epoch:{i}; '
+                        f'source_mae:{current_source_mae:.6f}, '
+                        f'best:{best_stage1_source_mae:.6f} '
+                        f'(epoch {best_stage1_epoch})'
+                    )
        
                 
     print('Source training Ending!!!')

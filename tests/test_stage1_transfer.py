@@ -30,6 +30,15 @@ class SharedPrivateReliabilityTransferTest(unittest.TestCase):
         self.assertAlmostEqual(float(source_weights.sum()), 1.0, places=5)
         self.assertAlmostEqual(float(target_weights.sum()), 1.0, places=5)
 
+    def test_stabilized_mass_does_not_collapse_to_one_sample(self):
+        scores = torch.full((100,), 1e-8)
+        scores[0] = 1.0
+        weights = SharedPrivateReliabilityTransfer.stabilize_mass(scores)
+        effective_samples = 1.0 / weights.square().sum()
+        self.assertLess(float(weights.max()), 0.3)
+        self.assertGreater(float(effective_samples), 10.0)
+        self.assertAlmostEqual(float(weights.sum()), 1.0, places=5)
+
     def test_source_quality_is_target_conditioned(self):
         module = SharedPrivateReliabilityTransfer(input_dim=36)
         target = torch.randn(64, 24)
