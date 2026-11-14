@@ -21,10 +21,13 @@ Each server run is stored under:
 ```
 
 The primary comparison uses the four paper horizons: indices 1, 11, 23 and
-35, corresponding to 10, 60, 120 and 180 minutes.  MAE and RMSE are compared
-separately against the same-protocol official `SOFTS+PMME` baseline.
+35, corresponding to 10, 60, 120 and 180 minutes.  MAE and RMSE are
+compared separately against both the same-protocol official `SOFTS+PMME`
+baseline and the four values reported in the paper.  The comparison JSON
+records both win counts.
 
 The stopping rule is strict: a candidate must improve both MAE and RMSE on a
-majority of the four paper horizons.  A Stage-I-only result is diagnostic and
-cannot be called a final win until it has passed the unchanged official
-few-shot Stage-II.
+majority of the four paper horizons against the paper reference.  The
+same-protocol v00 comparison is retained as a reproducibility diagnostic.  A
+Stage-I-only result is diagnostic and cannot be called a final win until it
+has passed the unchanged official few-shot Stage-II.
