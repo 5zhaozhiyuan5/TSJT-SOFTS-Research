@@ -1,0 +1,90 @@
+- DA: OT
+  DAcoef: 0.01
+  DAepoch: 1500
+  DAwarmup: 500
+  MemSize: 1
+  STmodel: SOFTS
+  batch_size: 16
+  classifier: 0.3
+  config_filename: ./configs/config.yaml
+  curr_time: 2026-11-14-14-20-56
+  data_list: chengdu_shenzhen_pems
+  description: E2_current_stage1_seed1
+  device: !!python/object/apply:torch.device
+  - cuda
+  - 0
+  evaluate_checkpoint: ''
+  finetune_epochs: 0
+  gpu: 0
+  his_num: 288
+  model_name: SOFTS
+  new: 1
+  projection: 1.0
+  save_dir: !!python/object/apply:pathlib.PosixPath
+  - experiment_results
+  - E2
+  seed: 1
+  stage1_mass_temperature: 2.0
+  stage1_reliability_mix: 0.25
+  stage1_transfer: 1
+  stage1_uniform_mass: 0.75
+  stage2_feature_bins: 12
+  stage2_residual_rank: 6
+  stage2_residual_ridge: 10.0
+  stage2_residual_smooth_rank: 3
+  target_days: 3
+  test_dataset: metr-la
+  train_epochs: 3000
+  xySquaredRatio: 100.0
+- data:
+    chengdu_m:
+      adjacency_matrix_path: data/chengdu_m/matrix.npy
+      dataset_path: data/chengdu_m/dataset_expand.npy
+      node_num: 524
+      speed_mean: 29.0982979559
+      speed_std: 9.75304346669
+      time_step: 17280
+    data_keys:
+    - metr-la
+    - pems-bay
+    - shenzhen
+    - chengdu_m
+    metr-la:
+      adjacency_matrix_path: data/metr-la/matrix.npy
+      dataset_path: data/metr-la/dataset_expand.npy
+      node_num: 207
+      speed_mean: 58.465786
+      speed_std: 12.905341
+      time_step: 34272
+    pems-bay:
+      adjacency_matrix_path: data/pems-bay/matrix.npy
+      dataset_path: data/pems-bay/dataset_expand.npy
+      node_num: 325
+      speed_mean: 62.621582859
+      speed_std: 9.58811369696
+      time_step: 52116
+    shenzhen:
+      adjacency_matrix_path: data/shenzhen/matrix.npy
+      dataset_path: data/shenzhen/dataset_expand.npy
+      node_num: 627
+      speed_mean: 30.5735608506
+      speed_std: 11.0922606598
+      time_step: 17280
+  model:
+    STnet:
+      lr: 0.001
+  task:
+    source:
+      add_target: true
+      batch_size: 16
+      finetune_epochs: 0
+      his_num: 288
+      pred_num: 36
+      task_num: 2
+      train_epochs: 3000
+    target_few_shot:
+      add_target: true
+      batch_size: 46
+      his_num: 288
+      pred_num: 36
+      task_num: 2

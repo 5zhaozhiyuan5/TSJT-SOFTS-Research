@@ -8,12 +8,139 @@ import argparse
 import yaml
 import time
 import sys
+import json
 sys.path.append('./model')
 sys.path.append('./model/Meta_Models')
 
 from PMME import *
 from pathlib import Path
 import random
+
+
+def summarize_test_metrics(model, test_dataset, pred_num):
+    """Aggregate held-out metrics by forecast horizon for experiment records."""
+    raw_mse, raw_rmse, raw_mae, raw_mape, _ = model.test_batch(
+        0, len(test_dataset) + 1, test_dataset, "test"
+    )
+    metrics = []
+    for horizon in range(pred_num):
+        total_len = 0
+        mse_values = []
+        mae_values = []
+        mape_values = []
+        for batch_mse, batch_rmse, batch_mae, batch_mape in zip(
+            raw_mse, raw_rmse, raw_mae, raw_mape
+        ):
+            batch_size = int(batch_mse[1])
+            total_len += batch_size
+            mse_values.append(float(batch_mse[0][horizon]) * batch_size)
+            mae_values.append(float(batch_mae[0][horizon]) * batch_size)
+            mape_values.append(float(batch_mape[0][horizon]) * batch_size)
+        mse = sum(mse_values) / max(total_len, 1)
+        mae = sum(mae_values) / max(total_len, 1)
+        mape = sum(mape_values) / max(total_len, 1)
+        metrics.append({
+            "horizon_index": horizon,
+            "mse": mse,
+            "rmse": float(np.sqrt(mse)),
+            "mae": mae,
+            "mape": mape,
+        })
+    return metrics
+
+
+def load_stage1_model_for_evaluation(model_path, eval_model):
+    checkpoint = torch.load(model_path, map_location=eval_model.device)
+    model_state = eval_model.model.state_dict()
+    filtered_state = {
+        key[len("model."):]: value
+        for key, value in checkpoint["model_state_dict"].items()
+        if key.startswith("model.")
+    }
+    model_state.update({
+        key: value for key, value in filtered_state.items()
+        if key in model_state
+    })
+    eval_model.model.load_state_dict(model_state)
+    return checkpoint
+
+
+def save_stage1_test_result(
+    model_path,
+    finetune_dataset,
+    test_dataset,
+    args,
+    config,
+    data_list,
+    model_args,
+    task_args,
+    data_args,
+    PatchFSL_cfg,
+    best_stage1_epoch,
+    best_stage1_source_mae,
+    best_stage1_selection_score=None,
+    stage1_selection_metric='source_mae',
+):
+    """Evaluate the selected Stage-I checkpoint and persist a complete JSON record."""
+    eval_model = STRep(
+        args.classifier,
+        args.DAepoch,
+        args.DAcoef,
+        args.xySquaredRatio,
+        0,
+        0,
+        args.model_name,
+        args.DA,
+        data_args,
+        task_args,
+        model_args,
+        PatchFSL_cfg,
+        args,
+    )
+    checkpoint = load_stage1_model_for_evaluation(model_path, eval_model)
+    eval_model.eval()
+    metrics = summarize_test_metrics(
+        eval_model,
+        test_dataset,
+        task_args["source"]["pred_num"],
+    )
+    selected_indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]
+    selected = [metrics[index] for index in selected_indices]
+    result = {
+        "experiment": args.description,
+        "seed": int(args.seed),
+        "target_dataset": args.test_dataset,
+        "source_datasets": [str(item) for item in data_list],
+        "model_name": args.model_name,
+        "stage1_only": True,
+        "stage1_method": args.stage1_method,
+        "stage1_transfer": int(args.stage1_transfer),
+        "stage1_selection_metric": stage1_selection_metric,
+        "best_epoch": int(best_stage1_epoch),
+        "best_source_mae": float(best_stage1_source_mae),
+        "best_selection_score": float(
+            best_stage1_source_mae
+            if best_stage1_selection_score is None
+            else best_stage1_selection_score
+        ),
+        "checkpoint": str(model_path),
+        "checkpoint_epoch": int(checkpoint.get("epoch", best_stage1_epoch)),
+        "config": config,
+        "metrics_all_horizons": metrics,
+        "selected_horizon_indices": selected_indices,
+        "metrics_selected_horizons": selected,
+        "selected_mae_sum": float(sum(item["mae"] for item in selected)),
+    }
+    result_path = Path(args.save_dir) / f"stage1_test_metrics_seed{args.seed}.json"
+    with open(result_path, "w", encoding="utf-8") as handle:
+        json.dump(result, handle, ensure_ascii=False, indent=2, default=str)
+    print(f"[RESULT] Stage-I metrics saved to {result_path}")
+    for item in selected:
+        print(
+            "[RESULT] horizon={horizon_index} MSE={mse:.6f} RMSE={rmse:.6f} "
+            "MAE={mae:.6f} MAPE={mape:.6f}".format(**item)
+        )
+    return result
 
 curr_time = time.strftime('%Y-%m-%d-%H-%M-%S')
 
@@ -24,6 +151,12 @@ parser.add_argument('--test_dataset', default='pems-bay', type=str)
 parser.add_argument('--train_epochs', default=0, type=int)
 parser.add_argument('--finetune_epochs', default=1, type=int, help='Legacy Stage-II enable flag; the low-rank adapter is fitted once in closed form, not iteratively.')
 parser.add_argument('--description', default='PMME', type=str)
+parser.add_argument(
+    '--evaluate_checkpoint',
+    default='',
+    type=str,
+    help='Evaluate an existing Stage-I checkpoint without retraining.',
+)
 
 parser.add_argument('--seed',default=7,type=int)
 parser.add_argument('--data_list', default='chengdu_shenzhen_metr',type=str)
@@ -45,6 +178,28 @@ parser.add_argument('--stage1_uniform_mass',default=0.75,type=float,
                     help='Uniform mass mixture preventing classifier collapse.')
 parser.add_argument('--stage1_reliability_mix',default=0.25,type=float,
                     help='Small geometric reliability mixture; avoids double gating.')
+parser.add_argument('--stage1_transfer', default=1, type=int,
+                    help='Enable the current Stage-I transfer module; set 0 for a pure SOFTS baseline.')
+parser.add_argument(
+    '--stage1_selection_metric',
+    default='source_mae',
+    choices=['source_mae', 'target_support_mae'],
+    help=(
+        'Checkpoint metric for Stage-I. target_support_mae uses only the '
+        'observed target support prefix, never the held-out target test split.'
+    ),
+)
+parser.add_argument('--stage1_method', default='pmme', choices=['pmme', 'rhsr'],
+                    help='Stage-I method: PMME path or non-PMME RHSR path.')
+parser.add_argument('--rhsr_num_regimes', default=4, type=int)
+parser.add_argument('--rhsr_hidden_dim', default=96, type=int)
+parser.add_argument('--rhsr_route_temperature', default=1.5, type=float)
+parser.add_argument('--rhsr_router_uniform_mix', default=0.0, type=float)
+parser.add_argument('--rhsr_route_logit_clip', default=0.0, type=float)
+parser.add_argument('--rhsr_target_anchor', default=0.1, type=float)
+parser.add_argument('--rhsr_state_weight', default=0.1, type=float)
+parser.add_argument('--rhsr_decomposition_weight', default=0.1, type=float)
+parser.add_argument('--rhsr_route_balance_weight', default=0.01, type=float)
 parser.add_argument('--MemSize', default=1, type=int, help='Legacy enable flag: any value > 0 enables the target-only low-rank Stage-II adapter; no memory slots are allocated.')
 parser.add_argument('--stage2_feature_bins', default=12, type=int, help='Number of history segments used by the lightweight Stage-II adapter.')
 parser.add_argument('--stage2_residual_rank', default=6, type=int, help='Total number of low-rank residual basis vectors.')
@@ -57,10 +212,13 @@ args = parser.parse_args()
 
 args.curr_time = curr_time
 print('args.test_dataset',args.test_dataset)
-save_dir = os.path.join(".", "logged_files", args.test_dataset, args.data_list , args.curr_time)
-if not os.path.exists(save_dir):
-    os.makedirs(save_dir)
-save_dir = Path(save_dir)
+if args.save_dir:
+    save_dir = Path(args.save_dir)
+else:
+    save_dir = Path(os.path.join(
+        ".", "logged_files", args.test_dataset, args.data_list, args.curr_time
+    ))
+save_dir.mkdir(parents=True, exist_ok=True)
 args.save_dir = save_dir
 
 #a = torch.rand(8000, 1000, 1000, device='cuda:0')
@@ -138,10 +296,11 @@ if __name__ == '__main__':
     rep_tasknum = task_args['source']['task_num']
     
     # Stage-I must not select a checkpoint using the held-out target test set.
-    # Use the source forecasting MAE reported by meta_train_revise instead of
-    # keeping the last checkpoint, because the source objective fluctuates
-    # after OT is enabled.
+    # The default is source forecasting MAE. An optional target-support metric
+    # uses only the observed target prefix and is useful for checking whether
+    # source loss is a poor proxy for target transfer quality.
     best_stage1_source_mae = float('inf')
+    best_stage1_selection_score = float('inf')
     best_stage1_epoch = -1
     
     log_verbose(args,dict(vars(args)))
@@ -187,31 +346,67 @@ if __name__ == '__main__':
             if i%25==0:
                 log_verbose(args,'Epochs {}/{}'.format(i,task_args['source']['train_epochs']))
                 log_verbose(args,'in meta-training   Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, MAPE: {:.5f}, reconstruction Loss : {:.5f}.'.format(mse_loss, rmse_loss, mae_loss,mape_loss,model_loss))
+                if args.stage1_method == 'rhsr':
+                    diagnostics = {
+                        'epoch': int(i),
+                        'model_loss': float(model_loss),
+                        **getattr(rep_model, 'last_rhsr_diagnostics', {}),
+                    }
+                    with open(
+                        Path(args.save_dir) / 'rhsr_diagnostics.jsonl',
+                        'a',
+                        encoding='utf-8',
+                    ) as handle:
+                        handle.write(json.dumps(diagnostics, ensure_ascii=False) + '\n')
             log_verbose(args,"This epoch cost {:.3}s.".format(time.time() - time_1))
             
             # if((i+1)%50==0):
             if((i+1)%100==0)or i==0:
+                selection_score = float(mae_loss)
+                target_support_mae = None
+                if args.stage1_selection_metric == 'target_support_mae':
+                    was_training = rep_model.training
+                    rep_model.eval()
+                    support_metrics = summarize_test_metrics(
+                        rep_model,
+                        finetune_dataset,
+                        task_args['source']['pred_num'],
+                    )
+                    target_support_mae = float(
+                        np.mean([item['mae'] for item in support_metrics])
+                    )
+                    if was_training:
+                        rep_model.train()
+                    selection_score = target_support_mae
                 state = {
                     'epoch': i,  
                     'model_state_dict': rep_model.state_dict(), 
                     'optimizer_state_dict': rep_model.main_optim.state_dict(),  
-                    'stage1_selection_metric': 'source_mae',
+                    'stage1_selection_metric': args.stage1_selection_metric,
                     'stage1_source_mae': float(mae_loss),
+                    'stage1_target_support_mae': target_support_mae,
+                    'stage1_selection_score': selection_score,
                 }
                 current_source_mae = float(mae_loss)
-                if current_source_mae < best_stage1_source_mae:
+                best_stage1_source_mae = min(
+                    best_stage1_source_mae, current_source_mae
+                )
+                if selection_score < best_stage1_selection_score:
                     torch.save(state, f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
-                    best_stage1_source_mae = current_source_mae
+                    best_stage1_selection_score = selection_score
                     best_stage1_epoch = i
                     print(
                         f'best Stage-I checkpoint saved at epoch:{i}, '
-                        f'source_mae:{current_source_mae:.6f}'
+                        f'source_mae:{current_source_mae:.6f}, '
+                        f'selection={args.stage1_selection_metric}:'
+                        f'{selection_score:.6f}'
                     )
                 else:
                     print(
                         f'Stage-I checkpoint skipped at epoch:{i}; '
                         f'source_mae:{current_source_mae:.6f}, '
-                        f'best:{best_stage1_source_mae:.6f} '
+                        f'selection:{selection_score:.6f}, '
+                        f'best:{best_stage1_selection_score:.6f} '
                         f'(epoch {best_stage1_epoch})'
                     )
        
@@ -365,6 +560,42 @@ if __name__ == '__main__':
         del baseline_model
 
         print('2ndStage Source training Ending!!!')
+    else:
+        # Stage-I-only runs still need a complete held-out evaluation record.
+        # The test split is constructed only after the source checkpoint has
+        # been selected, and it is never used to select the checkpoint.
+        model_path = args.evaluate_checkpoint or f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth"
+        if args.evaluate_checkpoint:
+            evaluation_checkpoint = torch.load(model_path, map_location=args.device)
+            best_stage1_epoch = int(evaluation_checkpoint.get("epoch", -1))
+            best_stage1_source_mae = float(
+                evaluation_checkpoint.get("stage1_source_mae", float("inf"))
+            )
+        test_dataset = traffic_dataset(
+            data_args,
+            task_args['source'],
+            data_list,
+            'test',
+            test_data=args.test_dataset,
+            target_days=args.target_days,
+        )
+        save_stage1_test_result(
+            model_path=model_path,
+            finetune_dataset=finetune_dataset,
+            test_dataset=test_dataset,
+            args=args,
+            config=config,
+            data_list=source_dataset.data_list,
+            model_args=model_args,
+            task_args=task_args,
+            data_args=data_args,
+            PatchFSL_cfg=PatchFSL_cfg,
+            best_stage1_epoch=best_stage1_epoch,
+            best_stage1_source_mae=best_stage1_source_mae,
+            best_stage1_selection_score=best_stage1_selection_score,
+            stage1_selection_metric=args.stage1_selection_metric,
+        )
+        print('Stage-I-only evaluation and result saving complete.')
     # del rep_model
     # torch.cuda.empty_cache()
 ##################################################################################################################################

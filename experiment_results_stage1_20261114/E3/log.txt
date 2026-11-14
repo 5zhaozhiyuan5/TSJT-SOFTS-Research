@@ -1,0 +1,3538 @@
+forecasting_model.enc_embedding.value_embedding.weight : torch.Size([512, 288]), require_grads : True
+forecasting_model.enc_embedding.value_embedding.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.projection1.weight : torch.Size([128, 512]), require_grads : True
+forecasting_model.projection1.bias : torch.Size([128]), require_grads : True
+forecasting_model.projection2.weight : torch.Size([36, 128]), require_grads : True
+forecasting_model.projection2.bias : torch.Size([36]), require_grads : True
+model params: 5738660
+INFO: GPU : 0
+INFO: train on ['chengdu_m', 'pems-bay', 'shenzhen']. test on metr-la.
+Verified source-only training cities: ['chengdu_m', 'pems-bay', 'shenzhen']
+source dataset has chengdu_m. X : torch.Size([2854, 524, 288, 2]), y : torch.Size([2854, 524, 36])
+source dataset has pems-bay. X : torch.Size([4317, 325, 288, 2]), y : torch.Size([4317, 325, 36])
+source dataset has shenzhen. X : torch.Size([2854, 627, 288, 2]), y : torch.Size([2854, 627, 36])
+data args : {'data_keys': ['metr-la', 'pems-bay', 'shenzhen', 'chengdu_m'], 'metr-la': {'dataset_path': 'data/metr-la/dataset_expand.npy', 'adjacency_matrix_path': 'data/metr-la/matrix.npy', 'time_step': 34272, 'node_num': 207, 'speed_mean': 58.465786, 'speed_std': 12.905341}, 'pems-bay': {'dataset_path': 'data/pems-bay/dataset_expand.npy', 'adjacency_matrix_path': 'data/pems-bay/matrix.npy', 'time_step': 52116, 'node_num': 325, 'speed_mean': 62.621582859, 'speed_std': 9.58811369696}, 'chengdu_m': {'dataset_path': 'data/chengdu_m/dataset_expand.npy', 'adjacency_matrix_path': 'data/chengdu_m/matrix.npy', 'time_step': 17280, 'node_num': 524, 'speed_mean': 29.0982979559, 'speed_std': 9.75304346669}, 'shenzhen': {'dataset_path': 'data/shenzhen/dataset_expand.npy', 'adjacency_matrix_path': 'data/shenzhen/matrix.npy', 'time_step': 17280, 'node_num': 627, 'speed_mean': 30.5735608506, 'speed_std': 11.0922606598}}
+task_args : {'source': {'his_num': 288, 'pred_num': 36, 'batch_size': 16, 'task_num': 2, 'add_target': True, 'train_epochs': 3000, 'finetune_epochs': 0}, 'target_few_shot': {'add_target': True, 'batch_size': 46, 'his_num': 288, 'pred_num': 36, 'task_num': 2}}
+model_args : {'STnet': {'lr': 0.001}}
+PatchFSL_cfg : {'data_list': 'chengdu_shenzhen_pems', 'base_dir': PosixPath('/root/autodl-tmp/stage1_rhsr_exp_20261114'), 'device': device(type='cuda', index=0)}
+STmodel : SOFTS
+forecasting_model.enc_embedding.value_embedding.weight : torch.Size([512, 288]), require_grads : True
+forecasting_model.enc_embedding.value_embedding.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.projection1.weight : torch.Size([128, 512]), require_grads : True
+forecasting_model.projection1.bias : torch.Size([128]), require_grads : True
+forecasting_model.projection2.weight : torch.Size([36, 128]), require_grads : True
+forecasting_model.projection2.bias : torch.Size([36]), require_grads : True
+model params: 5738660
+{'config_filename': './configs/config.yaml', 'test_dataset': 'metr-la', 'train_epochs': 3000, 'finetune_epochs': 0, 'description': 'E3_RHSR_seed1', 'evaluate_checkpoint': '', 'seed': 1, 'data_list': 'chengdu_shenzhen_pems', 'target_days': 3, 'gpu': 0, 'STmodel': 'SOFTS', 'his_num': 288, 'save_dir': PosixPath('experiment_results/E3'), 'classifier': 0.0, 'xySquaredRatio': 100.0, 'DAcoef': 0.0, 'DAepoch': 50000, 'DAwarmup': 0, 'stage1_mass_temperature': 2.0, 'stage1_uniform_mass': 0.75, 'stage1_reliability_mix': 0.25, 'stage1_transfer': 1, 'stage1_method': 'rhsr', 'rhsr_num_regimes': 4, 'rhsr_hidden_dim': 96, 'rhsr_route_temperature': 1.5, 'rhsr_target_anchor': 0.1, 'rhsr_state_weight': 0.1, 'rhsr_decomposition_weight': 0.1, 'rhsr_route_balance_weight': 0.01, 'MemSize': 1, 'stage2_feature_bins': 12, 'stage2_residual_rank': 6, 'stage2_residual_smooth_rank': 3, 'stage2_residual_ridge': 10.0, 'projection': 0.0, 'model_name': 'SOFTS', 'DA': 'NONE', 'curr_time': '2026-11-14-14-44-06', 'new': 1, 'device': device(type='cuda', index=0), 'batch_size': 16}
+{'data': {'data_keys': ['metr-la', 'pems-bay', 'shenzhen', 'chengdu_m'], 'metr-la': {'dataset_path': 'data/metr-la/dataset_expand.npy', 'adjacency_matrix_path': 'data/metr-la/matrix.npy', 'time_step': 34272, 'node_num': 207, 'speed_mean': 58.465786, 'speed_std': 12.905341}, 'pems-bay': {'dataset_path': 'data/pems-bay/dataset_expand.npy', 'adjacency_matrix_path': 'data/pems-bay/matrix.npy', 'time_step': 52116, 'node_num': 325, 'speed_mean': 62.621582859, 'speed_std': 9.58811369696}, 'chengdu_m': {'dataset_path': 'data/chengdu_m/dataset_expand.npy', 'adjacency_matrix_path': 'data/chengdu_m/matrix.npy', 'time_step': 17280, 'node_num': 524, 'speed_mean': 29.0982979559, 'speed_std': 9.75304346669}, 'shenzhen': {'dataset_path': 'data/shenzhen/dataset_expand.npy', 'adjacency_matrix_path': 'data/shenzhen/matrix.npy', 'time_step': 17280, 'node_num': 627, 'speed_mean': 30.5735608506, 'speed_std': 11.0922606598}}, 'task': {'source': {'his_num': 288, 'pred_num': 36, 'batch_size': 16, 'task_num': 2, 'add_target': True, 'train_epochs': 3000, 'finetune_epochs': 0}, 'target_few_shot': {'add_target': True, 'batch_size': 46, 'his_num': 288, 'pred_num': 36, 'task_num': 2}}, 'model': {'STnet': {'lr': 0.001}}}
+----------------------
+Epochs 0/3000
+in meta-training   Unnormed MSE : 58.95576, RMSE : 7.51587, MAE : 4.99402, MAPE: 0.17565, reconstruction Loss : 5.34405.
+This epoch cost 1.87s.
+This epoch cost 0.22s.
+This epoch cost 0.245s.
+This epoch cost 0.21s.
+This epoch cost 0.2s.
+This epoch cost 0.234s.
+This epoch cost 0.211s.
+This epoch cost 0.2s.
+This epoch cost 0.207s.
+This epoch cost 0.225s.
+This epoch cost 0.211s.
+This epoch cost 0.206s.
+This epoch cost 0.23s.
+This epoch cost 0.2s.
+This epoch cost 0.248s.
+This epoch cost 0.215s.
+This epoch cost 0.217s.
+This epoch cost 0.209s.
+This epoch cost 0.255s.
+This epoch cost 0.214s.
+This epoch cost 0.229s.
+This epoch cost 0.219s.
+This epoch cost 0.196s.
+This epoch cost 0.224s.
+This epoch cost 0.24s.
+----------------------
+Epochs 25/3000
+in meta-training   Unnormed MSE : 22.15910, RMSE : 4.51213, MAE : 2.58171, MAPE: 0.09034, reconstruction Loss : 2.51365.
+This epoch cost 0.253s.
+This epoch cost 0.214s.
+This epoch cost 0.204s.
+This epoch cost 0.207s.
+This epoch cost 0.205s.
+This epoch cost 0.223s.
+This epoch cost 0.217s.
+This epoch cost 0.259s.
+This epoch cost 0.208s.
+This epoch cost 0.228s.
+This epoch cost 0.235s.
+This epoch cost 0.216s.
+This epoch cost 0.211s.
+This epoch cost 0.242s.
+This epoch cost 0.207s.
+This epoch cost 0.229s.
+This epoch cost 0.21s.
+This epoch cost 0.203s.
+This epoch cost 0.204s.
+This epoch cost 0.204s.
+This epoch cost 0.249s.
+This epoch cost 0.228s.
+This epoch cost 0.218s.
+This epoch cost 0.211s.
+This epoch cost 0.206s.
+----------------------
+Epochs 50/3000
+in meta-training   Unnormed MSE : 16.34112, RMSE : 4.00927, MAE : 2.29087, MAPE: 0.08344, reconstruction Loss : 2.28050.
+This epoch cost 0.209s.
+This epoch cost 0.235s.
+This epoch cost 0.213s.
+This epoch cost 0.202s.
+This epoch cost 0.214s.
+This epoch cost 0.236s.
+This epoch cost 0.231s.
+This epoch cost 0.221s.
+This epoch cost 0.226s.
+This epoch cost 0.208s.
+This epoch cost 0.234s.
+This epoch cost 0.243s.
+This epoch cost 0.216s.
+This epoch cost 0.202s.
+This epoch cost 0.196s.
+This epoch cost 0.21s.
+This epoch cost 0.222s.
+This epoch cost 0.209s.
+This epoch cost 0.209s.
+This epoch cost 0.212s.
+This epoch cost 0.215s.
+This epoch cost 0.204s.
+This epoch cost 0.216s.
+This epoch cost 0.227s.
+This epoch cost 0.228s.
+----------------------
+Epochs 75/3000
+in meta-training   Unnormed MSE : 22.13089, RMSE : 4.49848, MAE : 2.53394, MAPE: 0.09245, reconstruction Loss : 2.20457.
+This epoch cost 0.23s.
+This epoch cost 0.21s.
+This epoch cost 0.238s.
+This epoch cost 0.224s.
+This epoch cost 0.227s.
+This epoch cost 0.214s.
+This epoch cost 0.225s.
+This epoch cost 0.207s.
+This epoch cost 0.238s.
+This epoch cost 0.216s.
+This epoch cost 0.23s.
+This epoch cost 0.23s.
+This epoch cost 0.245s.
+This epoch cost 0.232s.
+This epoch cost 0.224s.
+This epoch cost 0.227s.
+This epoch cost 0.214s.
+This epoch cost 0.239s.
+This epoch cost 0.227s.
+This epoch cost 0.225s.
+This epoch cost 0.214s.
+This epoch cost 0.23s.
+This epoch cost 0.229s.
+This epoch cost 0.216s.
+This epoch cost 0.204s.
+----------------------
+Epochs 100/3000
+in meta-training   Unnormed MSE : 21.27023, RMSE : 4.43510, MAE : 2.53734, MAPE: 0.08871, reconstruction Loss : 2.17049.
+This epoch cost 0.216s.
+This epoch cost 0.218s.
+This epoch cost 0.21s.
+This epoch cost 0.211s.
+This epoch cost 0.215s.
+This epoch cost 0.212s.
+This epoch cost 0.211s.
+This epoch cost 0.207s.
+This epoch cost 0.221s.
+This epoch cost 0.23s.
+This epoch cost 0.224s.
+This epoch cost 0.242s.
+This epoch cost 0.246s.
+This epoch cost 0.219s.
+This epoch cost 0.248s.
+This epoch cost 0.248s.
+This epoch cost 0.241s.
+This epoch cost 0.212s.
+This epoch cost 0.215s.
+This epoch cost 0.245s.
+This epoch cost 0.223s.
+This epoch cost 0.209s.
+This epoch cost 0.26s.
+This epoch cost 0.244s.
+This epoch cost 0.239s.
+----------------------
+Epochs 125/3000
+in meta-training   Unnormed MSE : 20.60006, RMSE : 4.35946, MAE : 2.44865, MAPE: 0.08395, reconstruction Loss : 2.05086.
+This epoch cost 0.214s.
+This epoch cost 0.201s.
+This epoch cost 0.232s.
+This epoch cost 0.203s.
+This epoch cost 0.247s.
+This epoch cost 0.255s.
+This epoch cost 0.225s.
+This epoch cost 0.206s.
+This epoch cost 0.203s.
+This epoch cost 0.223s.
+This epoch cost 0.228s.
+This epoch cost 0.217s.
+This epoch cost 0.223s.
+This epoch cost 0.232s.
+This epoch cost 0.215s.
+This epoch cost 0.264s.
+This epoch cost 0.211s.
+This epoch cost 0.206s.
+This epoch cost 0.224s.
+This epoch cost 0.242s.
+This epoch cost 0.221s.
+This epoch cost 0.203s.
+This epoch cost 0.274s.
+This epoch cost 0.199s.
+This epoch cost 0.212s.
+----------------------
+Epochs 150/3000
+in meta-training   Unnormed MSE : 20.67564, RMSE : 4.38833, MAE : 2.47949, MAPE: 0.09215, reconstruction Loss : 2.04898.
+This epoch cost 0.212s.
+This epoch cost 0.216s.
+This epoch cost 0.208s.
+This epoch cost 0.235s.
+This epoch cost 0.234s.
+This epoch cost 0.224s.
+This epoch cost 0.224s.
+This epoch cost 0.21s.
+This epoch cost 0.218s.
+This epoch cost 0.221s.
+This epoch cost 0.218s.
+This epoch cost 0.227s.
+This epoch cost 0.226s.
+This epoch cost 0.244s.
+This epoch cost 0.224s.
+This epoch cost 0.237s.
+This epoch cost 0.21s.
+This epoch cost 0.225s.
+This epoch cost 0.212s.
+This epoch cost 0.213s.
+This epoch cost 0.222s.
+This epoch cost 0.215s.
+This epoch cost 0.214s.
+This epoch cost 0.206s.
+This epoch cost 0.204s.
+----------------------
+Epochs 175/3000
+in meta-training   Unnormed MSE : 22.52769, RMSE : 4.52468, MAE : 2.53417, MAPE: 0.09641, reconstruction Loss : 2.12680.
+This epoch cost 0.219s.
+This epoch cost 0.205s.
+This epoch cost 0.255s.
+This epoch cost 0.22s.
+This epoch cost 0.242s.
+This epoch cost 0.221s.
+This epoch cost 0.253s.
+This epoch cost 0.206s.
+This epoch cost 0.218s.
+This epoch cost 0.241s.
+This epoch cost 0.216s.
+This epoch cost 0.214s.
+This epoch cost 0.199s.
+This epoch cost 0.239s.
+This epoch cost 0.223s.
+This epoch cost 0.219s.
+This epoch cost 0.211s.
+This epoch cost 0.203s.
+This epoch cost 0.229s.
+This epoch cost 0.25s.
+This epoch cost 0.215s.
+This epoch cost 0.254s.
+This epoch cost 0.221s.
+This epoch cost 0.211s.
+This epoch cost 0.221s.
+----------------------
+Epochs 200/3000
+in meta-training   Unnormed MSE : 23.84498, RMSE : 4.61711, MAE : 2.64783, MAPE: 0.09649, reconstruction Loss : 2.07182.
+This epoch cost 0.249s.
+This epoch cost 0.208s.
+This epoch cost 0.199s.
+This epoch cost 0.209s.
+This epoch cost 0.22s.
+This epoch cost 0.213s.
+This epoch cost 0.216s.
+This epoch cost 0.208s.
+This epoch cost 0.227s.
+This epoch cost 0.217s.
+This epoch cost 0.216s.
+This epoch cost 0.21s.
+This epoch cost 0.224s.
+This epoch cost 0.235s.
+This epoch cost 0.202s.
+This epoch cost 0.259s.
+This epoch cost 0.205s.
+This epoch cost 0.226s.
+This epoch cost 0.204s.
+This epoch cost 0.208s.
+This epoch cost 0.295s.
+This epoch cost 0.203s.
+This epoch cost 0.212s.
+This epoch cost 0.229s.
+This epoch cost 0.24s.
+----------------------
+Epochs 225/3000
+in meta-training   Unnormed MSE : 19.90376, RMSE : 4.27322, MAE : 2.36753, MAPE: 0.08212, reconstruction Loss : 1.88539.
+This epoch cost 0.217s.
+This epoch cost 0.296s.
+This epoch cost 0.21s.
+This epoch cost 0.223s.
+This epoch cost 0.21s.
+This epoch cost 0.204s.
+This epoch cost 0.257s.
+This epoch cost 0.197s.
+This epoch cost 0.226s.
+This epoch cost 0.197s.
+This epoch cost 0.201s.
+This epoch cost 0.203s.
+This epoch cost 0.204s.
+This epoch cost 0.216s.
+This epoch cost 0.209s.
+This epoch cost 0.246s.
+This epoch cost 0.225s.
+This epoch cost 0.219s.
+This epoch cost 0.315s.
+This epoch cost 0.235s.
+This epoch cost 0.196s.
+This epoch cost 0.2s.
+This epoch cost 0.215s.
+This epoch cost 0.22s.
+This epoch cost 0.218s.
+----------------------
+Epochs 250/3000
+in meta-training   Unnormed MSE : 19.04531, RMSE : 4.20731, MAE : 2.31160, MAPE: 0.08321, reconstruction Loss : 1.81256.
+This epoch cost 0.207s.
+This epoch cost 0.236s.
+This epoch cost 0.228s.
+This epoch cost 0.205s.
+This epoch cost 0.235s.
+This epoch cost 0.207s.
+This epoch cost 0.207s.
+This epoch cost 0.216s.
+This epoch cost 0.204s.
+This epoch cost 0.21s.
+This epoch cost 0.203s.
+This epoch cost 0.205s.
+This epoch cost 0.206s.
+This epoch cost 0.209s.
+This epoch cost 0.203s.
+This epoch cost 0.214s.
+This epoch cost 0.219s.
+This epoch cost 0.223s.
+This epoch cost 0.226s.
+This epoch cost 0.241s.
+This epoch cost 0.215s.
+This epoch cost 0.231s.
+This epoch cost 0.215s.
+This epoch cost 0.203s.
+This epoch cost 0.2s.
+----------------------
+Epochs 275/3000
+in meta-training   Unnormed MSE : 21.53387, RMSE : 4.43373, MAE : 2.53734, MAPE: 0.08618, reconstruction Loss : 1.94465.
+This epoch cost 0.218s.
+This epoch cost 0.222s.
+This epoch cost 0.226s.
+This epoch cost 0.208s.
+This epoch cost 0.213s.
+This epoch cost 0.206s.
+This epoch cost 0.233s.
+This epoch cost 0.225s.
+This epoch cost 0.217s.
+This epoch cost 0.201s.
+This epoch cost 0.21s.
+This epoch cost 0.32s.
+This epoch cost 0.207s.
+This epoch cost 0.241s.
+This epoch cost 0.26s.
+This epoch cost 0.246s.
+This epoch cost 0.199s.
+This epoch cost 0.204s.
+This epoch cost 0.204s.
+This epoch cost 0.231s.
+This epoch cost 0.223s.
+This epoch cost 0.224s.
+This epoch cost 0.213s.
+This epoch cost 0.217s.
+This epoch cost 0.209s.
+----------------------
+Epochs 300/3000
+in meta-training   Unnormed MSE : 13.60393, RMSE : 3.62843, MAE : 2.11795, MAPE: 0.07244, reconstruction Loss : 1.75362.
+This epoch cost 0.259s.
+This epoch cost 0.212s.
+This epoch cost 0.218s.
+This epoch cost 0.213s.
+This epoch cost 0.213s.
+This epoch cost 0.199s.
+This epoch cost 0.196s.
+This epoch cost 0.278s.
+This epoch cost 0.227s.
+This epoch cost 0.26s.
+This epoch cost 0.246s.
+This epoch cost 0.229s.
+This epoch cost 0.243s.
+This epoch cost 0.216s.
+This epoch cost 0.205s.
+This epoch cost 0.238s.
+This epoch cost 0.214s.
+This epoch cost 0.269s.
+This epoch cost 0.239s.
+This epoch cost 0.224s.
+This epoch cost 0.214s.
+This epoch cost 0.249s.
+This epoch cost 0.223s.
+This epoch cost 0.216s.
+This epoch cost 0.212s.
+----------------------
+Epochs 325/3000
+in meta-training   Unnormed MSE : 21.14326, RMSE : 4.40864, MAE : 2.56518, MAPE: 0.08579, reconstruction Loss : 1.92923.
+This epoch cost 0.243s.
+This epoch cost 0.198s.
+This epoch cost 0.205s.
+This epoch cost 0.223s.
+This epoch cost 0.225s.
+This epoch cost 0.216s.
+This epoch cost 0.224s.
+This epoch cost 0.215s.
+This epoch cost 0.22s.
+This epoch cost 0.226s.
+This epoch cost 0.235s.
+This epoch cost 0.219s.
+This epoch cost 0.218s.
+This epoch cost 0.201s.
+This epoch cost 0.224s.
+This epoch cost 0.213s.
+This epoch cost 0.213s.
+This epoch cost 0.239s.
+This epoch cost 0.204s.
+This epoch cost 0.269s.
+This epoch cost 0.217s.
+This epoch cost 0.212s.
+This epoch cost 0.215s.
+This epoch cost 0.218s.
+This epoch cost 0.213s.
+----------------------
+Epochs 350/3000
+in meta-training   Unnormed MSE : 14.69843, RMSE : 3.78538, MAE : 2.17767, MAPE: 0.07940, reconstruction Loss : 1.71793.
+This epoch cost 0.227s.
+This epoch cost 0.218s.
+This epoch cost 0.201s.
+This epoch cost 0.207s.
+This epoch cost 0.2s.
+This epoch cost 0.214s.
+This epoch cost 0.221s.
+This epoch cost 0.253s.
+This epoch cost 0.23s.
+This epoch cost 0.215s.
+This epoch cost 0.206s.
+This epoch cost 0.221s.
+This epoch cost 0.2s.
+This epoch cost 0.216s.
+This epoch cost 0.215s.
+This epoch cost 0.217s.
+This epoch cost 0.212s.
+This epoch cost 0.203s.
+This epoch cost 0.196s.
+This epoch cost 0.199s.
+This epoch cost 0.203s.
+This epoch cost 0.202s.
+This epoch cost 0.21s.
+This epoch cost 0.209s.
+This epoch cost 0.21s.
+----------------------
+Epochs 375/3000
+in meta-training   Unnormed MSE : 11.37172, RMSE : 3.34868, MAE : 1.99847, MAPE: 0.07210, reconstruction Loss : 1.63002.
+This epoch cost 0.233s.
+This epoch cost 0.216s.
+This epoch cost 0.211s.
+This epoch cost 0.204s.
+This epoch cost 0.2s.
+This epoch cost 0.201s.
+This epoch cost 0.227s.
+This epoch cost 0.23s.
+This epoch cost 0.208s.
+This epoch cost 0.2s.
+This epoch cost 0.197s.
+This epoch cost 0.228s.
+This epoch cost 0.214s.
+This epoch cost 0.227s.
+This epoch cost 0.218s.
+This epoch cost 0.211s.
+This epoch cost 0.195s.
+This epoch cost 0.2s.
+This epoch cost 0.21s.
+This epoch cost 0.201s.
+This epoch cost 0.199s.
+This epoch cost 0.207s.
+This epoch cost 0.199s.
+This epoch cost 0.208s.
+This epoch cost 0.206s.
+----------------------
+Epochs 400/3000
+in meta-training   Unnormed MSE : 18.90728, RMSE : 4.14909, MAE : 2.27733, MAPE: 0.08365, reconstruction Loss : 1.48650.
+This epoch cost 0.217s.
+This epoch cost 0.216s.
+This epoch cost 0.197s.
+This epoch cost 0.201s.
+This epoch cost 0.2s.
+This epoch cost 0.203s.
+This epoch cost 0.216s.
+This epoch cost 0.207s.
+This epoch cost 0.209s.
+This epoch cost 0.203s.
+This epoch cost 0.199s.
+This epoch cost 0.201s.
+This epoch cost 0.203s.
+This epoch cost 0.224s.
+This epoch cost 0.2s.
+This epoch cost 0.215s.
+This epoch cost 0.208s.
+This epoch cost 0.208s.
+This epoch cost 0.207s.
+This epoch cost 0.219s.
+This epoch cost 0.217s.
+This epoch cost 0.261s.
+This epoch cost 0.255s.
+This epoch cost 0.222s.
+This epoch cost 0.222s.
+----------------------
+Epochs 425/3000
+in meta-training   Unnormed MSE : 21.39452, RMSE : 4.34143, MAE : 2.39730, MAPE: 0.08547, reconstruction Loss : 1.51830.
+This epoch cost 0.209s.
+This epoch cost 0.204s.
+This epoch cost 0.218s.
+This epoch cost 0.225s.
+This epoch cost 0.236s.
+This epoch cost 0.261s.
+This epoch cost 0.222s.
+This epoch cost 0.227s.
+This epoch cost 0.272s.
+This epoch cost 0.21s.
+This epoch cost 0.313s.
+This epoch cost 0.254s.
+This epoch cost 0.198s.
+This epoch cost 0.207s.
+This epoch cost 0.224s.
+This epoch cost 0.218s.
+This epoch cost 0.225s.
+This epoch cost 0.229s.
+This epoch cost 0.196s.
+This epoch cost 0.223s.
+This epoch cost 0.238s.
+This epoch cost 0.227s.
+This epoch cost 0.212s.
+This epoch cost 0.28s.
+This epoch cost 0.223s.
+----------------------
+Epochs 450/3000
+in meta-training   Unnormed MSE : 19.51427, RMSE : 4.25392, MAE : 2.31755, MAPE: 0.08546, reconstruction Loss : 1.76438.
+This epoch cost 0.214s.
+This epoch cost 0.241s.
+This epoch cost 0.206s.
+This epoch cost 0.22s.
+This epoch cost 0.202s.
+This epoch cost 0.232s.
+This epoch cost 0.208s.
+This epoch cost 0.238s.
+This epoch cost 0.236s.
+This epoch cost 0.21s.
+This epoch cost 0.22s.
+This epoch cost 0.258s.
+This epoch cost 0.225s.
+This epoch cost 0.217s.
+This epoch cost 0.212s.
+This epoch cost 0.251s.
+This epoch cost 0.201s.
+This epoch cost 0.203s.
+This epoch cost 0.203s.
+This epoch cost 0.222s.
+This epoch cost 0.238s.
+This epoch cost 0.227s.
+This epoch cost 0.213s.
+This epoch cost 0.235s.
+This epoch cost 0.222s.
+----------------------
+Epochs 475/3000
+in meta-training   Unnormed MSE : 13.89404, RMSE : 3.67719, MAE : 2.16729, MAPE: 0.07577, reconstruction Loss : 1.66521.
+This epoch cost 0.227s.
+This epoch cost 0.21s.
+This epoch cost 0.212s.
+This epoch cost 0.241s.
+This epoch cost 0.224s.
+This epoch cost 0.217s.
+This epoch cost 0.22s.
+This epoch cost 0.22s.
+This epoch cost 0.223s.
+This epoch cost 0.216s.
+This epoch cost 0.233s.
+This epoch cost 0.207s.
+This epoch cost 0.215s.
+This epoch cost 0.233s.
+This epoch cost 0.22s.
+This epoch cost 0.22s.
+This epoch cost 0.231s.
+This epoch cost 0.221s.
+This epoch cost 0.21s.
+This epoch cost 0.237s.
+This epoch cost 0.251s.
+This epoch cost 0.215s.
+This epoch cost 0.208s.
+This epoch cost 0.228s.
+This epoch cost 0.215s.
+----------------------
+Epochs 500/3000
+in meta-training   Unnormed MSE : 10.66552, RMSE : 3.22166, MAE : 1.91213, MAPE: 0.06906, reconstruction Loss : 1.39674.
+This epoch cost 0.228s.
+This epoch cost 0.198s.
+This epoch cost 0.227s.
+This epoch cost 0.265s.
+This epoch cost 0.203s.
+This epoch cost 0.278s.
+This epoch cost 0.218s.
+This epoch cost 0.217s.
+This epoch cost 0.236s.
+This epoch cost 0.205s.
+This epoch cost 0.212s.
+This epoch cost 0.215s.
+This epoch cost 0.268s.
+This epoch cost 0.22s.
+This epoch cost 0.2s.
+This epoch cost 0.248s.
+This epoch cost 0.219s.
+This epoch cost 0.207s.
+This epoch cost 0.22s.
+This epoch cost 0.222s.
+This epoch cost 0.221s.
+This epoch cost 0.207s.
+This epoch cost 0.253s.
+This epoch cost 0.221s.
+This epoch cost 0.218s.
+----------------------
+Epochs 525/3000
+in meta-training   Unnormed MSE : 21.85377, RMSE : 4.44162, MAE : 2.50324, MAPE: 0.08817, reconstruction Loss : 1.75835.
+This epoch cost 0.223s.
+This epoch cost 0.225s.
+This epoch cost 0.212s.
+This epoch cost 0.23s.
+This epoch cost 0.211s.
+This epoch cost 0.216s.
+This epoch cost 0.206s.
+This epoch cost 0.214s.
+This epoch cost 0.207s.
+This epoch cost 0.224s.
+This epoch cost 0.207s.
+This epoch cost 0.221s.
+This epoch cost 0.208s.
+This epoch cost 0.199s.
+This epoch cost 0.2s.
+This epoch cost 0.212s.
+This epoch cost 0.224s.
+This epoch cost 0.227s.
+This epoch cost 0.236s.
+This epoch cost 0.226s.
+This epoch cost 0.225s.
+This epoch cost 0.214s.
+This epoch cost 0.214s.
+This epoch cost 0.204s.
+This epoch cost 0.217s.
+----------------------
+Epochs 550/3000
+in meta-training   Unnormed MSE : 21.99152, RMSE : 4.43886, MAE : 2.61918, MAPE: 0.08748, reconstruction Loss : 1.88780.
+This epoch cost 0.199s.
+This epoch cost 0.217s.
+This epoch cost 0.199s.
+This epoch cost 0.201s.
+This epoch cost 0.209s.
+This epoch cost 0.205s.
+This epoch cost 0.217s.
+This epoch cost 0.236s.
+This epoch cost 0.241s.
+This epoch cost 0.271s.
+This epoch cost 0.225s.
+This epoch cost 0.216s.
+This epoch cost 0.296s.
+This epoch cost 0.259s.
+This epoch cost 0.212s.
+This epoch cost 0.207s.
+This epoch cost 0.219s.
+This epoch cost 0.241s.
+This epoch cost 0.221s.
+This epoch cost 0.203s.
+This epoch cost 0.214s.
+This epoch cost 0.213s.
+This epoch cost 0.219s.
+This epoch cost 0.221s.
+This epoch cost 0.208s.
+----------------------
+Epochs 575/3000
+in meta-training   Unnormed MSE : 19.83484, RMSE : 4.28599, MAE : 2.37273, MAPE: 0.08524, reconstruction Loss : 1.80134.
+This epoch cost 0.221s.
+This epoch cost 0.224s.
+This epoch cost 0.234s.
+This epoch cost 0.219s.
+This epoch cost 0.224s.
+This epoch cost 0.23s.
+This epoch cost 0.243s.
+This epoch cost 0.214s.
+This epoch cost 0.217s.
+This epoch cost 0.196s.
+This epoch cost 0.201s.
+This epoch cost 0.201s.
+This epoch cost 0.207s.
+This epoch cost 0.201s.
+This epoch cost 0.238s.
+This epoch cost 0.203s.
+This epoch cost 0.23s.
+This epoch cost 0.21s.
+This epoch cost 0.216s.
+This epoch cost 0.224s.
+This epoch cost 0.227s.
+This epoch cost 0.219s.
+This epoch cost 0.205s.
+This epoch cost 0.216s.
+This epoch cost 0.197s.
+----------------------
+Epochs 600/3000
+in meta-training   Unnormed MSE : 12.01897, RMSE : 3.35210, MAE : 1.99627, MAPE: 0.06670, reconstruction Loss : 1.24111.
+This epoch cost 0.216s.
+This epoch cost 0.226s.
+This epoch cost 0.225s.
+This epoch cost 0.22s.
+This epoch cost 0.216s.
+This epoch cost 0.22s.
+This epoch cost 0.232s.
+This epoch cost 0.226s.
+This epoch cost 0.213s.
+This epoch cost 0.23s.
+This epoch cost 0.235s.
+This epoch cost 0.221s.
+This epoch cost 0.207s.
+This epoch cost 0.215s.
+This epoch cost 0.202s.
+This epoch cost 0.198s.
+This epoch cost 0.211s.
+This epoch cost 0.234s.
+This epoch cost 0.213s.
+This epoch cost 0.23s.
+This epoch cost 0.259s.
+This epoch cost 0.237s.
+This epoch cost 0.203s.
+This epoch cost 0.219s.
+This epoch cost 0.21s.
+----------------------
+Epochs 625/3000
+in meta-training   Unnormed MSE : 14.20147, RMSE : 3.64133, MAE : 2.10908, MAPE: 0.07570, reconstruction Loss : 1.28255.
+This epoch cost 0.229s.
+This epoch cost 0.205s.
+This epoch cost 0.199s.
+This epoch cost 0.228s.
+This epoch cost 0.217s.
+This epoch cost 0.206s.
+This epoch cost 0.239s.
+This epoch cost 0.23s.
+This epoch cost 0.263s.
+This epoch cost 0.236s.
+This epoch cost 0.224s.
+This epoch cost 0.215s.
+This epoch cost 0.2s.
+This epoch cost 0.218s.
+This epoch cost 0.217s.
+This epoch cost 0.211s.
+This epoch cost 0.223s.
+This epoch cost 0.222s.
+This epoch cost 0.21s.
+This epoch cost 0.227s.
+This epoch cost 0.202s.
+This epoch cost 0.225s.
+This epoch cost 0.198s.
+This epoch cost 0.204s.
+This epoch cost 0.2s.
+----------------------
+Epochs 650/3000
+in meta-training   Unnormed MSE : 19.68786, RMSE : 4.24875, MAE : 2.39085, MAPE: 0.08459, reconstruction Loss : 1.78576.
+This epoch cost 0.216s.
+This epoch cost 0.199s.
+This epoch cost 0.204s.
+This epoch cost 0.207s.
+This epoch cost 0.203s.
+This epoch cost 0.215s.
+This epoch cost 0.224s.
+This epoch cost 0.225s.
+This epoch cost 0.214s.
+This epoch cost 0.198s.
+This epoch cost 0.212s.
+This epoch cost 0.217s.
+This epoch cost 0.211s.
+This epoch cost 0.229s.
+This epoch cost 0.214s.
+This epoch cost 0.217s.
+This epoch cost 0.213s.
+This epoch cost 0.205s.
+This epoch cost 0.199s.
+This epoch cost 0.21s.
+This epoch cost 0.198s.
+This epoch cost 0.216s.
+This epoch cost 0.211s.
+This epoch cost 0.215s.
+This epoch cost 0.204s.
+----------------------
+Epochs 675/3000
+in meta-training   Unnormed MSE : 21.43996, RMSE : 4.35606, MAE : 2.48196, MAPE: 0.08320, reconstruction Loss : 1.59343.
+This epoch cost 0.203s.
+This epoch cost 0.216s.
+This epoch cost 0.212s.
+This epoch cost 0.204s.
+This epoch cost 0.245s.
+This epoch cost 0.201s.
+This epoch cost 0.202s.
+This epoch cost 0.223s.
+This epoch cost 0.211s.
+This epoch cost 0.209s.
+This epoch cost 0.201s.
+This epoch cost 0.205s.
+This epoch cost 0.213s.
+This epoch cost 0.202s.
+This epoch cost 0.21s.
+This epoch cost 0.228s.
+This epoch cost 0.216s.
+This epoch cost 0.251s.
+This epoch cost 0.242s.
+This epoch cost 0.258s.
+This epoch cost 0.202s.
+This epoch cost 0.224s.
+This epoch cost 0.219s.
+This epoch cost 0.216s.
+This epoch cost 0.244s.
+----------------------
+Epochs 700/3000
+in meta-training   Unnormed MSE : 18.65057, RMSE : 4.14031, MAE : 2.34164, MAPE: 0.08100, reconstruction Loss : 1.67801.
+This epoch cost 0.218s.
+This epoch cost 0.205s.
+This epoch cost 0.217s.
+This epoch cost 0.206s.
+This epoch cost 0.221s.
+This epoch cost 0.207s.
+This epoch cost 0.204s.
+This epoch cost 0.213s.
+This epoch cost 0.205s.
+This epoch cost 0.199s.
+This epoch cost 0.218s.
+This epoch cost 0.218s.
+This epoch cost 0.215s.
+This epoch cost 0.2s.
+This epoch cost 0.201s.
+This epoch cost 0.2s.
+This epoch cost 0.206s.
+This epoch cost 0.213s.
+This epoch cost 0.209s.
+This epoch cost 0.203s.
+This epoch cost 0.234s.
+This epoch cost 0.224s.
+This epoch cost 0.221s.
+This epoch cost 0.211s.
+This epoch cost 0.203s.
+----------------------
+Epochs 725/3000
+in meta-training   Unnormed MSE : 21.28940, RMSE : 4.32906, MAE : 2.46291, MAPE: 0.08204, reconstruction Loss : 1.53157.
+This epoch cost 0.197s.
+This epoch cost 0.218s.
+This epoch cost 0.197s.
+This epoch cost 0.208s.
+This epoch cost 0.203s.
+This epoch cost 0.212s.
+This epoch cost 0.207s.
+This epoch cost 0.229s.
+This epoch cost 0.2s.
+This epoch cost 0.206s.
+This epoch cost 0.223s.
+This epoch cost 0.203s.
+This epoch cost 0.223s.
+This epoch cost 0.213s.
+This epoch cost 0.238s.
+This epoch cost 0.222s.
+This epoch cost 0.214s.
+This epoch cost 0.212s.
+This epoch cost 0.246s.
+This epoch cost 0.215s.
+This epoch cost 0.208s.
+This epoch cost 0.209s.
+This epoch cost 0.217s.
+This epoch cost 0.253s.
+This epoch cost 0.211s.
+----------------------
+Epochs 750/3000
+in meta-training   Unnormed MSE : 17.89772, RMSE : 3.90321, MAE : 2.18819, MAPE: 0.07265, reconstruction Loss : 1.09049.
+This epoch cost 0.235s.
+This epoch cost 0.206s.
+This epoch cost 0.219s.
+This epoch cost 0.238s.
+This epoch cost 0.222s.
+This epoch cost 0.213s.
+This epoch cost 0.205s.
+This epoch cost 0.207s.
+This epoch cost 0.258s.
+This epoch cost 0.201s.
+This epoch cost 0.209s.
+This epoch cost 0.199s.
+This epoch cost 0.206s.
+This epoch cost 0.219s.
+This epoch cost 0.226s.
+This epoch cost 0.257s.
+This epoch cost 0.245s.
+This epoch cost 0.212s.
+This epoch cost 0.231s.
+This epoch cost 0.199s.
+This epoch cost 0.228s.
+This epoch cost 0.205s.
+This epoch cost 0.207s.
+This epoch cost 0.207s.
+This epoch cost 0.208s.
+----------------------
+Epochs 775/3000
+in meta-training   Unnormed MSE : 17.79028, RMSE : 3.85640, MAE : 2.08507, MAPE: 0.07610, reconstruction Loss : 0.97525.
+This epoch cost 0.239s.
+This epoch cost 0.25s.
+This epoch cost 0.219s.
+This epoch cost 0.28s.
+This epoch cost 0.221s.
+This epoch cost 0.229s.
+This epoch cost 0.23s.
+This epoch cost 0.202s.
+This epoch cost 0.224s.
+This epoch cost 0.211s.
+This epoch cost 0.22s.
+This epoch cost 0.261s.
+This epoch cost 0.216s.
+This epoch cost 0.21s.
+This epoch cost 0.201s.
+This epoch cost 0.202s.
+This epoch cost 0.221s.
+This epoch cost 0.246s.
+This epoch cost 0.205s.
+This epoch cost 0.219s.
+This epoch cost 0.225s.
+This epoch cost 0.237s.
+This epoch cost 0.211s.
+This epoch cost 0.208s.
+This epoch cost 0.2s.
+----------------------
+Epochs 800/3000
+in meta-training   Unnormed MSE : 20.68349, RMSE : 4.40733, MAE : 2.45439, MAPE: 0.09029, reconstruction Loss : 1.94208.
+This epoch cost 0.231s.
+This epoch cost 0.211s.
+This epoch cost 0.233s.
+This epoch cost 0.231s.
+This epoch cost 0.207s.
+This epoch cost 0.226s.
+This epoch cost 0.213s.
+This epoch cost 0.219s.
+This epoch cost 0.219s.
+This epoch cost 0.212s.
+This epoch cost 0.22s.
+This epoch cost 0.198s.
+This epoch cost 0.21s.
+This epoch cost 0.224s.
+This epoch cost 0.22s.
+This epoch cost 0.222s.
+This epoch cost 0.213s.
+This epoch cost 0.222s.
+This epoch cost 0.218s.
+This epoch cost 0.219s.
+This epoch cost 0.206s.
+This epoch cost 0.218s.
+This epoch cost 0.226s.
+This epoch cost 0.229s.
+This epoch cost 0.243s.
+----------------------
+Epochs 825/3000
+in meta-training   Unnormed MSE : 21.52320, RMSE : 4.32154, MAE : 2.39348, MAPE: 0.08669, reconstruction Loss : 1.35014.
+This epoch cost 0.214s.
+This epoch cost 0.202s.
+This epoch cost 0.217s.
+This epoch cost 0.23s.
+This epoch cost 0.22s.
+This epoch cost 0.219s.
+This epoch cost 0.219s.
+This epoch cost 0.224s.
+This epoch cost 0.217s.
+This epoch cost 0.24s.
+This epoch cost 0.211s.
+This epoch cost 0.238s.
+This epoch cost 0.241s.
+This epoch cost 0.213s.
+This epoch cost 0.218s.
+This epoch cost 0.203s.
+This epoch cost 0.204s.
+This epoch cost 0.202s.
+This epoch cost 0.22s.
+This epoch cost 0.204s.
+This epoch cost 0.221s.
+This epoch cost 0.213s.
+This epoch cost 0.218s.
+This epoch cost 0.204s.
+This epoch cost 0.223s.
+----------------------
+Epochs 850/3000
+in meta-training   Unnormed MSE : 21.56017, RMSE : 4.36303, MAE : 2.46808, MAPE: 0.08871, reconstruction Loss : 1.68984.
+This epoch cost 0.236s.
+This epoch cost 0.206s.
+This epoch cost 0.223s.
+This epoch cost 0.225s.
+This epoch cost 0.201s.
+This epoch cost 0.217s.
+This epoch cost 0.22s.
+This epoch cost 0.219s.
+This epoch cost 0.222s.
+This epoch cost 0.212s.
+This epoch cost 0.207s.
+This epoch cost 0.228s.
+This epoch cost 0.203s.
+This epoch cost 0.218s.
+This epoch cost 0.227s.
+This epoch cost 0.202s.
+This epoch cost 0.218s.
+This epoch cost 0.234s.
+This epoch cost 0.204s.
+This epoch cost 0.219s.
+This epoch cost 0.213s.
+This epoch cost 0.213s.
+This epoch cost 0.198s.
+This epoch cost 0.21s.
+This epoch cost 0.229s.
+----------------------
+Epochs 875/3000
+in meta-training   Unnormed MSE : 21.92398, RMSE : 4.43554, MAE : 2.55723, MAPE: 0.08829, reconstruction Loss : 1.76761.
+This epoch cost 0.214s.
+This epoch cost 0.223s.
+This epoch cost 0.229s.
+This epoch cost 0.216s.
+This epoch cost 0.23s.
+This epoch cost 0.262s.
+This epoch cost 0.238s.
+This epoch cost 0.223s.
+This epoch cost 0.207s.
+This epoch cost 0.206s.
+This epoch cost 0.207s.
+This epoch cost 0.234s.
+This epoch cost 0.216s.
+This epoch cost 0.216s.
+This epoch cost 0.254s.
+This epoch cost 0.222s.
+This epoch cost 0.22s.
+This epoch cost 0.231s.
+This epoch cost 0.22s.
+This epoch cost 0.228s.
+This epoch cost 0.24s.
+This epoch cost 0.212s.
+This epoch cost 0.195s.
+This epoch cost 0.255s.
+This epoch cost 0.246s.
+----------------------
+Epochs 900/3000
+in meta-training   Unnormed MSE : 17.23933, RMSE : 3.75127, MAE : 2.05758, MAPE: 0.06970, reconstruction Loss : 0.83372.
+This epoch cost 0.23s.
+This epoch cost 0.208s.
+This epoch cost 0.198s.
+This epoch cost 0.203s.
+This epoch cost 0.217s.
+This epoch cost 0.213s.
+This epoch cost 0.214s.
+This epoch cost 0.216s.
+This epoch cost 0.204s.
+This epoch cost 0.212s.
+This epoch cost 0.227s.
+This epoch cost 0.224s.
+This epoch cost 0.219s.
+This epoch cost 0.234s.
+This epoch cost 0.207s.
+This epoch cost 0.211s.
+This epoch cost 0.226s.
+This epoch cost 0.242s.
+This epoch cost 0.231s.
+This epoch cost 0.2s.
+This epoch cost 0.196s.
+This epoch cost 0.224s.
+This epoch cost 0.206s.
+This epoch cost 0.221s.
+This epoch cost 0.242s.
+----------------------
+Epochs 925/3000
+in meta-training   Unnormed MSE : 13.89795, RMSE : 3.68028, MAE : 2.12775, MAPE: 0.07723, reconstruction Loss : 1.49855.
+This epoch cost 0.221s.
+This epoch cost 0.213s.
+This epoch cost 0.223s.
+This epoch cost 0.212s.
+This epoch cost 0.22s.
+This epoch cost 0.213s.
+This epoch cost 0.228s.
+This epoch cost 0.207s.
+This epoch cost 0.211s.
+This epoch cost 0.207s.
+This epoch cost 0.221s.
+This epoch cost 0.213s.
+This epoch cost 0.216s.
+This epoch cost 0.229s.
+This epoch cost 0.227s.
+This epoch cost 0.219s.
+This epoch cost 0.224s.
+This epoch cost 0.243s.
+This epoch cost 0.231s.
+This epoch cost 0.22s.
+This epoch cost 0.202s.
+This epoch cost 0.221s.
+This epoch cost 0.235s.
+This epoch cost 0.227s.
+This epoch cost 0.246s.
+----------------------
+Epochs 950/3000
+in meta-training   Unnormed MSE : 20.28164, RMSE : 4.27301, MAE : 2.36311, MAPE: 0.08621, reconstruction Loss : 1.46942.
+This epoch cost 0.245s.
+This epoch cost 0.221s.
+This epoch cost 0.227s.
+This epoch cost 0.205s.
+This epoch cost 0.21s.
+This epoch cost 0.21s.
+This epoch cost 0.218s.
+This epoch cost 0.22s.
+This epoch cost 0.214s.
+This epoch cost 0.211s.
+This epoch cost 0.2s.
+This epoch cost 0.218s.
+This epoch cost 0.213s.
+This epoch cost 0.22s.
+This epoch cost 0.224s.
+This epoch cost 0.222s.
+This epoch cost 0.226s.
+This epoch cost 0.224s.
+This epoch cost 0.213s.
+This epoch cost 0.214s.
+This epoch cost 0.217s.
+This epoch cost 0.263s.
+This epoch cost 0.217s.
+This epoch cost 0.234s.
+This epoch cost 0.222s.
+----------------------
+Epochs 975/3000
+in meta-training   Unnormed MSE : 13.36184, RMSE : 3.59190, MAE : 2.12658, MAPE: 0.07483, reconstruction Loss : 1.43612.
+This epoch cost 0.209s.
+This epoch cost 0.209s.
+This epoch cost 0.232s.
+This epoch cost 0.233s.
+This epoch cost 0.22s.
+This epoch cost 0.221s.
+This epoch cost 0.22s.
+This epoch cost 0.197s.
+This epoch cost 0.216s.
+This epoch cost 0.218s.
+This epoch cost 0.213s.
+This epoch cost 0.22s.
+This epoch cost 0.203s.
+This epoch cost 0.203s.
+This epoch cost 0.209s.
+This epoch cost 0.198s.
+This epoch cost 0.215s.
+This epoch cost 0.284s.
+This epoch cost 0.208s.
+This epoch cost 0.21s.
+This epoch cost 0.208s.
+This epoch cost 0.202s.
+This epoch cost 0.233s.
+This epoch cost 0.219s.
+This epoch cost 0.241s.
+----------------------
+Epochs 1000/3000
+in meta-training   Unnormed MSE : 11.38410, RMSE : 3.14437, MAE : 1.81550, MAPE: 0.06366, reconstruction Loss : 0.68465.
+This epoch cost 0.2s.
+This epoch cost 0.228s.
+This epoch cost 0.228s.
+This epoch cost 0.196s.
+This epoch cost 0.216s.
+This epoch cost 0.214s.
+This epoch cost 0.216s.
+This epoch cost 0.205s.
+This epoch cost 0.225s.
+This epoch cost 0.198s.
+This epoch cost 0.255s.
+This epoch cost 0.212s.
+This epoch cost 0.222s.
+This epoch cost 0.22s.
+This epoch cost 0.226s.
+This epoch cost 0.24s.
+This epoch cost 0.221s.
+This epoch cost 0.221s.
+This epoch cost 0.238s.
+This epoch cost 0.235s.
+This epoch cost 0.207s.
+This epoch cost 0.201s.
+This epoch cost 0.219s.
+This epoch cost 0.206s.
+This epoch cost 0.241s.
+----------------------
+Epochs 1025/3000
+in meta-training   Unnormed MSE : 20.33902, RMSE : 4.34035, MAE : 2.42856, MAPE: 0.08878, reconstruction Loss : 1.76007.
+This epoch cost 0.226s.
+This epoch cost 0.237s.
+This epoch cost 0.211s.
+This epoch cost 0.204s.
+This epoch cost 0.219s.
+This epoch cost 0.223s.
+This epoch cost 0.213s.
+This epoch cost 0.2s.
+This epoch cost 0.249s.
+This epoch cost 0.212s.
+This epoch cost 0.226s.
+This epoch cost 0.242s.
+This epoch cost 0.202s.
+This epoch cost 0.221s.
+This epoch cost 0.209s.
+This epoch cost 0.202s.
+This epoch cost 0.232s.
+This epoch cost 0.201s.
+This epoch cost 0.216s.
+This epoch cost 0.206s.
+This epoch cost 0.222s.
+This epoch cost 0.234s.
+This epoch cost 0.207s.
+This epoch cost 0.217s.
+This epoch cost 0.206s.
+----------------------
+Epochs 1050/3000
+in meta-training   Unnormed MSE : 17.34589, RMSE : 3.70645, MAE : 2.02502, MAPE: 0.06684, reconstruction Loss : 0.66598.
+This epoch cost 0.204s.
+This epoch cost 0.228s.
+This epoch cost 0.223s.
+This epoch cost 0.226s.
+This epoch cost 0.236s.
+This epoch cost 0.2s.
+This epoch cost 0.224s.
+This epoch cost 0.202s.
+This epoch cost 0.204s.
+This epoch cost 0.198s.
+This epoch cost 0.215s.
+This epoch cost 0.2s.
+This epoch cost 0.209s.
+This epoch cost 0.224s.
+This epoch cost 0.221s.
+This epoch cost 0.223s.
+This epoch cost 0.214s.
+This epoch cost 0.209s.
+This epoch cost 0.236s.
+This epoch cost 0.214s.
+This epoch cost 0.25s.
+This epoch cost 0.221s.
+This epoch cost 0.319s.
+This epoch cost 0.217s.
+This epoch cost 0.216s.
+----------------------
+Epochs 1075/3000
+in meta-training   Unnormed MSE : 20.68873, RMSE : 4.33551, MAE : 2.41522, MAPE: 0.08738, reconstruction Loss : 1.64733.
+This epoch cost 0.213s.
+This epoch cost 0.202s.
+This epoch cost 0.205s.
+This epoch cost 0.229s.
+This epoch cost 0.214s.
+This epoch cost 0.248s.
+This epoch cost 0.208s.
+This epoch cost 0.2s.
+This epoch cost 0.197s.
+This epoch cost 0.216s.
+This epoch cost 0.242s.
+This epoch cost 0.208s.
+This epoch cost 0.197s.
+This epoch cost 0.209s.
+This epoch cost 0.203s.
+This epoch cost 0.204s.
+This epoch cost 0.196s.
+This epoch cost 0.205s.
+This epoch cost 0.239s.
+This epoch cost 0.228s.
+This epoch cost 0.224s.
+This epoch cost 0.207s.
+This epoch cost 0.214s.
+This epoch cost 0.2s.
+This epoch cost 0.224s.
+----------------------
+Epochs 1100/3000
+in meta-training   Unnormed MSE : 13.60246, RMSE : 3.62946, MAE : 2.10895, MAPE: 0.07489, reconstruction Loss : 1.36638.
+This epoch cost 0.209s.
+This epoch cost 0.215s.
+This epoch cost 0.231s.
+This epoch cost 0.251s.
+This epoch cost 0.208s.
+This epoch cost 0.225s.
+This epoch cost 0.22s.
+This epoch cost 0.24s.
+This epoch cost 0.219s.
+This epoch cost 0.227s.
+This epoch cost 0.221s.
+This epoch cost 0.209s.
+This epoch cost 0.203s.
+This epoch cost 0.218s.
+This epoch cost 0.21s.
+This epoch cost 0.241s.
+This epoch cost 0.208s.
+This epoch cost 0.217s.
+This epoch cost 0.216s.
+This epoch cost 0.212s.
+This epoch cost 0.222s.
+This epoch cost 0.213s.
+This epoch cost 0.21s.
+This epoch cost 0.238s.
+This epoch cost 0.211s.
+----------------------
+Epochs 1125/3000
+in meta-training   Unnormed MSE : 17.12661, RMSE : 3.67937, MAE : 2.06131, MAPE: 0.07085, reconstruction Loss : 0.71161.
+This epoch cost 0.205s.
+This epoch cost 0.234s.
+This epoch cost 0.204s.
+This epoch cost 0.217s.
+This epoch cost 0.209s.
+This epoch cost 0.228s.
+This epoch cost 0.223s.
+This epoch cost 0.203s.
+This epoch cost 0.209s.
+This epoch cost 0.22s.
+This epoch cost 0.214s.
+This epoch cost 0.201s.
+This epoch cost 0.201s.
+This epoch cost 0.202s.
+This epoch cost 0.202s.
+This epoch cost 0.241s.
+This epoch cost 0.222s.
+This epoch cost 0.212s.
+This epoch cost 0.203s.
+This epoch cost 0.213s.
+This epoch cost 0.23s.
+This epoch cost 0.213s.
+This epoch cost 0.221s.
+This epoch cost 0.264s.
+This epoch cost 0.208s.
+----------------------
+Epochs 1150/3000
+in meta-training   Unnormed MSE : 21.09834, RMSE : 4.18960, MAE : 2.31868, MAPE: 0.07988, reconstruction Loss : 1.07771.
+This epoch cost 0.211s.
+This epoch cost 0.207s.
+This epoch cost 0.274s.
+This epoch cost 0.22s.
+This epoch cost 0.23s.
+This epoch cost 0.208s.
+This epoch cost 0.213s.
+This epoch cost 0.203s.
+This epoch cost 0.211s.
+This epoch cost 0.209s.
+This epoch cost 0.208s.
+This epoch cost 0.212s.
+This epoch cost 0.21s.
+This epoch cost 0.21s.
+This epoch cost 0.212s.
+This epoch cost 0.217s.
+This epoch cost 0.224s.
+This epoch cost 0.213s.
+This epoch cost 0.226s.
+This epoch cost 0.203s.
+This epoch cost 0.22s.
+This epoch cost 0.195s.
+This epoch cost 0.195s.
+This epoch cost 0.21s.
+This epoch cost 0.206s.
+----------------------
+Epochs 1175/3000
+in meta-training   Unnormed MSE : 20.49349, RMSE : 4.34961, MAE : 2.41944, MAPE: 0.08769, reconstruction Loss : 1.66950.
+This epoch cost 0.204s.
+This epoch cost 0.243s.
+This epoch cost 0.241s.
+This epoch cost 0.24s.
+This epoch cost 0.232s.
+This epoch cost 0.22s.
+This epoch cost 0.205s.
+This epoch cost 0.239s.
+This epoch cost 0.217s.
+This epoch cost 0.231s.
+This epoch cost 0.209s.
+This epoch cost 0.212s.
+This epoch cost 0.202s.
+This epoch cost 0.229s.
+This epoch cost 0.212s.
+This epoch cost 0.2s.
+This epoch cost 0.232s.
+This epoch cost 0.197s.
+This epoch cost 0.199s.
+This epoch cost 0.207s.
+This epoch cost 0.23s.
+This epoch cost 0.237s.
+This epoch cost 0.2s.
+This epoch cost 0.2s.
+This epoch cost 0.203s.
+----------------------
+Epochs 1200/3000
+in meta-training   Unnormed MSE : 15.26266, RMSE : 3.80767, MAE : 2.19719, MAPE: 0.07749, reconstruction Loss : 1.46112.
+This epoch cost 0.203s.
+This epoch cost 0.199s.
+This epoch cost 0.204s.
+This epoch cost 0.26s.
+This epoch cost 0.212s.
+This epoch cost 0.201s.
+This epoch cost 0.219s.
+This epoch cost 0.216s.
+This epoch cost 0.2s.
+This epoch cost 0.209s.
+This epoch cost 0.204s.
+This epoch cost 0.219s.
+This epoch cost 0.231s.
+This epoch cost 0.237s.
+This epoch cost 0.216s.
+This epoch cost 0.226s.
+This epoch cost 0.221s.
+This epoch cost 0.231s.
+This epoch cost 0.208s.
+This epoch cost 0.222s.
+This epoch cost 0.233s.
+This epoch cost 0.216s.
+This epoch cost 0.216s.
+This epoch cost 0.205s.
+This epoch cost 0.217s.
+----------------------
+Epochs 1225/3000
+in meta-training   Unnormed MSE : 11.51886, RMSE : 3.11169, MAE : 1.82257, MAPE: 0.06315, reconstruction Loss : 0.59387.
+This epoch cost 0.207s.
+This epoch cost 0.231s.
+This epoch cost 0.245s.
+This epoch cost 0.216s.
+This epoch cost 0.211s.
+This epoch cost 0.238s.
+This epoch cost 0.222s.
+This epoch cost 0.227s.
+This epoch cost 0.212s.
+This epoch cost 0.215s.
+This epoch cost 0.217s.
+This epoch cost 0.241s.
+This epoch cost 0.243s.
+This epoch cost 0.246s.
+This epoch cost 0.226s.
+This epoch cost 0.213s.
+This epoch cost 0.241s.
+This epoch cost 0.246s.
+This epoch cost 0.219s.
+This epoch cost 0.227s.
+This epoch cost 0.2s.
+This epoch cost 0.214s.
+This epoch cost 0.209s.
+This epoch cost 0.221s.
+This epoch cost 0.225s.
+----------------------
+Epochs 1250/3000
+in meta-training   Unnormed MSE : 18.73993, RMSE : 3.78250, MAE : 2.08632, MAPE: 0.07135, reconstruction Loss : 0.74275.
+This epoch cost 0.235s.
+This epoch cost 0.201s.
+This epoch cost 0.235s.
+This epoch cost 0.216s.
+This epoch cost 0.22s.
+This epoch cost 0.212s.
+This epoch cost 0.234s.
+This epoch cost 0.206s.
+This epoch cost 0.209s.
+This epoch cost 0.214s.
+This epoch cost 0.199s.
+This epoch cost 0.212s.
+This epoch cost 0.27s.
+This epoch cost 0.211s.
+This epoch cost 0.214s.
+This epoch cost 0.214s.
+This epoch cost 0.217s.
+This epoch cost 0.227s.
+This epoch cost 0.212s.
+This epoch cost 0.218s.
+This epoch cost 0.204s.
+This epoch cost 0.207s.
+This epoch cost 0.236s.
+This epoch cost 0.23s.
+This epoch cost 0.238s.
+----------------------
+Epochs 1275/3000
+in meta-training   Unnormed MSE : 21.22321, RMSE : 4.26695, MAE : 2.40734, MAPE: 0.08470, reconstruction Loss : 1.27907.
+This epoch cost 0.206s.
+This epoch cost 0.215s.
+This epoch cost 0.235s.
+This epoch cost 0.218s.
+This epoch cost 0.221s.
+This epoch cost 0.228s.
+This epoch cost 0.222s.
+This epoch cost 0.25s.
+This epoch cost 0.233s.
+This epoch cost 0.223s.
+This epoch cost 0.217s.
+This epoch cost 0.208s.
+This epoch cost 0.21s.
+This epoch cost 0.218s.
+This epoch cost 0.216s.
+This epoch cost 0.224s.
+This epoch cost 0.246s.
+This epoch cost 0.209s.
+This epoch cost 0.222s.
+This epoch cost 0.209s.
+This epoch cost 0.222s.
+This epoch cost 0.206s.
+This epoch cost 0.214s.
+This epoch cost 0.207s.
+This epoch cost 0.21s.
+----------------------
+Epochs 1300/3000
+in meta-training   Unnormed MSE : 15.74677, RMSE : 3.96015, MAE : 2.35563, MAPE: 0.08661, reconstruction Loss : 2.03893.
+This epoch cost 0.247s.
+This epoch cost 0.233s.
+This epoch cost 0.236s.
+This epoch cost 0.228s.
+This epoch cost 0.217s.
+This epoch cost 0.236s.
+This epoch cost 0.2s.
+This epoch cost 0.2s.
+This epoch cost 0.226s.
+This epoch cost 0.223s.
+This epoch cost 0.217s.
+This epoch cost 0.229s.
+This epoch cost 0.207s.
+This epoch cost 0.2s.
+This epoch cost 0.218s.
+This epoch cost 0.202s.
+This epoch cost 0.216s.
+This epoch cost 0.2s.
+This epoch cost 0.212s.
+This epoch cost 0.218s.
+This epoch cost 0.227s.
+This epoch cost 0.246s.
+This epoch cost 0.256s.
+This epoch cost 0.218s.
+This epoch cost 0.206s.
+----------------------
+Epochs 1325/3000
+in meta-training   Unnormed MSE : 17.45483, RMSE : 3.86592, MAE : 2.13733, MAPE: 0.07665, reconstruction Loss : 1.01578.
+This epoch cost 0.222s.
+This epoch cost 0.226s.
+This epoch cost 0.208s.
+This epoch cost 0.229s.
+This epoch cost 0.215s.
+This epoch cost 0.208s.
+This epoch cost 0.213s.
+This epoch cost 0.235s.
+This epoch cost 0.213s.
+This epoch cost 0.214s.
+This epoch cost 0.221s.
+This epoch cost 0.198s.
+This epoch cost 0.211s.
+This epoch cost 0.204s.
+This epoch cost 0.205s.
+This epoch cost 0.202s.
+This epoch cost 0.21s.
+This epoch cost 0.201s.
+This epoch cost 0.206s.
+This epoch cost 0.222s.
+This epoch cost 0.218s.
+This epoch cost 0.231s.
+This epoch cost 0.209s.
+This epoch cost 0.245s.
+This epoch cost 0.231s.
+----------------------
+Epochs 1350/3000
+in meta-training   Unnormed MSE : 20.09157, RMSE : 4.03975, MAE : 2.23531, MAPE: 0.08048, reconstruction Loss : 0.80789.
+This epoch cost 0.205s.
+This epoch cost 0.231s.
+This epoch cost 0.197s.
+This epoch cost 0.209s.
+This epoch cost 0.247s.
+This epoch cost 0.271s.
+This epoch cost 0.202s.
+This epoch cost 0.248s.
+This epoch cost 0.203s.
+This epoch cost 0.221s.
+This epoch cost 0.225s.
+This epoch cost 0.23s.
+This epoch cost 0.197s.
+This epoch cost 0.216s.
+This epoch cost 0.203s.
+This epoch cost 0.231s.
+This epoch cost 0.202s.
+This epoch cost 0.23s.
+This epoch cost 0.237s.
+This epoch cost 0.219s.
+This epoch cost 0.204s.
+This epoch cost 0.232s.
+This epoch cost 0.216s.
+This epoch cost 0.223s.
+This epoch cost 0.215s.
+----------------------
+Epochs 1375/3000
+in meta-training   Unnormed MSE : 19.87977, RMSE : 3.98906, MAE : 2.26749, MAPE: 0.07367, reconstruction Loss : 0.81466.
+This epoch cost 0.205s.
+This epoch cost 0.228s.
+This epoch cost 0.202s.
+This epoch cost 0.209s.
+This epoch cost 0.221s.
+This epoch cost 0.24s.
+This epoch cost 0.2s.
+This epoch cost 0.199s.
+This epoch cost 0.211s.
+This epoch cost 0.205s.
+This epoch cost 0.21s.
+This epoch cost 0.219s.
+This epoch cost 0.236s.
+This epoch cost 0.212s.
+This epoch cost 0.207s.
+This epoch cost 0.205s.
+This epoch cost 0.199s.
+This epoch cost 0.235s.
+This epoch cost 0.22s.
+This epoch cost 0.213s.
+This epoch cost 0.202s.
+This epoch cost 0.212s.
+This epoch cost 0.218s.
+This epoch cost 0.222s.
+This epoch cost 0.219s.
+----------------------
+Epochs 1400/3000
+in meta-training   Unnormed MSE : 19.51383, RMSE : 4.18762, MAE : 2.28323, MAPE: 0.08294, reconstruction Loss : 1.32063.
+This epoch cost 0.205s.
+This epoch cost 0.201s.
+This epoch cost 0.203s.
+This epoch cost 0.224s.
+This epoch cost 0.216s.
+This epoch cost 0.22s.
+This epoch cost 0.247s.
+This epoch cost 0.237s.
+This epoch cost 0.225s.
+This epoch cost 0.203s.
+This epoch cost 0.231s.
+This epoch cost 0.201s.
+This epoch cost 0.211s.
+This epoch cost 0.212s.
+This epoch cost 0.232s.
+This epoch cost 0.21s.
+This epoch cost 0.234s.
+This epoch cost 0.235s.
+This epoch cost 0.202s.
+This epoch cost 0.296s.
+This epoch cost 0.21s.
+This epoch cost 0.208s.
+This epoch cost 0.206s.
+This epoch cost 0.209s.
+This epoch cost 0.228s.
+----------------------
+Epochs 1425/3000
+in meta-training   Unnormed MSE : 17.12959, RMSE : 3.64076, MAE : 1.99945, MAPE: 0.06577, reconstruction Loss : 0.57737.
+This epoch cost 0.223s.
+This epoch cost 0.22s.
+This epoch cost 0.212s.
+This epoch cost 0.212s.
+This epoch cost 0.199s.
+This epoch cost 0.227s.
+This epoch cost 0.207s.
+This epoch cost 0.227s.
+This epoch cost 0.255s.
+This epoch cost 0.215s.
+This epoch cost 0.224s.
+This epoch cost 0.22s.
+This epoch cost 0.224s.
+This epoch cost 0.262s.
+This epoch cost 0.2s.
+This epoch cost 0.225s.
+This epoch cost 0.204s.
+This epoch cost 0.216s.
+This epoch cost 0.24s.
+This epoch cost 0.22s.
+This epoch cost 0.211s.
+This epoch cost 0.215s.
+This epoch cost 0.221s.
+This epoch cost 0.213s.
+This epoch cost 0.209s.
+----------------------
+Epochs 1450/3000
+in meta-training   Unnormed MSE : 17.32102, RMSE : 3.62507, MAE : 1.94440, MAPE: 0.07115, reconstruction Loss : 0.45841.
+This epoch cost 0.203s.
+This epoch cost 0.211s.
+This epoch cost 0.257s.
+This epoch cost 0.201s.
+This epoch cost 0.213s.
+This epoch cost 0.205s.
+This epoch cost 0.226s.
+This epoch cost 0.198s.
+This epoch cost 0.214s.
+This epoch cost 0.22s.
+This epoch cost 0.247s.
+This epoch cost 0.246s.
+This epoch cost 0.237s.
+This epoch cost 0.235s.
+This epoch cost 0.271s.
+This epoch cost 0.211s.
+This epoch cost 0.221s.
+This epoch cost 0.21s.
+This epoch cost 0.242s.
+This epoch cost 0.223s.
+This epoch cost 0.205s.
+This epoch cost 0.204s.
+This epoch cost 0.208s.
+This epoch cost 0.201s.
+This epoch cost 0.23s.
+----------------------
+Epochs 1475/3000
+in meta-training   Unnormed MSE : 17.30772, RMSE : 3.61762, MAE : 1.99982, MAPE: 0.06552, reconstruction Loss : 0.49110.
+This epoch cost 0.21s.
+This epoch cost 0.212s.
+This epoch cost 0.236s.
+This epoch cost 0.208s.
+This epoch cost 0.213s.
+This epoch cost 0.223s.
+This epoch cost 0.207s.
+This epoch cost 0.225s.
+This epoch cost 0.233s.
+This epoch cost 0.203s.
+This epoch cost 0.244s.
+This epoch cost 0.216s.
+This epoch cost 0.221s.
+This epoch cost 0.212s.
+This epoch cost 0.203s.
+This epoch cost 0.223s.
+This epoch cost 0.227s.
+This epoch cost 0.21s.
+This epoch cost 0.207s.
+This epoch cost 0.2s.
+This epoch cost 0.21s.
+This epoch cost 0.252s.
+This epoch cost 0.214s.
+This epoch cost 0.224s.
+This epoch cost 0.215s.
+----------------------
+Epochs 1500/3000
+in meta-training   Unnormed MSE : 21.31878, RMSE : 4.26399, MAE : 2.44204, MAPE: 0.08450, reconstruction Loss : 1.29798.
+This epoch cost 0.255s.
+This epoch cost 0.23s.
+This epoch cost 0.221s.
+This epoch cost 0.222s.
+This epoch cost 0.204s.
+This epoch cost 0.2s.
+This epoch cost 0.21s.
+This epoch cost 0.207s.
+This epoch cost 0.202s.
+This epoch cost 0.21s.
+This epoch cost 0.218s.
+This epoch cost 0.228s.
+This epoch cost 0.213s.
+This epoch cost 0.208s.
+This epoch cost 0.214s.
+This epoch cost 0.203s.
+This epoch cost 0.222s.
+This epoch cost 0.264s.
+This epoch cost 0.223s.
+This epoch cost 0.214s.
+This epoch cost 0.227s.
+This epoch cost 0.214s.
+This epoch cost 0.229s.
+This epoch cost 0.237s.
+This epoch cost 0.224s.
+----------------------
+Epochs 1525/3000
+in meta-training   Unnormed MSE : 11.80528, RMSE : 3.26740, MAE : 1.94803, MAPE: 0.06694, reconstruction Loss : 0.91143.
+This epoch cost 0.216s.
+This epoch cost 0.22s.
+This epoch cost 0.212s.
+This epoch cost 0.23s.
+This epoch cost 0.207s.
+This epoch cost 0.217s.
+This epoch cost 0.225s.
+This epoch cost 0.228s.
+This epoch cost 0.201s.
+This epoch cost 0.205s.
+This epoch cost 0.202s.
+This epoch cost 0.218s.
+This epoch cost 0.209s.
+This epoch cost 0.196s.
+This epoch cost 0.202s.
+This epoch cost 0.206s.
+This epoch cost 0.221s.
+This epoch cost 0.215s.
+This epoch cost 0.197s.
+This epoch cost 0.216s.
+This epoch cost 0.208s.
+This epoch cost 0.218s.
+This epoch cost 0.195s.
+This epoch cost 0.201s.
+This epoch cost 0.214s.
+----------------------
+Epochs 1550/3000
+in meta-training   Unnormed MSE : 24.28694, RMSE : 4.31451, MAE : 2.39866, MAPE: 0.08470, reconstruction Loss : 0.83298.
+This epoch cost 0.22s.
+This epoch cost 0.216s.
+This epoch cost 0.21s.
+This epoch cost 0.211s.
+This epoch cost 0.214s.
+This epoch cost 0.225s.
+This epoch cost 0.214s.
+This epoch cost 0.203s.
+This epoch cost 0.211s.
+This epoch cost 0.209s.
+This epoch cost 0.244s.
+This epoch cost 0.235s.
+This epoch cost 0.208s.
+This epoch cost 0.207s.
+This epoch cost 0.237s.
+This epoch cost 0.229s.
+This epoch cost 0.203s.
+This epoch cost 0.225s.
+This epoch cost 0.196s.
+This epoch cost 0.203s.
+This epoch cost 0.196s.
+This epoch cost 0.224s.
+This epoch cost 0.231s.
+This epoch cost 0.207s.
+This epoch cost 0.238s.
+----------------------
+Epochs 1575/3000
+in meta-training   Unnormed MSE : 16.44948, RMSE : 3.46804, MAE : 1.86566, MAPE: 0.06587, reconstruction Loss : 0.38745.
+This epoch cost 0.227s.
+This epoch cost 0.207s.
+This epoch cost 0.215s.
+This epoch cost 0.208s.
+This epoch cost 0.201s.
+This epoch cost 0.228s.
+This epoch cost 0.203s.
+This epoch cost 0.2s.
+This epoch cost 0.206s.
+This epoch cost 0.209s.
+This epoch cost 0.219s.
+This epoch cost 0.219s.
+This epoch cost 0.215s.
+This epoch cost 0.22s.
+This epoch cost 0.207s.
+This epoch cost 0.209s.
+This epoch cost 0.232s.
+This epoch cost 0.237s.
+This epoch cost 0.223s.
+This epoch cost 0.197s.
+This epoch cost 0.231s.
+This epoch cost 0.27s.
+This epoch cost 0.211s.
+This epoch cost 0.204s.
+This epoch cost 0.207s.
+----------------------
+Epochs 1600/3000
+in meta-training   Unnormed MSE : 13.84882, RMSE : 3.55717, MAE : 2.07106, MAPE: 0.07050, reconstruction Loss : 1.09743.
+This epoch cost 0.225s.
+This epoch cost 0.225s.
+This epoch cost 0.201s.
+This epoch cost 0.202s.
+This epoch cost 0.211s.
+This epoch cost 0.202s.
+This epoch cost 0.219s.
+This epoch cost 0.203s.
+This epoch cost 0.205s.
+This epoch cost 0.202s.
+This epoch cost 0.237s.
+This epoch cost 0.216s.
+This epoch cost 0.215s.
+This epoch cost 0.225s.
+This epoch cost 0.211s.
+This epoch cost 0.231s.
+This epoch cost 0.208s.
+This epoch cost 0.213s.
+This epoch cost 0.209s.
+This epoch cost 0.248s.
+This epoch cost 0.206s.
+This epoch cost 0.199s.
+This epoch cost 0.222s.
+This epoch cost 0.287s.
+This epoch cost 0.208s.
+----------------------
+Epochs 1625/3000
+in meta-training   Unnormed MSE : 9.75008, RMSE : 2.79703, MAE : 1.63431, MAPE: 0.05700, reconstruction Loss : 0.37545.
+This epoch cost 0.225s.
+This epoch cost 0.226s.
+This epoch cost 0.201s.
+This epoch cost 0.237s.
+This epoch cost 0.217s.
+This epoch cost 0.223s.
+This epoch cost 0.21s.
+This epoch cost 0.202s.
+This epoch cost 0.217s.
+This epoch cost 0.237s.
+This epoch cost 0.21s.
+This epoch cost 0.223s.
+This epoch cost 0.199s.
+This epoch cost 0.224s.
+This epoch cost 0.227s.
+This epoch cost 0.228s.
+This epoch cost 0.216s.
+This epoch cost 0.241s.
+This epoch cost 0.264s.
+This epoch cost 0.232s.
+This epoch cost 0.235s.
+This epoch cost 0.214s.
+This epoch cost 0.22s.
+This epoch cost 0.227s.
+This epoch cost 0.224s.
+----------------------
+Epochs 1650/3000
+in meta-training   Unnormed MSE : 20.27544, RMSE : 3.94530, MAE : 2.22958, MAPE: 0.07268, reconstruction Loss : 0.60757.
+This epoch cost 0.215s.
+This epoch cost 0.211s.
+This epoch cost 0.2s.
+This epoch cost 0.204s.
+This epoch cost 0.208s.
+This epoch cost 0.199s.
+This epoch cost 0.211s.
+This epoch cost 0.241s.
+This epoch cost 0.234s.
+This epoch cost 0.22s.
+This epoch cost 0.205s.
+This epoch cost 0.204s.
+This epoch cost 0.21s.
+This epoch cost 0.206s.
+This epoch cost 0.207s.
+This epoch cost 0.207s.
+This epoch cost 0.202s.
+This epoch cost 0.211s.
+This epoch cost 0.219s.
+This epoch cost 0.225s.
+This epoch cost 0.209s.
+This epoch cost 0.217s.
+This epoch cost 0.231s.
+This epoch cost 0.207s.
+This epoch cost 0.214s.
+----------------------
+Epochs 1675/3000
+in meta-training   Unnormed MSE : 22.07390, RMSE : 4.38182, MAE : 2.53726, MAPE: 0.08753, reconstruction Loss : 1.47156.
+This epoch cost 0.215s.
+This epoch cost 0.204s.
+This epoch cost 0.215s.
+This epoch cost 0.26s.
+This epoch cost 0.231s.
+This epoch cost 0.232s.
+This epoch cost 0.21s.
+This epoch cost 0.211s.
+This epoch cost 0.21s.
+This epoch cost 0.217s.
+This epoch cost 0.237s.
+This epoch cost 0.207s.
+This epoch cost 0.212s.
+This epoch cost 0.213s.
+This epoch cost 0.214s.
+This epoch cost 0.273s.
+This epoch cost 0.199s.
+This epoch cost 0.202s.
+This epoch cost 0.219s.
+This epoch cost 0.199s.
+This epoch cost 0.21s.
+This epoch cost 0.206s.
+This epoch cost 0.21s.
+This epoch cost 0.22s.
+This epoch cost 0.228s.
+----------------------
+Epochs 1700/3000
+in meta-training   Unnormed MSE : 11.50764, RMSE : 3.03578, MAE : 1.73769, MAPE: 0.06298, reconstruction Loss : 0.41347.
+This epoch cost 0.224s.
+This epoch cost 0.206s.
+This epoch cost 0.219s.
+This epoch cost 0.242s.
+This epoch cost 0.261s.
+This epoch cost 0.252s.
+This epoch cost 0.225s.
+This epoch cost 0.207s.
+This epoch cost 0.23s.
+This epoch cost 0.209s.
+This epoch cost 0.2s.
+This epoch cost 0.207s.
+This epoch cost 0.212s.
+This epoch cost 0.236s.
+This epoch cost 0.196s.
+This epoch cost 0.229s.
+This epoch cost 0.207s.
+This epoch cost 0.25s.
+This epoch cost 0.219s.
+This epoch cost 0.197s.
+This epoch cost 0.212s.
+This epoch cost 0.228s.
+This epoch cost 0.218s.
+This epoch cost 0.212s.
+This epoch cost 0.219s.
+----------------------
+Epochs 1725/3000
+in meta-training   Unnormed MSE : 20.13182, RMSE : 3.79796, MAE : 2.04782, MAPE: 0.07033, reconstruction Loss : 0.34816.
+This epoch cost 0.2s.
+This epoch cost 0.202s.
+This epoch cost 0.196s.
+This epoch cost 0.224s.
+This epoch cost 0.225s.
+This epoch cost 0.248s.
+This epoch cost 0.216s.
+This epoch cost 0.256s.
+This epoch cost 0.207s.
+This epoch cost 0.217s.
+This epoch cost 0.199s.
+This epoch cost 0.218s.
+This epoch cost 0.221s.
+This epoch cost 0.231s.
+This epoch cost 0.2s.
+This epoch cost 0.203s.
+This epoch cost 0.215s.
+This epoch cost 0.225s.
+This epoch cost 0.229s.
+This epoch cost 0.239s.
+This epoch cost 0.224s.
+This epoch cost 0.297s.
+This epoch cost 0.249s.
+This epoch cost 0.247s.
+This epoch cost 0.222s.
+----------------------
+Epochs 1750/3000
+in meta-training   Unnormed MSE : 19.61645, RMSE : 4.17574, MAE : 2.29845, MAPE: 0.08225, reconstruction Loss : 1.24138.
+This epoch cost 0.225s.
+This epoch cost 0.225s.
+This epoch cost 0.235s.
+This epoch cost 0.237s.
+This epoch cost 0.22s.
+This epoch cost 0.241s.
+This epoch cost 0.202s.
+This epoch cost 0.221s.
+This epoch cost 0.208s.
+This epoch cost 0.21s.
+This epoch cost 0.22s.
+This epoch cost 0.243s.
+This epoch cost 0.222s.
+This epoch cost 0.242s.
+This epoch cost 0.211s.
+This epoch cost 0.209s.
+This epoch cost 0.211s.
+This epoch cost 0.215s.
+This epoch cost 0.247s.
+This epoch cost 0.236s.
+This epoch cost 0.199s.
+This epoch cost 0.224s.
+This epoch cost 0.211s.
+This epoch cost 0.241s.
+This epoch cost 0.215s.
+----------------------
+Epochs 1775/3000
+in meta-training   Unnormed MSE : 19.73410, RMSE : 4.20799, MAE : 2.36328, MAPE: 0.08455, reconstruction Loss : 1.36400.
+This epoch cost 0.22s.
+This epoch cost 0.245s.
+This epoch cost 0.221s.
+This epoch cost 0.23s.
+This epoch cost 0.228s.
+This epoch cost 0.26s.
+This epoch cost 0.212s.
+This epoch cost 0.201s.
+This epoch cost 0.209s.
+This epoch cost 0.205s.
+This epoch cost 0.223s.
+This epoch cost 0.21s.
+This epoch cost 0.205s.
+This epoch cost 0.21s.
+This epoch cost 0.224s.
+This epoch cost 0.202s.
+This epoch cost 0.207s.
+This epoch cost 0.211s.
+This epoch cost 0.208s.
+This epoch cost 0.216s.
+This epoch cost 0.235s.
+This epoch cost 0.243s.
+This epoch cost 0.27s.
+This epoch cost 0.207s.
+This epoch cost 0.223s.
+----------------------
+Epochs 1800/3000
+in meta-training   Unnormed MSE : 29.36720, RMSE : 4.40075, MAE : 2.39639, MAPE: 0.08432, reconstruction Loss : 0.32787.
+This epoch cost 0.22s.
+This epoch cost 0.229s.
+This epoch cost 0.228s.
+This epoch cost 0.223s.
+This epoch cost 0.234s.
+This epoch cost 0.22s.
+This epoch cost 0.219s.
+This epoch cost 0.203s.
+This epoch cost 0.267s.
+This epoch cost 0.254s.
+This epoch cost 0.215s.
+This epoch cost 0.225s.
+This epoch cost 0.257s.
+This epoch cost 0.196s.
+This epoch cost 0.224s.
+This epoch cost 0.217s.
+This epoch cost 0.212s.
+This epoch cost 0.214s.
+This epoch cost 0.211s.
+This epoch cost 0.221s.
+This epoch cost 0.2s.
+This epoch cost 0.205s.
+This epoch cost 0.221s.
+This epoch cost 0.232s.
+This epoch cost 0.21s.
+----------------------
+Epochs 1825/3000
+in meta-training   Unnormed MSE : 19.25058, RMSE : 3.75411, MAE : 2.08342, MAPE: 0.07376, reconstruction Loss : 0.37758.
+This epoch cost 0.253s.
+This epoch cost 0.23s.
+This epoch cost 0.23s.
+This epoch cost 0.23s.
+This epoch cost 0.225s.
+This epoch cost 0.248s.
+This epoch cost 0.249s.
+This epoch cost 0.249s.
+This epoch cost 0.205s.
+This epoch cost 0.21s.
+This epoch cost 0.213s.
+This epoch cost 0.216s.
+This epoch cost 0.231s.
+This epoch cost 0.21s.
+This epoch cost 0.222s.
+This epoch cost 0.205s.
+This epoch cost 0.213s.
+This epoch cost 0.225s.
+This epoch cost 0.217s.
+This epoch cost 0.201s.
+This epoch cost 0.202s.
+This epoch cost 0.214s.
+This epoch cost 0.205s.
+This epoch cost 0.216s.
+This epoch cost 0.23s.
+----------------------
+Epochs 1850/3000
+in meta-training   Unnormed MSE : 19.09241, RMSE : 4.01561, MAE : 2.19717, MAPE: 0.07934, reconstruction Loss : 0.94462.
+This epoch cost 0.224s.
+This epoch cost 0.217s.
+This epoch cost 0.21s.
+This epoch cost 0.224s.
+This epoch cost 0.21s.
+This epoch cost 0.205s.
+This epoch cost 0.213s.
+This epoch cost 0.22s.
+This epoch cost 0.222s.
+This epoch cost 0.203s.
+This epoch cost 0.201s.
+This epoch cost 0.199s.
+This epoch cost 0.212s.
+This epoch cost 0.201s.
+This epoch cost 0.208s.
+This epoch cost 0.207s.
+This epoch cost 0.203s.
+This epoch cost 0.218s.
+This epoch cost 0.202s.
+This epoch cost 0.226s.
+This epoch cost 0.217s.
+This epoch cost 0.215s.
+This epoch cost 0.207s.
+This epoch cost 0.198s.
+This epoch cost 0.218s.
+----------------------
+Epochs 1875/3000
+in meta-training   Unnormed MSE : 20.07176, RMSE : 4.22010, MAE : 2.32156, MAPE: 0.08387, reconstruction Loss : 1.23676.
+This epoch cost 0.225s.
+This epoch cost 0.209s.
+This epoch cost 0.215s.
+This epoch cost 0.212s.
+This epoch cost 0.236s.
+This epoch cost 0.243s.
+This epoch cost 0.24s.
+This epoch cost 0.254s.
+This epoch cost 0.223s.
+This epoch cost 0.207s.
+This epoch cost 0.229s.
+This epoch cost 0.226s.
+This epoch cost 0.256s.
+This epoch cost 0.263s.
+This epoch cost 0.2s.
+This epoch cost 0.202s.
+This epoch cost 0.233s.
+This epoch cost 0.269s.
+This epoch cost 0.209s.
+This epoch cost 0.203s.
+This epoch cost 0.207s.
+This epoch cost 0.212s.
+This epoch cost 0.217s.
+This epoch cost 0.252s.
+This epoch cost 0.213s.
+----------------------
+Epochs 1900/3000
+in meta-training   Unnormed MSE : 19.90010, RMSE : 3.88829, MAE : 2.19619, MAPE: 0.07182, reconstruction Loss : 0.55998.
+This epoch cost 0.217s.
+This epoch cost 0.223s.
+This epoch cost 0.217s.
+This epoch cost 0.218s.
+This epoch cost 0.224s.
+This epoch cost 0.215s.
+This epoch cost 0.208s.
+This epoch cost 0.263s.
+This epoch cost 0.209s.
+This epoch cost 0.215s.
+This epoch cost 0.248s.
+This epoch cost 0.218s.
+This epoch cost 0.211s.
+This epoch cost 0.201s.
+This epoch cost 0.216s.
+This epoch cost 0.223s.
+This epoch cost 0.24s.
+This epoch cost 0.229s.
+This epoch cost 0.214s.
+This epoch cost 0.218s.
+This epoch cost 0.232s.
+This epoch cost 0.234s.
+This epoch cost 0.232s.
+This epoch cost 0.211s.
+This epoch cost 0.212s.
+----------------------
+Epochs 1925/3000
+in meta-training   Unnormed MSE : 19.10114, RMSE : 3.72642, MAE : 2.07314, MAPE: 0.07263, reconstruction Loss : 0.36701.
+This epoch cost 0.231s.
+This epoch cost 0.216s.
+This epoch cost 0.216s.
+This epoch cost 0.229s.
+This epoch cost 0.243s.
+This epoch cost 0.214s.
+This epoch cost 0.215s.
+This epoch cost 0.278s.
+This epoch cost 0.195s.
+This epoch cost 0.199s.
+This epoch cost 0.207s.
+This epoch cost 0.202s.
+This epoch cost 0.207s.
+This epoch cost 0.198s.
+This epoch cost 0.215s.
+This epoch cost 0.223s.
+This epoch cost 0.212s.
+This epoch cost 0.213s.
+This epoch cost 0.224s.
+This epoch cost 0.219s.
+This epoch cost 0.207s.
+This epoch cost 0.228s.
+This epoch cost 0.204s.
+This epoch cost 0.223s.
+This epoch cost 0.231s.
+----------------------
+Epochs 1950/3000
+in meta-training   Unnormed MSE : 19.02507, RMSE : 4.09242, MAE : 2.29515, MAPE: 0.08087, reconstruction Loss : 1.21902.
+This epoch cost 0.232s.
+This epoch cost 0.226s.
+This epoch cost 0.218s.
+This epoch cost 0.203s.
+This epoch cost 0.21s.
+This epoch cost 0.262s.
+This epoch cost 0.209s.
+This epoch cost 0.214s.
+This epoch cost 0.206s.
+This epoch cost 0.205s.
+This epoch cost 0.203s.
+This epoch cost 0.211s.
+This epoch cost 0.213s.
+This epoch cost 0.219s.
+This epoch cost 0.199s.
+This epoch cost 0.217s.
+This epoch cost 0.224s.
+This epoch cost 0.21s.
+This epoch cost 0.208s.
+This epoch cost 0.209s.
+This epoch cost 0.216s.
+This epoch cost 0.225s.
+This epoch cost 0.22s.
+This epoch cost 0.213s.
+This epoch cost 0.219s.
+----------------------
+Epochs 1975/3000
+in meta-training   Unnormed MSE : 22.42510, RMSE : 4.40675, MAE : 2.49251, MAPE: 0.08961, reconstruction Loss : 1.46754.
+This epoch cost 0.211s.
+This epoch cost 0.221s.
+This epoch cost 0.232s.
+This epoch cost 0.233s.
+This epoch cost 0.207s.
+This epoch cost 0.229s.
+This epoch cost 0.221s.
+This epoch cost 0.207s.
+This epoch cost 0.209s.
+This epoch cost 0.211s.
+This epoch cost 0.196s.
+This epoch cost 0.206s.
+This epoch cost 0.199s.
+This epoch cost 0.199s.
+This epoch cost 0.208s.
+This epoch cost 0.197s.
+This epoch cost 0.205s.
+This epoch cost 0.207s.
+This epoch cost 0.206s.
+This epoch cost 0.225s.
+This epoch cost 0.22s.
+This epoch cost 0.217s.
+This epoch cost 0.203s.
+This epoch cost 0.212s.
+This epoch cost 0.231s.
+----------------------
+Epochs 2000/3000
+in meta-training   Unnormed MSE : 21.99438, RMSE : 4.32688, MAE : 2.45456, MAPE: 0.08508, reconstruction Loss : 1.13675.
+This epoch cost 0.213s.
+This epoch cost 0.206s.
+This epoch cost 0.226s.
+This epoch cost 0.209s.
+This epoch cost 0.223s.
+This epoch cost 0.232s.
+This epoch cost 0.202s.
+This epoch cost 0.229s.
+This epoch cost 0.215s.
+This epoch cost 0.224s.
+This epoch cost 0.222s.
+This epoch cost 0.207s.
+This epoch cost 0.239s.
+This epoch cost 0.21s.
+This epoch cost 0.257s.
+This epoch cost 0.21s.
+This epoch cost 0.207s.
+This epoch cost 0.218s.
+This epoch cost 0.212s.
+This epoch cost 0.21s.
+This epoch cost 0.241s.
+This epoch cost 0.222s.
+This epoch cost 0.235s.
+This epoch cost 0.212s.
+This epoch cost 0.223s.
+----------------------
+Epochs 2025/3000
+in meta-training   Unnormed MSE : 16.70832, RMSE : 3.49316, MAE : 1.93029, MAPE: 0.06405, reconstruction Loss : 0.32568.
+This epoch cost 0.208s.
+This epoch cost 0.205s.
+This epoch cost 0.216s.
+This epoch cost 0.203s.
+This epoch cost 0.229s.
+This epoch cost 0.211s.
+This epoch cost 0.23s.
+This epoch cost 0.222s.
+This epoch cost 0.216s.
+This epoch cost 0.222s.
+This epoch cost 0.28s.
+This epoch cost 0.214s.
+This epoch cost 0.208s.
+This epoch cost 0.203s.
+This epoch cost 0.221s.
+This epoch cost 0.221s.
+This epoch cost 0.2s.
+This epoch cost 0.2s.
+This epoch cost 0.213s.
+This epoch cost 0.206s.
+This epoch cost 0.203s.
+This epoch cost 0.211s.
+This epoch cost 0.225s.
+This epoch cost 0.224s.
+This epoch cost 0.217s.
+----------------------
+Epochs 2050/3000
+in meta-training   Unnormed MSE : 21.58505, RMSE : 4.25630, MAE : 2.42850, MAPE: 0.08893, reconstruction Loss : 1.07840.
+This epoch cost 0.219s.
+This epoch cost 0.202s.
+This epoch cost 0.199s.
+This epoch cost 0.206s.
+This epoch cost 0.214s.
+This epoch cost 0.215s.
+This epoch cost 0.244s.
+This epoch cost 0.215s.
+This epoch cost 0.271s.
+This epoch cost 0.204s.
+This epoch cost 0.229s.
+This epoch cost 0.207s.
+This epoch cost 0.202s.
+This epoch cost 0.205s.
+This epoch cost 0.224s.
+This epoch cost 0.232s.
+This epoch cost 0.243s.
+This epoch cost 0.224s.
+This epoch cost 0.206s.
+This epoch cost 0.207s.
+This epoch cost 0.217s.
+This epoch cost 0.228s.
+This epoch cost 0.215s.
+This epoch cost 0.22s.
+This epoch cost 0.226s.
+----------------------
+Epochs 2075/3000
+in meta-training   Unnormed MSE : 21.06749, RMSE : 4.19080, MAE : 2.40378, MAPE: 0.08264, reconstruction Loss : 1.10108.
+This epoch cost 0.21s.
+This epoch cost 0.208s.
+This epoch cost 0.208s.
+This epoch cost 0.204s.
+This epoch cost 0.212s.
+This epoch cost 0.202s.
+This epoch cost 0.23s.
+This epoch cost 0.215s.
+This epoch cost 0.222s.
+This epoch cost 0.21s.
+This epoch cost 0.195s.
+This epoch cost 0.218s.
+This epoch cost 0.226s.
+This epoch cost 0.222s.
+This epoch cost 0.201s.
+This epoch cost 0.225s.
+This epoch cost 0.237s.
+This epoch cost 0.205s.
+This epoch cost 0.202s.
+This epoch cost 0.217s.
+This epoch cost 0.199s.
+This epoch cost 0.197s.
+This epoch cost 0.205s.
+This epoch cost 0.199s.
+This epoch cost 0.204s.
+----------------------
+Epochs 2100/3000
+in meta-training   Unnormed MSE : 11.64678, RMSE : 2.98092, MAE : 1.72074, MAPE: 0.05963, reconstruction Loss : 0.25442.
+This epoch cost 0.208s.
+This epoch cost 0.21s.
+This epoch cost 0.206s.
+This epoch cost 0.221s.
+This epoch cost 0.254s.
+This epoch cost 0.225s.
+This epoch cost 0.225s.
+This epoch cost 0.214s.
+This epoch cost 0.212s.
+This epoch cost 0.21s.
+This epoch cost 0.213s.
+This epoch cost 0.205s.
+This epoch cost 0.2s.
+This epoch cost 0.206s.
+This epoch cost 0.22s.
+This epoch cost 0.219s.
+This epoch cost 0.289s.
+This epoch cost 0.211s.
+This epoch cost 0.219s.
+This epoch cost 0.255s.
+This epoch cost 0.218s.
+This epoch cost 0.218s.
+This epoch cost 0.216s.
+This epoch cost 0.206s.
+This epoch cost 0.221s.
+----------------------
+Epochs 2125/3000
+in meta-training   Unnormed MSE : 20.89588, RMSE : 3.95156, MAE : 2.14052, MAPE: 0.07308, reconstruction Loss : 0.53701.
+This epoch cost 0.222s.
+This epoch cost 0.226s.
+This epoch cost 0.21s.
+This epoch cost 0.204s.
+This epoch cost 0.226s.
+This epoch cost 0.229s.
+This epoch cost 0.209s.
+This epoch cost 0.203s.
+This epoch cost 0.207s.
+This epoch cost 0.221s.
+This epoch cost 0.2s.
+This epoch cost 0.224s.
+This epoch cost 0.213s.
+This epoch cost 0.212s.
+This epoch cost 0.204s.
+This epoch cost 0.212s.
+This epoch cost 0.245s.
+This epoch cost 0.218s.
+This epoch cost 0.209s.
+This epoch cost 0.204s.
+This epoch cost 0.212s.
+This epoch cost 0.201s.
+This epoch cost 0.203s.
+This epoch cost 0.197s.
+This epoch cost 0.209s.
+----------------------
+Epochs 2150/3000
+in meta-training   Unnormed MSE : 19.54049, RMSE : 3.68122, MAE : 1.97209, MAPE: 0.06616, reconstruction Loss : 0.25448.
+This epoch cost 0.204s.
+This epoch cost 0.213s.
+This epoch cost 0.26s.
+This epoch cost 0.228s.
+This epoch cost 0.215s.
+This epoch cost 0.209s.
+This epoch cost 0.213s.
+This epoch cost 0.221s.
+This epoch cost 0.204s.
+This epoch cost 0.212s.
+This epoch cost 0.227s.
+This epoch cost 0.214s.
+This epoch cost 0.199s.
+This epoch cost 0.233s.
+This epoch cost 0.256s.
+This epoch cost 0.222s.
+This epoch cost 0.229s.
+This epoch cost 0.21s.
+This epoch cost 0.225s.
+This epoch cost 0.211s.
+This epoch cost 0.206s.
+This epoch cost 0.225s.
+This epoch cost 0.234s.
+This epoch cost 0.264s.
+This epoch cost 0.206s.
+----------------------
+Epochs 2175/3000
+in meta-training   Unnormed MSE : 20.33484, RMSE : 4.28408, MAE : 2.40799, MAPE: 0.08590, reconstruction Loss : 1.50154.
+This epoch cost 0.226s.
+This epoch cost 0.205s.
+This epoch cost 0.225s.
+This epoch cost 0.232s.
+This epoch cost 0.2s.
+This epoch cost 0.215s.
+This epoch cost 0.228s.
+This epoch cost 0.215s.
+This epoch cost 0.195s.
+This epoch cost 0.223s.
+This epoch cost 0.222s.
+This epoch cost 0.221s.
+This epoch cost 0.215s.
+This epoch cost 0.214s.
+This epoch cost 0.218s.
+This epoch cost 0.238s.
+This epoch cost 0.237s.
+This epoch cost 0.292s.
+This epoch cost 0.213s.
+This epoch cost 0.211s.
+This epoch cost 0.23s.
+This epoch cost 0.207s.
+This epoch cost 0.205s.
+This epoch cost 0.229s.
+This epoch cost 0.215s.
+----------------------
+Epochs 2200/3000
+in meta-training   Unnormed MSE : 12.72145, RMSE : 3.55648, MAE : 2.11444, MAPE: 0.07688, reconstruction Loss : 1.66782.
+This epoch cost 0.226s.
+This epoch cost 0.314s.
+This epoch cost 0.215s.
+This epoch cost 0.219s.
+This epoch cost 0.223s.
+This epoch cost 0.202s.
+This epoch cost 0.221s.
+This epoch cost 0.223s.
+This epoch cost 0.198s.
+This epoch cost 0.21s.
+This epoch cost 0.207s.
+This epoch cost 0.218s.
+This epoch cost 0.235s.
+This epoch cost 0.2s.
+This epoch cost 0.213s.
+This epoch cost 0.213s.
+This epoch cost 0.215s.
+This epoch cost 0.202s.
+This epoch cost 0.197s.
+This epoch cost 0.201s.
+This epoch cost 0.212s.
+This epoch cost 0.217s.
+This epoch cost 0.197s.
+This epoch cost 0.206s.
+This epoch cost 0.203s.
+----------------------
+Epochs 2225/3000
+in meta-training   Unnormed MSE : 17.71076, RMSE : 3.74797, MAE : 2.05755, MAPE: 0.07156, reconstruction Loss : 0.62122.
+This epoch cost 0.208s.
+This epoch cost 0.208s.
+This epoch cost 0.21s.
+This epoch cost 0.199s.
+This epoch cost 0.201s.
+This epoch cost 0.2s.
+This epoch cost 0.231s.
+This epoch cost 0.211s.
+This epoch cost 0.208s.
+This epoch cost 0.209s.
+This epoch cost 0.22s.
+This epoch cost 0.215s.
+This epoch cost 0.198s.
+This epoch cost 0.214s.
+This epoch cost 0.209s.
+This epoch cost 0.232s.
+This epoch cost 0.219s.
+This epoch cost 0.23s.
+This epoch cost 0.227s.
+This epoch cost 0.233s.
+This epoch cost 0.239s.
+This epoch cost 0.199s.
+This epoch cost 0.202s.
+This epoch cost 0.202s.
+This epoch cost 0.215s.
+----------------------
+Epochs 2250/3000
+in meta-training   Unnormed MSE : 18.09957, RMSE : 3.79802, MAE : 2.08381, MAPE: 0.07268, reconstruction Loss : 0.67957.
+This epoch cost 0.213s.
+This epoch cost 0.212s.
+This epoch cost 0.207s.
+This epoch cost 0.213s.
+This epoch cost 0.233s.
+This epoch cost 0.205s.
+This epoch cost 0.205s.
+This epoch cost 0.214s.
+This epoch cost 0.224s.
+This epoch cost 0.241s.
+This epoch cost 0.225s.
+This epoch cost 0.223s.
+This epoch cost 0.232s.
+This epoch cost 0.209s.
+This epoch cost 0.233s.
+This epoch cost 0.244s.
+This epoch cost 0.221s.
+This epoch cost 0.218s.
+This epoch cost 0.212s.
+This epoch cost 0.221s.
+This epoch cost 0.223s.
+This epoch cost 0.206s.
+This epoch cost 0.215s.
+This epoch cost 0.21s.
+This epoch cost 0.242s.
+----------------------
+Epochs 2275/3000
+in meta-training   Unnormed MSE : 12.43822, RMSE : 3.19793, MAE : 1.86369, MAPE: 0.06374, reconstruction Loss : 0.49104.
+This epoch cost 0.212s.
+This epoch cost 0.217s.
+This epoch cost 0.233s.
+This epoch cost 0.233s.
+This epoch cost 0.225s.
+This epoch cost 0.206s.
+This epoch cost 0.201s.
+This epoch cost 0.205s.
+This epoch cost 0.205s.
+This epoch cost 0.199s.
+This epoch cost 0.217s.
+This epoch cost 0.221s.
+This epoch cost 0.215s.
+This epoch cost 0.235s.
+This epoch cost 0.249s.
+This epoch cost 0.198s.
+This epoch cost 0.215s.
+This epoch cost 0.236s.
+This epoch cost 0.213s.
+This epoch cost 0.2s.
+This epoch cost 0.244s.
+This epoch cost 0.219s.
+This epoch cost 0.199s.
+This epoch cost 0.209s.
+This epoch cost 0.205s.
+----------------------
+Epochs 2300/3000
+in meta-training   Unnormed MSE : 18.30109, RMSE : 3.64312, MAE : 1.98432, MAPE: 0.07040, reconstruction Loss : 0.29705.
+This epoch cost 0.212s.
+This epoch cost 0.206s.
+This epoch cost 0.209s.
+This epoch cost 0.206s.
+This epoch cost 0.217s.
+This epoch cost 0.204s.
+This epoch cost 0.245s.
+This epoch cost 0.214s.
+This epoch cost 0.216s.
+This epoch cost 0.215s.
+This epoch cost 0.214s.
+This epoch cost 0.244s.
+This epoch cost 0.221s.
+This epoch cost 0.23s.
+This epoch cost 0.216s.
+This epoch cost 0.228s.
+This epoch cost 0.217s.
+This epoch cost 0.218s.
+This epoch cost 0.224s.
+This epoch cost 0.234s.
+This epoch cost 0.244s.
+This epoch cost 0.251s.
+This epoch cost 0.231s.
+This epoch cost 0.2s.
+This epoch cost 0.214s.
+----------------------
+Epochs 2325/3000
+in meta-training   Unnormed MSE : 11.40611, RMSE : 2.98648, MAE : 1.71821, MAPE: 0.06190, reconstruction Loss : 0.34977.
+This epoch cost 0.211s.
+This epoch cost 0.232s.
+This epoch cost 0.2s.
+This epoch cost 0.212s.
+This epoch cost 0.232s.
+This epoch cost 0.216s.
+This epoch cost 0.206s.
+This epoch cost 0.21s.
+This epoch cost 0.253s.
+This epoch cost 0.21s.
+This epoch cost 0.236s.
+This epoch cost 0.229s.
+This epoch cost 0.217s.
+This epoch cost 0.203s.
+This epoch cost 0.214s.
+This epoch cost 0.204s.
+This epoch cost 0.227s.
+This epoch cost 0.206s.
+This epoch cost 0.231s.
+This epoch cost 0.208s.
+This epoch cost 0.217s.
+This epoch cost 0.22s.
+This epoch cost 0.218s.
+This epoch cost 0.224s.
+This epoch cost 0.231s.
+----------------------
+Epochs 2350/3000
+in meta-training   Unnormed MSE : 20.48012, RMSE : 3.90942, MAE : 2.16347, MAPE: 0.07551, reconstruction Loss : 0.51159.
+This epoch cost 0.236s.
+This epoch cost 0.212s.
+This epoch cost 0.201s.
+This epoch cost 0.244s.
+This epoch cost 0.216s.
+This epoch cost 0.234s.
+This epoch cost 0.225s.
+This epoch cost 0.212s.
+This epoch cost 0.233s.
+This epoch cost 0.217s.
+This epoch cost 0.214s.
+This epoch cost 0.215s.
+This epoch cost 0.204s.
+This epoch cost 0.216s.
+This epoch cost 0.222s.
+This epoch cost 0.213s.
+This epoch cost 0.214s.
+This epoch cost 0.201s.
+This epoch cost 0.226s.
+This epoch cost 0.217s.
+This epoch cost 0.217s.
+This epoch cost 0.22s.
+This epoch cost 0.242s.
+This epoch cost 0.214s.
+This epoch cost 0.205s.
+----------------------
+Epochs 2375/3000
+in meta-training   Unnormed MSE : 20.49968, RMSE : 4.10871, MAE : 2.35933, MAPE: 0.07955, reconstruction Loss : 1.00969.
+This epoch cost 0.256s.
+This epoch cost 0.226s.
+This epoch cost 0.211s.
+This epoch cost 0.201s.
+This epoch cost 0.211s.
+This epoch cost 0.201s.
+This epoch cost 0.217s.
+This epoch cost 0.223s.
+This epoch cost 0.244s.
+This epoch cost 0.22s.
+This epoch cost 0.222s.
+This epoch cost 0.199s.
+This epoch cost 0.221s.
+This epoch cost 0.202s.
+This epoch cost 0.207s.
+This epoch cost 0.238s.
+This epoch cost 0.222s.
+This epoch cost 0.214s.
+This epoch cost 0.218s.
+This epoch cost 0.214s.
+This epoch cost 0.211s.
+This epoch cost 0.211s.
+This epoch cost 0.212s.
+This epoch cost 0.217s.
+This epoch cost 0.2s.
+----------------------
+Epochs 2400/3000
+in meta-training   Unnormed MSE : 13.02976, RMSE : 3.13052, MAE : 1.76464, MAPE: 0.05851, reconstruction Loss : 0.28872.
+This epoch cost 0.217s.
+This epoch cost 0.23s.
+This epoch cost 0.256s.
+This epoch cost 0.231s.
+This epoch cost 0.222s.
+This epoch cost 0.227s.
+This epoch cost 0.2s.
+This epoch cost 0.225s.
+This epoch cost 0.206s.
+This epoch cost 0.205s.
+This epoch cost 0.223s.
+This epoch cost 0.216s.
+This epoch cost 0.225s.
+This epoch cost 0.219s.
+This epoch cost 0.2s.
+This epoch cost 0.217s.
+This epoch cost 0.223s.
+This epoch cost 0.218s.
+This epoch cost 0.223s.
+This epoch cost 0.263s.
+This epoch cost 0.209s.
+This epoch cost 0.217s.
+This epoch cost 0.211s.
+This epoch cost 0.214s.
+This epoch cost 0.223s.
+----------------------
+Epochs 2425/3000
+in meta-training   Unnormed MSE : 13.27679, RMSE : 3.17864, MAE : 1.79635, MAPE: 0.06161, reconstruction Loss : 0.30660.
+This epoch cost 0.218s.
+This epoch cost 0.213s.
+This epoch cost 0.227s.
+This epoch cost 0.204s.
+This epoch cost 0.205s.
+This epoch cost 0.199s.
+This epoch cost 0.195s.
+This epoch cost 0.21s.
+This epoch cost 0.22s.
+This epoch cost 0.236s.
+This epoch cost 0.221s.
+This epoch cost 0.216s.
+This epoch cost 0.204s.
+This epoch cost 0.229s.
+This epoch cost 0.245s.
+This epoch cost 0.226s.
+This epoch cost 0.234s.
+This epoch cost 0.214s.
+This epoch cost 0.211s.
+This epoch cost 0.207s.
+This epoch cost 0.219s.
+This epoch cost 0.213s.
+This epoch cost 0.209s.
+This epoch cost 0.209s.
+This epoch cost 0.244s.
+----------------------
+Epochs 2450/3000
+in meta-training   Unnormed MSE : 23.87435, RMSE : 4.02610, MAE : 2.18743, MAPE: 0.07719, reconstruction Loss : 0.32192.
+This epoch cost 0.22s.
+This epoch cost 0.238s.
+This epoch cost 0.218s.
+This epoch cost 0.248s.
+This epoch cost 0.212s.
+This epoch cost 0.212s.
+This epoch cost 0.218s.
+This epoch cost 0.205s.
+This epoch cost 0.203s.
+This epoch cost 0.22s.
+This epoch cost 0.205s.
+This epoch cost 0.22s.
+This epoch cost 0.214s.
+This epoch cost 0.205s.
+This epoch cost 0.206s.
+This epoch cost 0.231s.
+This epoch cost 0.228s.
+This epoch cost 0.225s.
+This epoch cost 0.229s.
+This epoch cost 0.234s.
+This epoch cost 0.238s.
+This epoch cost 0.213s.
+This epoch cost 0.206s.
+This epoch cost 0.216s.
+This epoch cost 0.243s.
+----------------------
+Epochs 2475/3000
+in meta-training   Unnormed MSE : 18.20728, RMSE : 3.67345, MAE : 2.01726, MAPE: 0.07139, reconstruction Loss : 0.36515.
+This epoch cost 0.202s.
+This epoch cost 0.214s.
+This epoch cost 0.211s.
+This epoch cost 0.211s.
+This epoch cost 0.203s.
+This epoch cost 0.222s.
+This epoch cost 0.204s.
+This epoch cost 0.269s.
+This epoch cost 0.209s.
+This epoch cost 0.2s.
+This epoch cost 0.238s.
+This epoch cost 0.213s.
+This epoch cost 0.217s.
+This epoch cost 0.219s.
+This epoch cost 0.208s.
+This epoch cost 0.203s.
+This epoch cost 0.226s.
+This epoch cost 0.223s.
+This epoch cost 0.227s.
+This epoch cost 0.223s.
+This epoch cost 0.216s.
+This epoch cost 0.242s.
+This epoch cost 0.243s.
+This epoch cost 0.228s.
+This epoch cost 0.225s.
+----------------------
+Epochs 2500/3000
+in meta-training   Unnormed MSE : 9.46462, RMSE : 2.80578, MAE : 1.67775, MAPE: 0.05708, reconstruction Loss : 0.46029.
+This epoch cost 0.235s.
+This epoch cost 0.243s.
+This epoch cost 0.235s.
+This epoch cost 0.209s.
+This epoch cost 0.232s.
+This epoch cost 0.224s.
+This epoch cost 0.23s.
+This epoch cost 0.254s.
+This epoch cost 0.234s.
+This epoch cost 0.217s.
+This epoch cost 0.235s.
+This epoch cost 0.203s.
+This epoch cost 0.207s.
+This epoch cost 0.26s.
+This epoch cost 0.235s.
+This epoch cost 0.226s.
+This epoch cost 0.225s.
+This epoch cost 0.263s.
+This epoch cost 0.24s.
+This epoch cost 0.216s.
+This epoch cost 0.221s.
+This epoch cost 0.198s.
+This epoch cost 0.208s.
+This epoch cost 0.222s.
+This epoch cost 0.214s.
+----------------------
+Epochs 2525/3000
+in meta-training   Unnormed MSE : 30.38078, RMSE : 4.85505, MAE : 2.71707, MAPE: 0.09565, reconstruction Loss : 1.15798.
+This epoch cost 0.231s.
+This epoch cost 0.216s.
+This epoch cost 0.219s.
+This epoch cost 0.22s.
+This epoch cost 0.229s.
+This epoch cost 0.221s.
+This epoch cost 0.232s.
+This epoch cost 0.206s.
+This epoch cost 0.265s.
+This epoch cost 0.225s.
+This epoch cost 0.215s.
+This epoch cost 0.202s.
+This epoch cost 0.218s.
+This epoch cost 0.208s.
+This epoch cost 0.201s.
+This epoch cost 0.234s.
+This epoch cost 0.231s.
+This epoch cost 0.209s.
+This epoch cost 0.232s.
+This epoch cost 0.207s.
+This epoch cost 0.217s.
+This epoch cost 0.226s.
+This epoch cost 0.214s.
+This epoch cost 0.2s.
+This epoch cost 0.208s.
+----------------------
+Epochs 2550/3000
+in meta-training   Unnormed MSE : 11.62912, RMSE : 3.10492, MAE : 1.83689, MAPE: 0.06198, reconstruction Loss : 0.50735.
+This epoch cost 0.212s.
+This epoch cost 0.214s.
+This epoch cost 0.227s.
+This epoch cost 0.206s.
+This epoch cost 0.212s.
+This epoch cost 0.199s.
+This epoch cost 0.206s.
+This epoch cost 0.2s.
+This epoch cost 0.227s.
+This epoch cost 0.214s.
+This epoch cost 0.227s.
+This epoch cost 0.251s.
+This epoch cost 0.227s.
+This epoch cost 0.213s.
+This epoch cost 0.232s.
+This epoch cost 0.2s.
+This epoch cost 0.203s.
+This epoch cost 0.225s.
+This epoch cost 0.219s.
+This epoch cost 0.219s.
+This epoch cost 0.244s.
+This epoch cost 0.223s.
+This epoch cost 0.231s.
+This epoch cost 0.248s.
+This epoch cost 0.226s.
+----------------------
+Epochs 2575/3000
+in meta-training   Unnormed MSE : 20.62914, RMSE : 3.82981, MAE : 2.08946, MAPE: 0.07158, reconstruction Loss : 0.34936.
+This epoch cost 0.199s.
+This epoch cost 0.226s.
+This epoch cost 0.256s.
+This epoch cost 0.228s.
+This epoch cost 0.211s.
+This epoch cost 0.218s.
+This epoch cost 0.232s.
+This epoch cost 0.222s.
+This epoch cost 0.231s.
+This epoch cost 0.202s.
+This epoch cost 0.22s.
+This epoch cost 0.22s.
+This epoch cost 0.216s.
+This epoch cost 0.255s.
+This epoch cost 0.238s.
+This epoch cost 0.218s.
+This epoch cost 0.215s.
+This epoch cost 0.205s.
+This epoch cost 0.22s.
+This epoch cost 0.234s.
+This epoch cost 0.203s.
+This epoch cost 0.219s.
+This epoch cost 0.207s.
+This epoch cost 0.214s.
+This epoch cost 0.211s.
+----------------------
+Epochs 2600/3000
+in meta-training   Unnormed MSE : 11.78303, RMSE : 2.99905, MAE : 1.75910, MAPE: 0.05961, reconstruction Loss : 0.27323.
+This epoch cost 0.216s.
+This epoch cost 0.211s.
+This epoch cost 0.208s.
+This epoch cost 0.223s.
+This epoch cost 0.202s.
+This epoch cost 0.215s.
+This epoch cost 0.212s.
+This epoch cost 0.199s.
+This epoch cost 0.216s.
+This epoch cost 0.202s.
+This epoch cost 0.209s.
+This epoch cost 0.204s.
+This epoch cost 0.213s.
+This epoch cost 0.208s.
+This epoch cost 0.22s.
+This epoch cost 0.203s.
+This epoch cost 0.23s.
+This epoch cost 0.224s.
+This epoch cost 0.228s.
+This epoch cost 0.214s.
+This epoch cost 0.206s.
+This epoch cost 0.221s.
+This epoch cost 0.203s.
+This epoch cost 0.205s.
+This epoch cost 0.219s.
+----------------------
+Epochs 2625/3000
+in meta-training   Unnormed MSE : 19.08779, RMSE : 3.79097, MAE : 2.13652, MAPE: 0.07385, reconstruction Loss : 0.48735.
+This epoch cost 0.214s.
+This epoch cost 0.204s.
+This epoch cost 0.198s.
+This epoch cost 0.211s.
+This epoch cost 0.205s.
+This epoch cost 0.2s.
+This epoch cost 0.224s.
+This epoch cost 0.231s.
+This epoch cost 0.213s.
+This epoch cost 0.227s.
+This epoch cost 0.215s.
+This epoch cost 0.214s.
+This epoch cost 0.209s.
+This epoch cost 0.233s.
+This epoch cost 0.221s.
+This epoch cost 0.202s.
+This epoch cost 0.216s.
+This epoch cost 0.221s.
+This epoch cost 0.2s.
+This epoch cost 0.205s.
+This epoch cost 0.202s.
+This epoch cost 0.204s.
+This epoch cost 0.219s.
+This epoch cost 0.21s.
+This epoch cost 0.224s.
+----------------------
+Epochs 2650/3000
+in meta-training   Unnormed MSE : 16.80453, RMSE : 3.48032, MAE : 1.92449, MAPE: 0.06655, reconstruction Loss : 0.31878.
+This epoch cost 0.222s.
+This epoch cost 0.207s.
+This epoch cost 0.206s.
+This epoch cost 0.24s.
+This epoch cost 0.227s.
+This epoch cost 0.246s.
+This epoch cost 0.209s.
+This epoch cost 0.22s.
+This epoch cost 0.238s.
+This epoch cost 0.217s.
+This epoch cost 0.205s.
+This epoch cost 0.208s.
+This epoch cost 0.211s.
+This epoch cost 0.233s.
+This epoch cost 0.246s.
+This epoch cost 0.197s.
+This epoch cost 0.212s.
+This epoch cost 0.223s.
+This epoch cost 0.218s.
+This epoch cost 0.213s.
+This epoch cost 0.221s.
+This epoch cost 0.211s.
+This epoch cost 0.211s.
+This epoch cost 0.234s.
+This epoch cost 0.202s.
+----------------------
+Epochs 2675/3000
+in meta-training   Unnormed MSE : 20.56853, RMSE : 4.35113, MAE : 2.45888, MAPE: 0.08861, reconstruction Loss : 1.64336.
+This epoch cost 0.223s.
+This epoch cost 0.218s.
+This epoch cost 0.227s.
+This epoch cost 0.27s.
+This epoch cost 0.222s.
+This epoch cost 0.234s.
+This epoch cost 0.229s.
+This epoch cost 0.24s.
+This epoch cost 0.236s.
+This epoch cost 0.218s.
+This epoch cost 0.208s.
+This epoch cost 0.209s.
+This epoch cost 0.206s.
+This epoch cost 0.201s.
+This epoch cost 0.199s.
+This epoch cost 0.202s.
+This epoch cost 0.212s.
+This epoch cost 0.197s.
+This epoch cost 0.223s.
+This epoch cost 0.21s.
+This epoch cost 0.21s.
+This epoch cost 0.203s.
+This epoch cost 0.21s.
+This epoch cost 0.215s.
+This epoch cost 0.217s.
+----------------------
+Epochs 2700/3000
+in meta-training   Unnormed MSE : 18.60742, RMSE : 3.90146, MAE : 2.14033, MAPE: 0.07650, reconstruction Loss : 0.74549.
+This epoch cost 0.236s.
+This epoch cost 0.219s.
+This epoch cost 0.209s.
+This epoch cost 0.215s.
+This epoch cost 0.204s.
+This epoch cost 0.215s.
+This epoch cost 0.291s.
+This epoch cost 0.237s.
+This epoch cost 0.235s.
+This epoch cost 0.205s.
+This epoch cost 0.23s.
+This epoch cost 0.221s.
+This epoch cost 0.208s.
+This epoch cost 0.219s.
+This epoch cost 0.229s.
+This epoch cost 0.214s.
+This epoch cost 0.232s.
+This epoch cost 0.219s.
+This epoch cost 0.215s.
+This epoch cost 0.22s.
+This epoch cost 0.207s.
+This epoch cost 0.209s.
+This epoch cost 0.215s.
+This epoch cost 0.205s.
+This epoch cost 0.218s.
+----------------------
+Epochs 2725/3000
+in meta-training   Unnormed MSE : 17.66970, RMSE : 3.57385, MAE : 1.93740, MAPE: 0.07153, reconstruction Loss : 0.38342.
+This epoch cost 0.212s.
+This epoch cost 0.201s.
+This epoch cost 0.203s.
+This epoch cost 0.21s.
+This epoch cost 0.199s.
+This epoch cost 0.214s.
+This epoch cost 0.203s.
+This epoch cost 0.206s.
+This epoch cost 0.209s.
+This epoch cost 0.222s.
+This epoch cost 0.218s.
+This epoch cost 0.231s.
+This epoch cost 0.216s.
+This epoch cost 0.213s.
+This epoch cost 0.198s.
+This epoch cost 0.2s.
+This epoch cost 0.23s.
+This epoch cost 0.224s.
+This epoch cost 0.197s.
+This epoch cost 0.211s.
+This epoch cost 0.212s.
+This epoch cost 0.207s.
+This epoch cost 0.215s.
+This epoch cost 0.229s.
+This epoch cost 0.205s.
+----------------------
+Epochs 2750/3000
+in meta-training   Unnormed MSE : 22.14231, RMSE : 4.36121, MAE : 2.50744, MAPE: 0.08695, reconstruction Loss : 1.32750.
+This epoch cost 0.209s.
+This epoch cost 0.208s.
+This epoch cost 0.224s.
+This epoch cost 0.21s.
+This epoch cost 0.229s.
+This epoch cost 0.223s.
+This epoch cost 0.214s.
+This epoch cost 0.208s.
+This epoch cost 0.223s.
+This epoch cost 0.218s.
+This epoch cost 0.247s.
+This epoch cost 0.22s.
+This epoch cost 0.224s.
+This epoch cost 0.198s.
+This epoch cost 0.206s.
+This epoch cost 0.196s.
+This epoch cost 0.223s.
+This epoch cost 0.213s.
+This epoch cost 0.209s.
+This epoch cost 0.232s.
+This epoch cost 0.229s.
+This epoch cost 0.26s.
+This epoch cost 0.22s.
+This epoch cost 0.211s.
+This epoch cost 0.202s.
+----------------------
+Epochs 2775/3000
+in meta-training   Unnormed MSE : 21.37859, RMSE : 4.12769, MAE : 2.34573, MAPE: 0.08280, reconstruction Loss : 0.78974.
+This epoch cost 0.206s.
+This epoch cost 0.213s.
+This epoch cost 0.223s.
+This epoch cost 0.22s.
+This epoch cost 0.225s.
+This epoch cost 0.219s.
+This epoch cost 0.206s.
+This epoch cost 0.216s.
+This epoch cost 0.23s.
+This epoch cost 0.216s.
+This epoch cost 0.289s.
+This epoch cost 0.216s.
+This epoch cost 0.223s.
+This epoch cost 0.245s.
+This epoch cost 0.2s.
+This epoch cost 0.219s.
+This epoch cost 0.235s.
+This epoch cost 0.198s.
+This epoch cost 0.207s.
+This epoch cost 0.243s.
+This epoch cost 0.214s.
+This epoch cost 0.208s.
+This epoch cost 0.215s.
+This epoch cost 0.203s.
+This epoch cost 0.21s.
+----------------------
+Epochs 2800/3000
+in meta-training   Unnormed MSE : 13.40863, RMSE : 3.14767, MAE : 1.78528, MAPE: 0.05844, reconstruction Loss : 0.24811.
+This epoch cost 0.283s.
+This epoch cost 0.219s.
+This epoch cost 0.233s.
+This epoch cost 0.212s.
+This epoch cost 0.203s.
+This epoch cost 0.21s.
+This epoch cost 0.218s.
+This epoch cost 0.204s.
+This epoch cost 0.224s.
+This epoch cost 0.213s.
+This epoch cost 0.22s.
+This epoch cost 0.208s.
+This epoch cost 0.229s.
+This epoch cost 0.214s.
+This epoch cost 0.229s.
+This epoch cost 0.206s.
+This epoch cost 0.201s.
+This epoch cost 0.21s.
+This epoch cost 0.202s.
+This epoch cost 0.219s.
+This epoch cost 0.214s.
+This epoch cost 0.232s.
+This epoch cost 0.237s.
+This epoch cost 0.226s.
+This epoch cost 0.24s.
+----------------------
+Epochs 2825/3000
+in meta-training   Unnormed MSE : 20.71962, RMSE : 4.03918, MAE : 2.29996, MAPE: 0.07852, reconstruction Loss : 0.73829.
+This epoch cost 0.224s.
+This epoch cost 0.205s.
+This epoch cost 0.2s.
+This epoch cost 0.215s.
+This epoch cost 0.199s.
+This epoch cost 0.22s.
+This epoch cost 0.198s.
+This epoch cost 0.202s.
+This epoch cost 0.208s.
+This epoch cost 0.203s.
+This epoch cost 0.199s.
+This epoch cost 0.212s.
+This epoch cost 0.226s.
+This epoch cost 0.207s.
+This epoch cost 0.219s.
+This epoch cost 0.256s.
+This epoch cost 0.239s.
+This epoch cost 0.224s.
+This epoch cost 0.224s.
+This epoch cost 0.234s.
+This epoch cost 0.215s.
+This epoch cost 0.225s.
+This epoch cost 0.211s.
+This epoch cost 0.231s.
+This epoch cost 0.217s.
+----------------------
+Epochs 2850/3000
+in meta-training   Unnormed MSE : 17.25506, RMSE : 3.50260, MAE : 1.88495, MAPE: 0.06831, reconstruction Loss : 0.23709.
+This epoch cost 0.199s.
+This epoch cost 0.202s.
+This epoch cost 0.207s.
+This epoch cost 0.214s.
+This epoch cost 0.219s.
+This epoch cost 0.201s.
+This epoch cost 0.219s.
+This epoch cost 0.201s.
+This epoch cost 0.244s.
+This epoch cost 0.2s.
+This epoch cost 0.23s.
+This epoch cost 0.214s.
+This epoch cost 0.264s.
+This epoch cost 0.21s.
+This epoch cost 0.218s.
+This epoch cost 0.201s.
+This epoch cost 0.205s.
+This epoch cost 0.251s.
+This epoch cost 0.216s.
+This epoch cost 0.209s.
+This epoch cost 0.234s.
+This epoch cost 0.225s.
+This epoch cost 0.229s.
+This epoch cost 0.213s.
+This epoch cost 0.242s.
+----------------------
+Epochs 2875/3000
+in meta-training   Unnormed MSE : 18.88957, RMSE : 3.65002, MAE : 1.98946, MAPE: 0.07118, reconstruction Loss : 0.27228.
+This epoch cost 0.248s.
+This epoch cost 0.203s.
+This epoch cost 0.202s.
+This epoch cost 0.224s.
+This epoch cost 0.195s.
+This epoch cost 0.212s.
+This epoch cost 0.207s.
+This epoch cost 0.21s.
+This epoch cost 0.215s.
+This epoch cost 0.212s.
+This epoch cost 0.207s.
+This epoch cost 0.215s.
+This epoch cost 0.248s.
+This epoch cost 0.226s.
+This epoch cost 0.209s.
+This epoch cost 0.23s.
+This epoch cost 0.206s.
+This epoch cost 0.223s.
+This epoch cost 0.224s.
+This epoch cost 0.234s.
+This epoch cost 0.207s.
+This epoch cost 0.201s.
+This epoch cost 0.198s.
+This epoch cost 0.242s.
+This epoch cost 0.22s.
+----------------------
+Epochs 2900/3000
+in meta-training   Unnormed MSE : 18.14543, RMSE : 3.55407, MAE : 1.94271, MAPE: 0.06362, reconstruction Loss : 0.20656.
+This epoch cost 0.218s.
+This epoch cost 0.224s.
+This epoch cost 0.204s.
+This epoch cost 0.21s.
+This epoch cost 0.211s.
+This epoch cost 0.213s.
+This epoch cost 0.207s.
+This epoch cost 0.228s.
+This epoch cost 0.226s.
+This epoch cost 0.238s.
+This epoch cost 0.208s.
+This epoch cost 0.231s.
+This epoch cost 0.215s.
+This epoch cost 0.203s.
+This epoch cost 0.209s.
+This epoch cost 0.207s.
+This epoch cost 0.214s.
+This epoch cost 0.207s.
+This epoch cost 0.205s.
+This epoch cost 0.218s.
+This epoch cost 0.232s.
+This epoch cost 0.202s.
+This epoch cost 0.217s.
+This epoch cost 0.195s.
+This epoch cost 0.213s.
+----------------------
+Epochs 2925/3000
+in meta-training   Unnormed MSE : 20.22635, RMSE : 3.74067, MAE : 2.00942, MAPE: 0.06858, reconstruction Loss : 0.23874.
+This epoch cost 0.222s.
+This epoch cost 0.206s.
+This epoch cost 0.199s.
+This epoch cost 0.207s.
+This epoch cost 0.218s.
+This epoch cost 0.208s.
+This epoch cost 0.206s.
+This epoch cost 0.202s.
+This epoch cost 0.219s.
+This epoch cost 0.217s.
+This epoch cost 0.209s.
+This epoch cost 0.205s.
+This epoch cost 0.217s.
+This epoch cost 0.22s.
+This epoch cost 0.212s.
+This epoch cost 0.206s.
+This epoch cost 0.249s.
+This epoch cost 0.216s.
+This epoch cost 0.2s.
+This epoch cost 0.198s.
+This epoch cost 0.208s.
+This epoch cost 0.241s.
+This epoch cost 0.233s.
+This epoch cost 0.205s.
+This epoch cost 0.223s.
+----------------------
+Epochs 2950/3000
+in meta-training   Unnormed MSE : 20.60240, RMSE : 3.78956, MAE : 2.05247, MAPE: 0.07064, reconstruction Loss : 0.25841.
+This epoch cost 0.21s.
+This epoch cost 0.211s.
+This epoch cost 0.217s.
+This epoch cost 0.219s.
+This epoch cost 0.213s.
+This epoch cost 0.203s.
+This epoch cost 0.209s.
+This epoch cost 0.209s.
+This epoch cost 0.197s.
+This epoch cost 0.204s.
+This epoch cost 0.219s.
+This epoch cost 0.229s.
+This epoch cost 0.216s.
+This epoch cost 0.216s.
+This epoch cost 0.208s.
+This epoch cost 0.204s.
+This epoch cost 0.212s.
+This epoch cost 0.205s.
+This epoch cost 0.201s.
+This epoch cost 0.2s.
+This epoch cost 0.205s.
+This epoch cost 0.218s.
+This epoch cost 0.204s.
+This epoch cost 0.248s.
+This epoch cost 0.205s.
+----------------------
+Epochs 2975/3000
+in meta-training   Unnormed MSE : 13.87713, RMSE : 3.43747, MAE : 1.99692, MAPE: 0.06682, reconstruction Loss : 0.70571.
+This epoch cost 0.214s.
+This epoch cost 0.216s.
+This epoch cost 0.276s.
+This epoch cost 0.247s.
+This epoch cost 0.223s.
+This epoch cost 0.249s.
+This epoch cost 0.215s.
+This epoch cost 0.206s.
+This epoch cost 0.209s.
+This epoch cost 0.205s.
+This epoch cost 0.22s.
+This epoch cost 0.198s.
+This epoch cost 0.207s.
+This epoch cost 0.208s.
+This epoch cost 0.208s.
+This epoch cost 0.22s.
+This epoch cost 0.212s.
+This epoch cost 0.201s.
+This epoch cost 0.204s.
+This epoch cost 0.203s.
+This epoch cost 0.197s.
+This epoch cost 0.203s.
+This epoch cost 0.201s.
+This epoch cost 0.208s.
+This epoch cost 0.195s.
+forecasting_model.enc_embedding.value_embedding.weight : torch.Size([512, 288]), require_grads : True
+forecasting_model.enc_embedding.value_embedding.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.projection1.weight : torch.Size([128, 512]), require_grads : True
+forecasting_model.projection1.bias : torch.Size([128]), require_grads : True
+forecasting_model.projection2.weight : torch.Size([36, 128]), require_grads : True
+forecasting_model.projection2.bias : torch.Size([36]), require_grads : True
+model params: 5738660

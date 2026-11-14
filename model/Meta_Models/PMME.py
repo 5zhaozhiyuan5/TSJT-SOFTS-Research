@@ -26,6 +26,7 @@ from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
 from stage1_transfer import SharedPrivateReliabilityTransfer
+from rhsr_transfer import RegimeHorizonSourceRouter
 
 def log_verbose(args, msg):
     print(msg)
@@ -119,6 +120,9 @@ class STRep(nn.Module):
         self.xySquaredRatio_args = xySquaredRatio_args
         self.projection_args = projection_args 
         self.memory_size_args = memory_size_args 
+        self.stage1_method = str(
+            getattr(args, 'stage1_method', 'pmme')
+        ).lower()
 
         # Stage-I transport safeguards. The domain classifier is useful for
         # ranking samples, but its probabilities must not become a hard gate:
@@ -132,6 +136,10 @@ class STRep(nn.Module):
         )
         self.stage1_reliability_mix = min(
             max(float(getattr(args, 'stage1_reliability_mix', 0.25)), 0.0), 1.0
+        )
+        self.stage1_transfer_enabled = (
+            self.stage1_method != 'rhsr'
+            and bool(int(getattr(args, 'stage1_transfer', 1)))
         )
         self.DAwarmup_args = max(int(getattr(args, 'DAwarmup', 500)), 0)
         
@@ -161,12 +169,33 @@ class STRep(nn.Module):
         # SOFTS exposes a 128-dimensional latent representation per node.
         # The transfer module operates on that representation, not on the
         # 36-step forecast horizon.
-        self.stage1_transfer = SharedPrivateReliabilityTransfer(
-            input_dim=128,
-            reliability_temperature=self.stage1_mass_temperature,
-            reliability_uniform_mix=self.stage1_uniform_mass,
-        ).to(self.device)
-        stage1_parameters = list(self.model.parameters()) + list(self.stage1_transfer.parameters())
+        self.stage1_transfer = None
+        self.rhsr_transfer = None
+        if self.stage1_method == 'rhsr':
+            self.rhsr_transfer = RegimeHorizonSourceRouter(
+                input_dim=128,
+                horizon=int(task_args['source']['pred_num']),
+                num_regimes=int(getattr(args, 'rhsr_num_regimes', 4)),
+                hidden_dim=int(getattr(args, 'rhsr_hidden_dim', 96)),
+                route_temperature=float(getattr(args, 'rhsr_route_temperature', 1.5)),
+                router_uniform_mix=float(
+                    getattr(args, 'rhsr_router_uniform_mix', 0.0)
+                ),
+                route_logit_clip=float(
+                    getattr(args, 'rhsr_route_logit_clip', 0.0)
+                ),
+            ).to(self.device)
+        elif self.stage1_transfer_enabled:
+            self.stage1_transfer = SharedPrivateReliabilityTransfer(
+                input_dim=128,
+                reliability_temperature=self.stage1_mass_temperature,
+                reliability_uniform_mix=self.stage1_uniform_mass,
+            ).to(self.device)
+        stage1_parameters = list(self.model.parameters())
+        if self.stage1_transfer is not None:
+            stage1_parameters += list(self.stage1_transfer.parameters())
+        if self.rhsr_transfer is not None:
+            stage1_parameters += list(self.rhsr_transfer.parameters())
         self.main_optim = optim.AdamW(stage1_parameters, lr=self.lr, weight_decay=1e-2)
         
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
@@ -174,33 +203,43 @@ class STRep(nn.Module):
         input_dim = 36
         
         num_inducing = 256
-        inducing_points1 = torch.randn(num_inducing, input_dim).to(self.device) 
-        inducing_points2 = torch.randn(num_inducing, input_dim).to(self.device) 
-        inducing_points3 = torch.randn(num_inducing, input_dim).to(self.device) 
-        
-    
-        self.gp1 = GPClassificationModel(input_dim, inducing_points1).to(self.device)
-        self.gp2 = GPClassificationModel(input_dim, inducing_points2).to(self.device)
-        self.gp3 = GPClassificationModel(input_dim, inducing_points3).to(self.device)
-        
-        self.likelihood1 = BernoulliLikelihood().to(self.device)
-        self.likelihood2 = BernoulliLikelihood().to(self.device)
-        self.likelihood3 = BernoulliLikelihood().to(self.device)
-        
-        self.optimizer1 = torch.optim.Adam([
-            {'params': self.gp1.parameters()},
-            {'params': self.likelihood1.parameters()},
-        ], lr=0.01)
-        
-        self.optimizer2 = torch.optim.Adam([
-            {'params': self.gp2.parameters()},
-            {'params': self.likelihood2.parameters()},
-        ], lr=0.01)
-        
-        self.optimizer3 = torch.optim.Adam([
-            {'params': self.gp3.parameters()},
-            {'params': self.likelihood3.parameters()},
-        ], lr=0.01)
+        if self.stage1_method == 'rhsr':
+            self.gp1 = None
+            self.gp2 = None
+            self.gp3 = None
+            self.likelihood1 = None
+            self.likelihood2 = None
+            self.likelihood3 = None
+            self.optimizer1 = None
+            self.optimizer2 = None
+            self.optimizer3 = None
+        else:
+            inducing_points1 = torch.randn(num_inducing, input_dim).to(self.device)
+            inducing_points2 = torch.randn(num_inducing, input_dim).to(self.device)
+            inducing_points3 = torch.randn(num_inducing, input_dim).to(self.device)
+
+            self.gp1 = GPClassificationModel(input_dim, inducing_points1).to(self.device)
+            self.gp2 = GPClassificationModel(input_dim, inducing_points2).to(self.device)
+            self.gp3 = GPClassificationModel(input_dim, inducing_points3).to(self.device)
+
+            self.likelihood1 = BernoulliLikelihood().to(self.device)
+            self.likelihood2 = BernoulliLikelihood().to(self.device)
+            self.likelihood3 = BernoulliLikelihood().to(self.device)
+
+            self.optimizer1 = torch.optim.Adam([
+                {'params': self.gp1.parameters()},
+                {'params': self.likelihood1.parameters()},
+            ], lr=0.01)
+
+            self.optimizer2 = torch.optim.Adam([
+                {'params': self.gp2.parameters()},
+                {'params': self.likelihood2.parameters()},
+            ], lr=0.01)
+
+            self.optimizer3 = torch.optim.Adam([
+                {'params': self.gp3.parameters()},
+                {'params': self.likelihood3.parameters()},
+            ], lr=0.01)
 
     def _stage1_da_ramp(self, epoch):
         """Gradually enable Stage-I distribution alignment after DAepoch."""
@@ -212,10 +251,146 @@ class STRep(nn.Module):
             1.0,
             float(epoch - self.DAepoch_args + 1) / float(self.DAwarmup_args),
         )
+
+    def meta_train_rhsr(self, data, matrix, epoch):
+        """Train the non-PMME Regime-Horizon Source Routing method.
+
+        RHSR deliberately replaces the PMME DVGP/conditional-OT path. It
+        learns source weights directly from target-conditioned traffic-state
+        summaries and applies them to horizon-wise supervised source losses.
+        """
+        if self.rhsr_transfer is None:
+            raise RuntimeError("RHSR transfer module is not initialized")
+
+        target_rep = None
+        target_y = None
+        target_task_loss = None
+        source_records = []
+        total_mse = []
+        total_rmse = []
+        total_mae = []
+        total_mape = []
+
+        for index, data_i in enumerate(data):
+            out, y, rep, y_unscale, normed_memory = self.model(
+                data_i, stage='train'
+            )
+            if index == 0:
+                target_rep = rep.reshape(-1, rep.shape[-1])
+                target_y = y.reshape(-1, y.shape[-1])
+                target_task_loss = self.loss_criterion(out, y)
+                continue
+
+            source_records.append({
+                'out': out,
+                'y': y,
+                'rep': rep.reshape(-1, rep.shape[-1]),
+                'forecast': y.reshape(-1, y.shape[-1]),
+            })
+            mse, rmse, mae, mape = calc_metric(out, y)
+            total_mse.append(mse.detach().cpu().numpy())
+            total_rmse.append(rmse.detach().cpu().numpy())
+            total_mae.append(mae.detach().cpu().numpy())
+            total_mape.append(mape.detach().cpu().numpy())
+
+        if not source_records:
+            raise RuntimeError("RHSR requires at least one source task")
+
+        target_encoded = self.rhsr_transfer.encode(target_rep, target_y)
+        source_encoded = [
+            self.rhsr_transfer.encode(record['rep'], record['forecast'])
+            for record in source_records
+        ]
+        source_summaries = [item['summary'] for item in source_encoded]
+        source_weights, route_logits = self.rhsr_transfer.route_weights(
+            target_encoded['summary'], source_summaries
+        )
+
+        horizon_losses = []
+        for record in source_records:
+            pointwise = F.smooth_l1_loss(
+                record['out'], record['y'], reduction='none'
+            )
+            horizon_losses.append(pointwise.mean(dim=(0, 1)))
+        horizon_losses = torch.stack(horizon_losses, dim=0)
+        source_task_loss = len(source_records) * (
+            source_weights * horizon_losses
+        ).mean()
+
+        target_shared_mean = target_encoded['shared'].mean(dim=0)
+        target_regime = target_encoded['regime_prob'].mean(dim=0)
+        state_losses = []
+        decomposition_losses = [target_encoded['decomposition_loss']]
+        for encoded in source_encoded:
+            source_shared_mean = encoded['shared'].mean(dim=0)
+            shared_match = 1.0 - F.cosine_similarity(
+                source_shared_mean.unsqueeze(0),
+                target_shared_mean.unsqueeze(0),
+                dim=-1,
+            ).mean()
+            source_regime = encoded['regime_prob'].mean(dim=0)
+            regime_match = self.rhsr_transfer.symmetric_kl(
+                source_regime, target_regime
+            )
+            state_losses.append(shared_match + regime_match)
+            decomposition_losses.append(encoded['decomposition_loss'])
+
+        state_consistency = torch.stack(state_losses).mean()
+        decomposition_loss = torch.stack(decomposition_losses).mean()
+        route_prob = source_weights.clamp_min(1e-8)
+        route_entropy = -(route_prob * route_prob.log()).sum(dim=0).mean()
+        route_balance_loss = -route_entropy
+
+        target_anchor = float(getattr(self.args, 'rhsr_target_anchor', 0.1))
+        state_weight = float(getattr(self.args, 'rhsr_state_weight', 0.1))
+        decomposition_weight = float(
+            getattr(self.args, 'rhsr_decomposition_weight', 0.1)
+        )
+        route_balance_weight = float(
+            getattr(self.args, 'rhsr_route_balance_weight', 0.01)
+        )
+        model_loss = (
+            source_task_loss
+            + target_anchor * target_task_loss
+            + state_weight * state_consistency
+            + decomposition_weight * decomposition_loss
+            + route_balance_weight * route_balance_loss
+        )
+
+        self.main_optim.zero_grad()
+        model_loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            list(self.model.parameters()) + list(self.rhsr_transfer.parameters()),
+            max_norm=5.0,
+        )
+        self.main_optim.step()
+
+        with torch.no_grad():
+            mean_source_weights = source_weights.mean(dim=1)
+            regime_hist = target_regime.detach().cpu().tolist()
+            self.last_rhsr_diagnostics = {
+                'source_weights': mean_source_weights.detach().cpu().tolist(),
+                'source_horizon_weights': source_weights.detach().cpu().tolist(),
+                'route_entropy': float(route_entropy.detach().cpu()),
+                'state_consistency': float(state_consistency.detach().cpu()),
+                'decomposition_loss': float(decomposition_loss.detach().cpu()),
+                'target_regime_histogram': regime_hist,
+                'route_logits_mean': route_logits.detach().mean(dim=1).cpu().tolist(),
+            }
+
+        return (
+            model_loss.detach().cpu().numpy(),
+            np.mean(total_mse),
+            np.mean(total_rmse),
+            np.mean(total_mae),
+            np.mean(total_mape),
+        )
         
     
     
     def meta_train_revise(self, data, matrix, epoch): 
+        if self.stage1_method == 'rhsr':
+            return self.meta_train_rhsr(data, matrix, epoch)
         
         total_mae = []
         total_mse = []
@@ -275,6 +450,19 @@ class STRep(nn.Module):
     
                 target_task_loss = loss
             
+        if not self.stage1_transfer_enabled:
+            model_loss = sum(task_losses)
+            self.main_optim.zero_grad()
+            model_loss.backward()
+            self.main_optim.step()
+            return (
+                model_loss.detach().cpu().numpy(),
+                np.mean(total_mse),
+                np.mean(total_rmse),
+                np.mean(total_mae),
+                np.mean(total_mape),
+            )
+
             
         model_loss = 0 
 
