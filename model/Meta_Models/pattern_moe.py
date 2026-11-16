@@ -295,13 +295,19 @@ class HorizonPatternMoEAlignment(nn.Module):
 
         context_dim = 32
         self.router_context = nn.Linear(input_dim, context_dim)
+        # A factorized pair router: score source and target samples separately,
+        # then add their three expert logits for each source-target pair. This
+        # preserves pair-conditioned routing without materializing a large
+        # [source, target, hidden] MLP input tensor.
         self.router = nn.Sequential(
-            nn.Linear(2 * context_dim + 8 + time_dim, hidden_dim),
+            nn.Linear(context_dim + 4 + time_dim, hidden_dim),
             nn.GELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.GELU(),
             nn.Linear(hidden_dim, 3),
         )
+        self.source_router_bias = nn.Parameter(torch.zeros(3))
+        self.target_router_bias = nn.Parameter(torch.zeros(3))
 
     def encode_horizons(self, steps, device=None, dtype=None):
         steps = tuple(int(value) for value in steps)
@@ -514,30 +520,20 @@ class HorizonPatternMoEAlignment(nn.Module):
 
             history_cost = _pairwise_squared_cost(source_feature, target_feature)
             future_cost = _pairwise_squared_cost(source_future, target_future)
-            source_context_pair = source_context[:, None, :].expand(-1, target.shape[0], -1)
-            target_context_pair = target_context[None, :, :].expand(source.shape[0], -1, -1)
-            source_descriptor_pair = source_desc[:, horizon_index, :][:, None, :].expand(
-                -1, target.shape[0], -1
-            )
-            target_descriptor_pair = target_desc[:, horizon_index, :][None, :, :].expand(
-                source.shape[0], -1, -1
-            )
-            time_context_pair = time_code.view(1, 1, -1).expand(
-                source.shape[0], target.shape[0], -1
-            )
-            router_input = torch.cat(
-                (
-                    source_context_pair,
-                    target_context_pair,
-                    source_descriptor_pair,
-                    target_descriptor_pair,
-                    time_context_pair,
-                ),
+            source_time = time_code.unsqueeze(0).expand(source.shape[0], -1)
+            target_time = time_code.unsqueeze(0).expand(target.shape[0], -1)
+            source_router_input = torch.cat(
+                (source_context, source_desc[:, horizon_index, :], source_time),
                 dim=-1,
             )
-            gate = torch.softmax(
-                self.router(router_input) / self.router_temperature, dim=-1
+            target_router_input = torch.cat(
+                (target_context, target_desc[:, horizon_index, :], target_time),
+                dim=-1,
             )
+            source_logits = self.router(source_router_input) + self.source_router_bias
+            target_logits = self.router(target_router_input) + self.target_router_bias
+            pair_logits = source_logits[:, None, :] + target_logits[None, :, :]
+            gate = torch.softmax(pair_logits / self.router_temperature, dim=-1)
             router_entropies.append(
                 -(
                     gate.clamp_min(1e-8) * gate.clamp_min(1e-8).log()
