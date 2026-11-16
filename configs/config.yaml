@@ -50,3 +50,14 @@ model:
   STnet:
     #target_lr : 0.0001
     lr : 0.001
+  # Stage-I horizon-conditioned low-rank metric (HCLM).
+  # The four anchors are physical durations on the common 5-minute grid.
+  hclm:
+    enabled: true
+    input_dim: 128
+    rank: 8
+    basis_dim: 8
+    anchor_minutes: [10, 60, 120, 180]
+    max_minutes: 180
+    relation_weight: 0.25
+    smoothness_weight: 0.0001
