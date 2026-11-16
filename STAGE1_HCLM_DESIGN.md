@@ -1,6 +1,11 @@
-# Stage-I HCLM design
+# Historical Stage-I HCLM design (superseded on stage-1-chta)
 
-This branch starts from the authors' official PMME implementation mirrored at
+This file records the preceding HCLM experiment for reproducibility. The active
+design on branch `stage-1-chta` is documented in
+[STAGE1_CHTA_DESIGN.md](STAGE1_CHTA_DESIGN.md). HCLM is not instantiated by the
+active Stage-I code on this branch.
+
+This branch family starts from the authors' official PMME implementation mirrored at
 commit `53a44670db06b7f756e84954e8334ef24cec1335` (upstream source commit
 `038d8d6958c13384c34b2e706e43fc0f421ea03c`).
 

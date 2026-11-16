@@ -25,7 +25,7 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
-from horizon_metric import HorizonConditionedLowRankMetric
+from horizon_transfer import ContinuousHorizonTransferAlignment, build_future_change_descriptors
 
 def log_verbose(args, msg):
     print(msg)
@@ -135,25 +135,34 @@ class STRep(nn.Module):
 
         self.model = PatchFSL(data_args, model_args, task_args, memory_size_args, projection_args, model_name, PatchFSL_cfg, args).to(self.device)
 
-        # Stage-I only: horizon-conditioned low-rank metric over the backbone's
-        # window-level representation. Stage-II remains in its official module.
-        hclm_cfg = model_args.get('hclm', {})
-        self.hclm_enabled = bool(hclm_cfg.get('enabled', False))
-        self.hclm_relation_weight = float(hclm_cfg.get('relation_weight', 0.25))
-        self.hclm_smoothness_weight = float(hclm_cfg.get('smoothness_weight', 1e-4))
-        self.hclm = None
-        if self.hclm_enabled:
-            self.hclm = HorizonConditionedLowRankMetric(
-                input_dim=int(hclm_cfg.get('input_dim', 128)),
-                rank=int(hclm_cfg.get('rank', 8)),
-                basis_dim=int(hclm_cfg.get('basis_dim', 8)),
-                anchor_minutes=tuple(hclm_cfg.get('anchor_minutes', [10, 60, 120, 180])),
-                max_minutes=float(hclm_cfg.get('max_minutes', 180)),
+        # Stage-I only: Continuous Horizon-conditioned Transfer Alignment (CHTA).
+        # This module consumes the existing backbone representation; SOFTS itself
+        # and the official Stage-II implementation are not modified.
+        chta_cfg = model_args.get('chta', {})
+        self.chta_enabled = bool(chta_cfg.get('enabled', False))
+        self.chta_loss_weight = float(chta_cfg.get('loss_weight', 0.1))
+        self.chta_smoothness_weight = float(chta_cfg.get('smoothness_weight', 1e-4))
+        self.chta_target_loss_weight = float(chta_cfg.get('target_loss_weight', 0.1))
+        self.chta = None
+        if self.chta_enabled:
+            self.chta = ContinuousHorizonTransferAlignment(
+                input_dim=int(chta_cfg.get('input_dim', 128)),
+                horizon_steps=int(chta_cfg.get('horizon_steps', task_args.get('source', {}).get('pred_num', 36))),
+                minutes_per_step=float(chta_cfg.get('minutes_per_step', 5.0)),
+                anchor_steps=tuple(chta_cfg.get('anchor_steps', [2, 12, 24, 36])),
+                time_dim=int(chta_cfg.get('time_dim', 16)),
+                hidden_dim=int(chta_cfg.get('hidden_dim', 64)),
+                relation_dim=int(chta_cfg.get('relation_dim', 32)),
+                epsilon=float(chta_cfg.get('epsilon', 0.08)),
+                sinkhorn_iterations=int(chta_cfg.get('sinkhorn_iterations', 20)),
+                max_samples=int(chta_cfg.get('max_samples', 128)),
+                future_weight=float(chta_cfg.get('future_weight', 1.0)),
+                prior_kl_weight=float(chta_cfg.get('prior_kl_weight', 1.0)),
             ).to(self.device)
 
         self.optimized_parameters = list(self.model.parameters())
-        if self.hclm is not None:
-            self.optimized_parameters.extend(list(self.hclm.parameters()))
+        if self.chta is not None:
+            self.optimized_parameters.extend(list(self.chta.parameters()))
 
         for name, params in self.model.named_parameters():
             log_verbose(args,"{} : {}, require_grads : {}".format(name, params.shape,params.requires_grad))
@@ -161,9 +170,9 @@ class STRep(nn.Module):
         # print(self.model)
         log_verbose(args,"model params: {}".format(count_parameters(self.model)))
 
-        if self.hclm is not None:
-            for name, params in self.hclm.named_parameters():
-                log_verbose(args, "hclm.{} : {}, require_grads : {}".format(name, params.shape, params.requires_grad))
+        if self.chta is not None:
+            for name, params in self.chta.named_parameters():
+                log_verbose(args, "chta.{} : {}, require_grads : {}".format(name, params.shape, params.requires_grad))
         self.main_optim = optim.AdamW(self.optimized_parameters, lr=self.lr, weight_decay=1e-2)
         
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
@@ -213,14 +222,29 @@ class STRep(nn.Module):
         rep_target = []
         y_source = []
         y_target = []
+        source_last_history = []
+        target_last_history = []
 
         target_task_loss = 0
         for i in range(len(data)):  
             task_loss = 0
             batch_size, node_num, seq_len, _ = data[i].x.shape
             
-            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train') 
-            
+            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train')
+
+            # Reproduce the backbone wrapper's RevIN transform for the final
+            # observed history value. This does not alter or wrap the SOFTS model.
+            raw_history = torch.as_tensor(data[i].x, device=self.device, dtype=rep.dtype)
+            raw_history = raw_history.permute(0, 1, 3, 2)[:, :, 0, -288:]
+            if self.model_name == 'MLP_noRevIn':
+                last_history = raw_history[:, :, -1]
+            else:
+                history_mean = raw_history.mean(dim=2, keepdim=True).detach()
+                history_std = torch.sqrt(
+                    raw_history.var(dim=2, keepdim=True, unbiased=False).detach() + 1e-9
+                )
+                last_history = ((raw_history[:, :, -1:] - history_mean) / history_std).squeeze(-1)
+
             if epoch%25==0:
                 print(out.shape, rep.shape)
             
@@ -232,10 +256,12 @@ class STRep(nn.Module):
                 
                 rep_target.extend(rep_split)
                 y_target.extend(y_unscale_split)
-                
+                target_last_history.extend(torch.split(last_history, split_indices, dim=0))
+
             else:
                 rep_source.append(rep)
                 y_source.append(y_unscale)
+                source_last_history.append(last_history)
                 
             
             if i>0:   
@@ -271,6 +297,8 @@ class STRep(nn.Module):
         print(shape0_list)
 
         DA_losses = []
+        CHTA_losses = []
+        CHTA_diagnostics = []
         y_norm_sources = []
         y_norm_targets = []
         
@@ -293,12 +321,14 @@ class STRep(nn.Module):
             x2,y2 = rep_target[index], y_target[index]
             shape0 = x1.shape[1]
 
-            # Compute a compact horizon-conditioned relation embedding from the
-            # SOFTS/iTransformer window representation before flattening nodes.
-            relation1, relation2 = None, None
-            if self.hclm is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
-                relation1 = self.hclm(x1)
-                relation2 = self.hclm(x2)
+            source_horizon_desc, target_horizon_desc = None, None
+            if self.chta is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
+                source_horizon_desc = build_future_change_descriptors(
+                    y1, source_last_history[index], self.chta.anchor_steps
+                ).reshape(-1, len(self.chta.anchor_steps), 4)
+                target_horizon_desc = build_future_change_descriptors(
+                    y2, target_last_history[index], self.chta.anchor_steps
+                ).reshape(-1, len(self.chta.anchor_steps), 4)
 
             y_norm_sources.append(y1)
             y_norm_targets.append(y2)
@@ -307,10 +337,11 @@ class STRep(nn.Module):
             x2 = x2.view(-1, x2.size(-1))
             y1 = y1.view(-1, y1.size(-1))
             y2 = y2.view(-1, y2.size(-1))
-            if relation1 is not None:
-                relation1 = relation1.reshape(-1, relation1.size(-1))
-                relation2 = relation2.reshape(-1, relation2.size(-1))
             
+
+            base_prob1 = torch.full((size1,), 1.0 / max(size1, 1), device=self.device)
+            base_prob2 = torch.full((size2,), 1.0 / max(size2, 1), device=self.device)
+            has_overlap = True
 
             if self.classifier_args>1e-6:
                 y = torch.cat((y1, y2), dim=0).detach()
@@ -373,23 +404,30 @@ class STRep(nn.Module):
                 if ratio1>0.00 and ratio2>0.00:
                     if epoch%25==0:
                         print('ratio1, ratio2', ratio1, ratio2)
-                    def threshold(x):   
+                    def threshold(x):
                         return torch.where(x > thresh, x, torch.tensor(0.0, device=x.device))
-                    
-                    prob1, prob2 = threshold(prob1).detach(), threshold(prob2).detach() 
-                    alpha = (prob1/torch.sum(prob1)).detach()
-                    beta = (prob2/torch.sum(prob2)).detach()
-                    
-                   
-                    OT_loss_scale = torch.sqrt(((prob1.mean())*(prob2.mean())).detach())
-                    
+
+                    base_prob1 = threshold(prob1).detach()
+                    base_prob2 = threshold(prob2).detach()
+                    alpha = (base_prob1 / torch.sum(base_prob1)).detach()
+                    beta = (base_prob2 / torch.sum(base_prob2)).detach()
+                    OT_loss_scale = torch.sqrt((base_prob1.mean() * base_prob2.mean()).detach())
                     if epoch%25==0:
                         print('OT_loss_scale', OT_loss_scale)
-            
+                else:
+                    # Keep the batch numerically valid, but do not force an OT
+                    # update when DVGP finds no overlapping samples.
+                    has_overlap = False
+                    alpha = torch.ones(size1, device=self.device) / max(size1, 1)
+                    beta = torch.ones(size2, device=self.device) / max(size2, 1)
+                    OT_loss_scale = 0.0
+
             else:
-                alpha = torch.ones(size1, device=self.device) / size1
-                beta = torch.ones(size2, device=self.device) / size2  
-                OT_loss_scale = 1
+                alpha = torch.ones(size1, device=self.device) / max(size1, 1)
+                beta = torch.ones(size2, device=self.device) / max(size2, 1)
+                base_prob1 = alpha.detach()
+                base_prob2 = beta.detach()
+                OT_loss_scale = 1.0
 
             if self.DA == 'OT':
                 if (epoch>=self.DAepoch_args): 
@@ -397,20 +435,42 @@ class STRep(nn.Module):
                     x_y_scale = math.sqrt(self.xySquaredRatio_args)
                     y1, y2 = y1*x_y_scale, y2*x_y_scale
                     
-                    x_blocks = [x1, y1]
-                    y_blocks = [x2, y2]
-                    if relation1 is not None:
-                        relation_scale = math.sqrt(max(self.hclm_relation_weight, 0.0))
-                        x_blocks.append(relation1 * relation_scale)
-                        y_blocks.append(relation2 * relation_scale)
-                    x = torch.cat(x_blocks, dim=-1)
-                    y = torch.cat(y_blocks, dim=-1)  # y: target
+                    # Preserve the official PMME base OT feature pair.  CHTA
+                    # contributes a separate, horizon-conditioned transport
+                    # regularizer below rather than changing the SOFTS feature API.
+                    x = torch.cat([x1, y1], dim=-1)
+                    y = torch.cat([x2, y2], dim=-1)  # target
                     
-                    if (ratio1>0.00 and ratio2>0.00):
-                        OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args *OT_loss_scale
+                    if has_overlap:
+                        OT_loss = torch.sum(criterion(alpha, x, beta, y)) * self.DAcoef_args * OT_loss_scale
                     else:
-                        OT_loss = 0
+                        OT_loss = 0.0
                     DA_losses.append(OT_loss)
+
+                    if (
+                        self.chta is not None
+                        and has_overlap
+                        and source_horizon_desc is not None
+                        and target_horizon_desc is not None
+                    ):
+                        source_h_marginals, target_h_marginals = self.chta.horizon_marginals(
+                            base_prob1, base_prob2, source_horizon_desc, target_horizon_desc
+                        )
+                        conditional_loss, conditional_stats = self.chta.compute_alignment_loss(
+                            x1,
+                            x2,
+                            source_horizon_desc,
+                            target_horizon_desc,
+                            source_h_marginals,
+                            target_h_marginals,
+                        )
+                        CHTA_losses.append(
+                            conditional_loss
+                            * self.chta_loss_weight
+                            * self.DAcoef_args
+                            * OT_loss_scale
+                        )
+                        CHTA_diagnostics.append(conditional_stats)
 
             elif self.DA == 'CMMD':
                 if (epoch>=self.DAepoch_args): 
@@ -435,21 +495,34 @@ class STRep(nn.Module):
                     DA_losses.append(coral(x1, x2)*self.DAcoef_args)
             
                     
-        task_loss = task_losses[0] + task_losses[1] + task_losses[2]
-        if len(DA_losses) == 0:
-            DA_loss = 0
+        task_loss = sum(task_losses)
+        DA_loss = sum(DA_losses) if DA_losses else task_loss.new_zeros(())
+        CHTA_loss = sum(CHTA_losses) if CHTA_losses else task_loss.new_zeros(())
+
+        if self.chta is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
+            CHTA_smoothness = self.chta.smoothness_loss()
+            CHTA_smoothness = self.chta_smoothness_weight * CHTA_smoothness
+            target_loss_weight = self.chta_target_loss_weight
         else:
-            DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
-        
-        model_loss += (task_loss + DA_loss)
-        if (
-            self.hclm is not None
-            and self.DA == 'OT'
-            and epoch >= self.DAepoch_args
-            and len(DA_losses) > 0
-            and self.hclm_smoothness_weight > 0
-        ):
-            model_loss += self.hclm_smoothness_weight * self.hclm.smoothness_loss()
+            CHTA_smoothness = task_loss.new_zeros(())
+            target_loss_weight = 0.0
+
+        # The few-shot target loss is now an explicit, low-weight Stage-I
+        # objective.  In the projected-gradient path it remains the reference
+        # direction and is also added back with target_loss_weight.
+        transfer_loss = task_loss + DA_loss + CHTA_loss + CHTA_smoothness
+        model_loss = transfer_loss + target_loss_weight * target_task_loss
+
+        if epoch % 25 == 0 and CHTA_diagnostics:
+            mean_diversity = torch.stack([d["plan_diversity"] for d in CHTA_diagnostics]).mean()
+            max_row_error = torch.stack([d["max_row_marginal_error"] for d in CHTA_diagnostics]).max()
+            max_col_error = torch.stack([d["max_col_marginal_error"] for d in CHTA_diagnostics]).max()
+            print(
+                "CHTA_loss", float(CHTA_loss.detach()),
+                "CHTA_plan_diversity", float(mean_diversity),
+                "CHTA_row_marginal_error", float(max_row_error),
+                "CHTA_col_marginal_error", float(max_col_error),
+            )
 
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
             
@@ -484,24 +557,21 @@ class STRep(nn.Module):
 
         if (self.projection_args == 0):
             self.main_optim.zero_grad()
-            (model_loss).backward() #(task_loss + OT_loss).backward()
+            model_loss.backward()
             self.main_optim.step()
-        else:            
-            
+        else:
             self.main_optim.zero_grad()
-            model_loss.backward(retain_graph=True)
-            
+            transfer_loss.backward(retain_graph=True)
             flat_A, mapping = flatten_and_pad_grads(self.optimized_parameters)
-            
+
             self.main_optim.zero_grad()
             target_task_loss.backward(retain_graph=True)
-            
             flat_B, _ = flatten_and_pad_grads(self.optimized_parameters)
-            
+
             flat_proj_A = pcgrad_one_sided(flat_A, flat_B)
-            
-            write_back_flat_grads(flat_proj_A, mapping)
-            
+            flat_final = flat_proj_A + target_loss_weight * flat_B
+            write_back_flat_grads(flat_final, mapping)
+
             self.main_optim.step()
             self.main_optim.zero_grad()
         

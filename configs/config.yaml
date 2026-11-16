@@ -50,14 +50,24 @@ model:
   STnet:
     #target_lr : 0.0001
     lr : 0.001
-  # Stage-I horizon-conditioned low-rank metric (HCLM).
-  # The four anchors are physical durations on the common 5-minute grid.
-  hclm:
+  # Stage-I Continuous Horizon-conditioned Transfer Alignment (CHTA).
+  # SOFTS and the official PMME Stage-II implementation remain unchanged.
+  # Four physical-time anchors supervise a continuous shared horizon function;
+  # conditional transport plans are KL-reweighted from one sampled base plan.
+  chta:
     enabled: true
     input_dim: 128
-    rank: 8
-    basis_dim: 8
-    anchor_minutes: [10, 60, 120, 180]
-    max_minutes: 180
-    relation_weight: 0.25
+    horizon_steps: 36
+    minutes_per_step: 5
+    anchor_steps: [2, 12, 24, 36]  # 10, 60, 120, 180 minutes
+    time_dim: 16
+    hidden_dim: 64
+    relation_dim: 32
+    epsilon: 0.08
+    sinkhorn_iterations: 20
+    max_samples: 128
+    future_weight: 1.0
+    prior_kl_weight: 1.0
+    loss_weight: 0.1
     smoothness_weight: 0.0001
+    target_loss_weight: 0.1

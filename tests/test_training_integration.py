@@ -78,15 +78,23 @@ class StageITrainingIntegrationTest(unittest.TestCase):
         self.args = Namespace(save_dir=self.tmp.name, STmodel="SOFTS")
         self.model_args = {
             "STnet": {"lr": 1e-3},
-            "hclm": {
+            "chta": {
                 "enabled": True,
                 "input_dim": 128,
-                "rank": 8,
-                "basis_dim": 8,
-                "anchor_minutes": [10, 60, 120, 180],
-                "max_minutes": 180,
-                "relation_weight": 0.25,
+                "horizon_steps": 36,
+                "minutes_per_step": 5,
+                "anchor_steps": [2, 12, 24, 36],
+                "time_dim": 16,
+                "hidden_dim": 32,
+                "relation_dim": 16,
+                "epsilon": 0.08,
+                "sinkhorn_iterations": 12,
+                "max_samples": 32,
+                "future_weight": 1.0,
+                "prior_kl_weight": 1.0,
+                "loss_weight": 0.1,
                 "smoothness_weight": 1e-4,
+                "target_loss_weight": 0.1,
             },
         }
         self.patch_cfg = {"device": torch.device("cpu")}
@@ -107,9 +115,9 @@ class StageITrainingIntegrationTest(unittest.TestCase):
             PatchFSL_cfg=self.patch_cfg,
             args=self.args,
         )
-        self.assertIsNotNone(stage1.hclm)
+        self.assertIsNotNone(stage1.chta)
         self.assertTrue(
-            any(p is stage1.hclm.base_projection for group in stage1.main_optim.param_groups for p in group["params"])
+            any(p is stage1.chta.history_projection.weight for group in stage1.main_optim.param_groups for p in group["params"])
         )
 
         stage2 = PMME_2ndStage.STRep(
@@ -131,10 +139,10 @@ class StageITrainingIntegrationTest(unittest.TestCase):
         stage2_state.update(compatible)
         stage2.model.load_state_dict(stage2_state)
 
-        # HCLM is a Stage-I-only module and is not part of the Stage-II model.
-        self.assertFalse(any(key.startswith("hclm.") for key in stage2.model.state_dict()))
+        # CHTA is a Stage-I-only module and is not part of the Stage-II model.
+        self.assertFalse(any(key.startswith("chta.") for key in stage2.model.state_dict()))
 
-    def test_one_stage1_meta_update_with_hclm_and_pcgrad(self):
+    def test_one_stage1_meta_update_with_chta_and_pcgrad(self):
         stage1 = PMME.STRep(
             classifier_args=0.0,  # exercise uniform DVGP marginals without fitting GPs
             DAepoch_args=0,
@@ -154,7 +162,7 @@ class StageITrainingIntegrationTest(unittest.TestCase):
         # The test swaps the backbone after STRep construction, so rebuild the
         # optimizer to include the synthetic backbone parameters as production
         # construction would do for the official SOFTS/iTransformer parameters.
-        stage1.optimized_parameters = list(stage1.model.parameters()) + list(stage1.hclm.parameters())
+        stage1.optimized_parameters = list(stage1.model.parameters()) + list(stage1.chta.parameters())
         stage1.main_optim = torch.optim.AdamW(
             stage1.optimized_parameters, lr=stage1.lr, weight_decay=1e-2
         )
@@ -168,7 +176,7 @@ class StageITrainingIntegrationTest(unittest.TestCase):
         data = [target] + sources
         matrices = [torch.eye(item.node_num) for item in data]
 
-        before = stage1.hclm.base_projection.detach().clone()
+        before = stage1.chta.history_projection.weight.detach().clone()
         before_backbone = stage1.model.forecasting_model.representation.weight.detach().clone()
 
         with patch.object(PMME, "SamplesLoss", FastSmokeSinkhorn):
@@ -176,7 +184,7 @@ class StageITrainingIntegrationTest(unittest.TestCase):
 
         self.assertEqual(len(result), 5)
         self.assertTrue(all(np.isfinite(float(value)) for value in result))
-        self.assertFalse(torch.equal(before, stage1.hclm.base_projection.detach()))
+        self.assertFalse(torch.equal(before, stage1.chta.history_projection.weight.detach()))
         self.assertFalse(
             torch.equal(before_backbone, stage1.model.forecasting_model.representation.weight.detach())
         )

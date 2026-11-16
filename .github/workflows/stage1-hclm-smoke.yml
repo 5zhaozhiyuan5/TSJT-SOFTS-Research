@@ -1,8 +1,9 @@
-name: Stage-I HCLM smoke tests
+name: Stage-I CHTA smoke tests
 
 on:
   push:
     branches:
+      - stage-1-chta
       - stage-1-hclm
   workflow_dispatch:
 
