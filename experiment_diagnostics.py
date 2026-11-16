@@ -236,7 +236,7 @@ class ExperimentDiagnostics:
                 })
 
     def log_gradient(self, epoch, module_name, grad_norm, parameter_norm, grad_none_fraction,
-                     nonfinite_grad_count, parameter_norm_after=None, stage="stage1"):
+                     nonfinite_grad_count, parameter_norm_after=None, parameter_delta_norm=None, stage="stage1"):
         self.write("gradient", {
             "stage": stage,
             "epoch": epoch,
@@ -244,6 +244,7 @@ class ExperimentDiagnostics:
             "gradient_norm": grad_norm,
             "parameter_norm_before": parameter_norm,
             "parameter_norm_after": parameter_norm_after,
+            "parameter_sample_delta_norm": parameter_delta_norm,
             "gradient_none_fraction": grad_none_fraction,
             "nonfinite_gradient_count": nonfinite_grad_count,
         })
