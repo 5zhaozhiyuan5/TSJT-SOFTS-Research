@@ -34,9 +34,11 @@ It is deliberately **not** a full MTPB port:
 6. For each source/target sample pair, each expert converts the corresponding
    historical windows into soft assignments over shared source prototypes.
    Pairwise Hellinger distances form the expert-specific pattern costs.
-7. A dense router receives the pair's SOFTS contexts, training-only future-change
-   descriptors, and physical horizon code. It produces three expert weights
-   separately for every source/target pair and horizon anchor.
+7. A factorized dense router scores source and target samples separately from
+   their SOFTS contexts, training-only future-change descriptors, and physical
+   horizon code. Adding the two three-expert logit vectors produces a distinct
+   gate for every source/target pair and horizon anchor, without running a
+   large MLP over every expanded pair tensor.
 8. The weighted pattern cost is combined with horizon-conditioned SOFTS
    representation cost and future-change cost.
 9. PMME's DVGP probabilities remain the sample-reliability weights. A shared
@@ -61,6 +63,8 @@ It is deliberately **not** a full MTPB port:
   bounded sample of source-city training windows.
 - Every extracted patch is normalized independently, matching the query-time
   patch normalization and reducing city-specific speed-scale effects.
+- The pairwise router is factorized: its MLP cost scales with source samples
+  plus target samples rather than the Cartesian product of all pairs.
 - Router diagnostics report pair-averaged expert weights, pair-level entropy,
   expert costs, router smoothness, plan diversity, and marginal errors.
 - The router is dense softmax over three experts. Top-1/Top-2 sparse routing is
