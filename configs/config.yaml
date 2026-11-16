@@ -1,6 +1,9 @@
 data:
   data_keys: ['metr-la', 'pems-bay', 'shenzhen', 'chengdu_m']
+  # Common grid after the loader's legacy interpolation step.
+  processed_interval_minutes: 5
   metr-la:
+    sampling_interval_minutes: 5
     dataset_path: data/metr-la/dataset_expand.npy
     adjacency_matrix_path: data/metr-la/matrix.npy
     time_step: 34272
@@ -9,6 +12,7 @@ data:
     speed_std: 12.905341
   
   pems-bay:
+    sampling_interval_minutes: 5
     dataset_path: data/pems-bay/dataset_expand.npy
     adjacency_matrix_path: data/pems-bay/matrix.npy
     time_step: 52116
@@ -17,6 +21,7 @@ data:
     speed_std: 9.58811369696
 
   chengdu_m:
+    sampling_interval_minutes: 10
     dataset_path: data/chengdu_m/dataset_expand.npy
     adjacency_matrix_path: data/chengdu_m/matrix.npy
     time_step: 17280
@@ -25,6 +30,7 @@ data:
     speed_std: 9.75304346669
   
   shenzhen:
+    sampling_interval_minutes: 10
     dataset_path: data/shenzhen/dataset_expand.npy
     adjacency_matrix_path: data/shenzhen/matrix.npy
     time_step: 17280
@@ -79,10 +85,9 @@ model:
   pattern_moe:
     enabled: true
     input_dim: 128
-    horizon_steps: 36
-    minutes_per_step: 5
-    anchor_steps: [2, 12, 24, 36]
-    scale_steps: [12, 36, 72, 144, 288]  # MTPB 1/3/6/12/24-hour scales
+    # Physical durations are converted to steps from data.processed_interval_minutes.
+    anchor_minutes: [10, 60, 120, 180]
+    scale_minutes: [60, 180, 360, 720, 1440]  # 1/3/6/12/24-hour history patterns
     num_prototypes: 10
     descriptor_bins: 16
     max_windows_per_city: 24
