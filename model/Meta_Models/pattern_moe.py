@@ -480,6 +480,18 @@ class HorizonPatternMoEAlignment(nn.Module):
             dim=0,
         )
 
+        # Detached diagnostics for checking prototype collapse/coverage. These
+        # statistics do not participate in the loss or gradient computation.
+        combined_assignments = torch.cat((source_pattern, target_pattern), dim=0).detach()
+        pattern_usage = combined_assignments.mean(dim=0)
+        pattern_entropy = -(
+            pattern_usage.clamp_min(1e-8) * pattern_usage.clamp_min(1e-8).log()
+        ).sum(dim=-1)
+        pattern_top1_fraction = combined_assignments.argmax(dim=-1).float().mean(dim=0)
+        per_scale_cost_means = torch.stack(
+            [cost.detach().mean() for cost in per_scale_costs]
+        )
+
         time_codes = self.encode_horizons(self.anchor_steps, source.device, source.dtype)
         # Pairwise contexts let the router choose experts for each source/target
         # sample pair, rather than assigning one global gate to the whole batch.
@@ -492,6 +504,7 @@ class HorizonPatternMoEAlignment(nn.Module):
         expert_cost_means = []
         film_states = []
         row_errors, col_errors = [], []
+        router_pair_stds, router_top1_fractions = [], []
 
         for horizon_index, time_code in enumerate(time_codes):
             gamma, beta = self.film_generator(time_code).chunk(2, dim=-1)
@@ -538,6 +551,10 @@ class HorizonPatternMoEAlignment(nn.Module):
                 -(
                     gate.clamp_min(1e-8) * gate.clamp_min(1e-8).log()
                 ).sum(dim=-1).mean()
+            )
+            router_pair_stds.append(gate.detach().std(dim=(0, 1), unbiased=False))
+            router_top1_fractions.append(
+                F.one_hot(gate.detach().argmax(dim=-1), num_classes=3).float().mean(dim=(0, 1))
             )
             pattern_cost = (expert_costs.permute(1, 2, 0) * gate).sum(dim=-1)
             combined_cost = (
@@ -631,6 +648,15 @@ class HorizonPatternMoEAlignment(nn.Module):
             "plan_diversity": plan_diversity.detach(),
             "max_row_marginal_error": torch.stack(row_errors).max().detach(),
             "max_col_marginal_error": torch.stack(col_errors).max().detach(),
+            "row_marginal_errors": torch.stack(row_errors).detach(),
+            "col_marginal_errors": torch.stack(col_errors).detach(),
+            "router_pair_std": torch.stack(router_pair_stds).detach(),
+            "router_top1_fraction": torch.stack(router_top1_fractions).detach(),
+            "pattern_usage": pattern_usage.detach(),
+            "pattern_entropy": pattern_entropy.detach(),
+            "pattern_top1_fraction": pattern_top1_fraction.detach(),
+            "per_scale_cost_means": per_scale_cost_means.detach(),
+            "scale_steps": list(self.scale_steps),
             "smoothness": smoothness.detach(),
             "sampled_source": loss.new_tensor(float(source.shape[0])).detach(),
             "sampled_target": loss.new_tensor(float(target.shape[0])).detach(),
