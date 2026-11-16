@@ -26,6 +26,7 @@ from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
 from horizon_transfer import ContinuousHorizonTransferAlignment, build_future_change_descriptors
+from pattern_moe import HorizonPatternMoEAlignment
 
 def log_verbose(args, msg):
     print(msg)
@@ -111,7 +112,7 @@ class STRep(nn.Module):
     """
     Reptile-based Few-shot learning architecture for STGNN
     """
-    def __init__(self, classifier_args, DAepoch_args, DAcoef_args, xySquaredRatio_args, memory_size_args, projection_args, model_name, DA, data_args, task_args, model_args,PatchFSL_cfg, args):
+    def __init__(self, classifier_args, DAepoch_args, DAcoef_args, xySquaredRatio_args, memory_size_args, projection_args, model_name, DA, data_args, task_args, model_args,PatchFSL_cfg, args, pattern_bank=None):
         super(STRep, self).__init__()
         self.classifier_args = classifier_args
         self.DAepoch_args = DAepoch_args
@@ -161,9 +162,49 @@ class STRep(nn.Module):
                 prior_kl_weight=float(chta_cfg.get('prior_kl_weight', 1.0)),
             ).to(self.device)
 
+        # MTPB-inspired multi-scale pattern bank + horizon-conditioned MoE.
+        # It is a Stage-I alignment module only; the SOFTS forward interface and
+        # PMME_2ndStage.py remain untouched.
+        pattern_cfg = model_args.get('pattern_moe', {})
+        self.pattern_moe_enabled = bool(pattern_cfg.get('enabled', False))
+        if self.pattern_moe_enabled and self.chta_enabled:
+            raise ValueError("Enable either pattern_moe or legacy chta, not both.")
+        self.pattern_moe = None
+        self.pattern_moe_loss_weight = float(pattern_cfg.get('loss_weight', 1.0))
+        self.pattern_moe_source_temperature = float(pattern_cfg.get('source_temperature', 0.25))
+        self.pattern_moe_smoothness_weight = float(pattern_cfg.get('smoothness_weight', 1e-4))
+        self.pattern_moe_target_loss_weight = float(pattern_cfg.get('target_loss_weight', 0.1))
+        if self.pattern_moe_enabled:
+            if pattern_bank is None:
+                raise ValueError(
+                    "pattern_moe is enabled but no source-only pattern_bank was supplied. "
+                    "Build it from source_dataset.x_list in train_DA_OT.py."
+                )
+            self.pattern_moe = HorizonPatternMoEAlignment(
+                pattern_bank=pattern_bank,
+                input_dim=int(pattern_cfg.get('input_dim', 128)),
+                horizon_steps=int(pattern_cfg.get('horizon_steps', task_args.get('source', {}).get('pred_num', 36))),
+                minutes_per_step=float(pattern_cfg.get('minutes_per_step', 5.0)),
+                anchor_steps=tuple(pattern_cfg.get('anchor_steps', [2, 12, 24, 36])),
+                scale_steps=tuple(pattern_cfg.get('scale_steps', [12, 36, 72, 144, 288])),
+                time_dim=int(pattern_cfg.get('time_dim', 16)),
+                hidden_dim=int(pattern_cfg.get('hidden_dim', 64)),
+                relation_dim=int(pattern_cfg.get('relation_dim', 32)),
+                epsilon=float(pattern_cfg.get('epsilon', 0.08)),
+                sinkhorn_iterations=int(pattern_cfg.get('sinkhorn_iterations', 20)),
+                max_samples=int(pattern_cfg.get('max_samples', 128)),
+                pattern_temperature=float(pattern_cfg.get('pattern_temperature', 0.15)),
+                router_temperature=float(pattern_cfg.get('router_temperature', 1.0)),
+                future_weight=float(pattern_cfg.get('future_weight', 1.0)),
+                pattern_weight=float(pattern_cfg.get('pattern_weight', 0.5)),
+                prior_kl_weight=float(pattern_cfg.get('prior_kl_weight', 1.0)),
+            ).to(self.device)
+
         self.optimized_parameters = list(self.model.parameters())
         if self.chta is not None:
             self.optimized_parameters.extend(list(self.chta.parameters()))
+        if self.pattern_moe is not None:
+            self.optimized_parameters.extend(list(self.pattern_moe.parameters()))
 
         for name, params in self.model.named_parameters():
             log_verbose(args,"{} : {}, require_grads : {}".format(name, params.shape,params.requires_grad))
@@ -174,6 +215,10 @@ class STRep(nn.Module):
         if self.chta is not None:
             for name, params in self.chta.named_parameters():
                 log_verbose(args, "chta.{} : {}, require_grads : {}".format(name, params.shape, params.requires_grad))
+        if self.pattern_moe is not None:
+            for name, params in self.pattern_moe.named_parameters():
+                log_verbose(args, "pattern_moe.{} : {}, require_grads : {}".format(name, params.shape, params.requires_grad))
+            log_verbose(args, "pattern bank shape: {}".format(tuple(self.pattern_moe.pattern_prototypes.shape)))
         self.main_optim = optim.AdamW(self.optimized_parameters, lr=self.lr, weight_decay=1e-2)
         
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
@@ -225,6 +270,8 @@ class STRep(nn.Module):
         y_target = []
         source_last_history = []
         target_last_history = []
+        source_history_windows = []
+        target_history_windows = []
 
         target_task_loss = 0
         for i in range(len(data)):  
@@ -258,11 +305,13 @@ class STRep(nn.Module):
                 rep_target.extend(rep_split)
                 y_target.extend(y_unscale_split)
                 target_last_history.extend(torch.split(last_history, split_indices, dim=0))
+                target_history_windows.extend(torch.split(raw_history, split_indices, dim=0))
 
             else:
                 rep_source.append(rep)
                 y_source.append(y_unscale)
                 source_last_history.append(last_history)
+                source_history_windows.append(raw_history)
                 
             
             if i>0:   
@@ -301,6 +350,9 @@ class STRep(nn.Module):
         CHTA_horizon_losses = []
         CHTA_source_scores = []
         CHTA_diagnostics = []
+        PatternMoE_horizon_losses = []
+        PatternMoE_source_scores = []
+        PatternMoE_diagnostics = []
         y_norm_sources = []
         y_norm_targets = []
         
@@ -324,13 +376,15 @@ class STRep(nn.Module):
             shape0 = x1.shape[1]
 
             source_horizon_desc, target_horizon_desc = None, None
-            if self.chta is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
+            alignment_module = self.pattern_moe if self.pattern_moe is not None else self.chta
+            if alignment_module is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
+                anchor_steps = alignment_module.anchor_steps
                 source_horizon_desc = build_future_change_descriptors(
-                    y1, source_last_history[index], self.chta.anchor_steps
-                ).reshape(-1, len(self.chta.anchor_steps), 4)
+                    y1, source_last_history[index], anchor_steps
+                ).reshape(-1, len(anchor_steps), 4)
                 target_horizon_desc = build_future_change_descriptors(
-                    y2, target_last_history[index], self.chta.anchor_steps
-                ).reshape(-1, len(self.chta.anchor_steps), 4)
+                    y2, target_last_history[index], anchor_steps
+                ).reshape(-1, len(anchor_steps), 4)
 
             y_norm_sources.append(y1)
             y_norm_targets.append(y2)
@@ -432,45 +486,89 @@ class STRep(nn.Module):
                 OT_loss_scale = 1.0
 
             if self.DA == 'OT':
-                if (epoch>=self.DAepoch_args): 
-                    
+                if (epoch>=self.DAepoch_args):
                     x_y_scale = math.sqrt(self.xySquaredRatio_args)
                     y1, y2 = y1*x_y_scale, y2*x_y_scale
-                    
-                    # Preserve the official PMME base OT feature pair.  CHTA
-                    # contributes a separate, horizon-conditioned transport
-                    # regularizer below rather than changing the SOFTS feature API.
-                    x = torch.cat([x1, y1], dim=-1)
-                    y = torch.cat([x2, y2], dim=-1)  # target
-                    
-                    if has_overlap:
-                        OT_loss = torch.sum(criterion(alpha, x, beta, y)) * self.DAcoef_args * OT_loss_scale
-                    else:
-                        OT_loss = 0.0
-                    DA_losses.append(OT_loss)
 
-                    if (
-                        self.chta is not None
-                        and has_overlap
-                        and source_horizon_desc is not None
-                        and target_horizon_desc is not None
-                    ):
-                        source_h_marginals, target_h_marginals, source_h_scores = self.chta.horizon_marginals(
-                            base_prob1, base_prob2, source_horizon_desc, target_horizon_desc
-                        )
-                        conditional_loss, conditional_stats = self.chta.compute_alignment_loss(
-                            x1,
-                            x2,
-                            source_horizon_desc,
-                            target_horizon_desc,
-                            source_h_marginals,
-                            target_h_marginals,
-                        )
-                        CHTA_horizon_losses.append(
-                            conditional_stats["horizon_losses"] * OT_loss_scale
-                        )
-                        CHTA_source_scores.append(source_h_scores)
-                        CHTA_diagnostics.append(conditional_stats)
+                    if self.pattern_moe is not None:
+                        # The horizon-conditioned MoE-OT replaces the old
+                        # full-sequence GeomLoss OT as the Stage-I main alignment.
+                        # DVGP still supplies the base sample reliability weights.
+                        if (
+                            has_overlap
+                            and source_horizon_desc is not None
+                            and target_horizon_desc is not None
+                        ):
+                            source_h_marginals, target_h_marginals, source_h_scores = (
+                                self.pattern_moe.horizon_marginals(
+                                    base_prob1,
+                                    base_prob2,
+                                    source_horizon_desc,
+                                    target_horizon_desc,
+                                )
+                            )
+                            source_history = source_history_windows[index].reshape(
+                                -1, source_history_windows[index].shape[-1]
+                            )
+                            target_history = target_history_windows[index].reshape(
+                                -1, target_history_windows[index].shape[-1]
+                            )
+                            _, conditional_stats = self.pattern_moe.compute_alignment_loss(
+                                x1,
+                                x2,
+                                source_history,
+                                target_history,
+                                source_horizon_desc,
+                                target_horizon_desc,
+                                source_h_marginals,
+                                target_h_marginals,
+                                base_prob1,
+                                base_prob2,
+                            )
+                            PatternMoE_horizon_losses.append(
+                                conditional_stats["horizon_losses"] * OT_loss_scale
+                            )
+                            PatternMoE_source_scores.append(source_h_scores)
+                            PatternMoE_diagnostics.append(conditional_stats)
+                    else:
+                        # Legacy PMME/CHTA path retained for controlled ablations.
+                        x = torch.cat([x1, y1], dim=-1)
+                        y = torch.cat([x2, y2], dim=-1)
+                        if has_overlap:
+                            OT_loss = (
+                                torch.sum(criterion(alpha, x, beta, y))
+                                * self.DAcoef_args
+                                * OT_loss_scale
+                            )
+                        else:
+                            OT_loss = 0.0
+                        DA_losses.append(OT_loss)
+
+                        if (
+                            self.chta is not None
+                            and has_overlap
+                            and source_horizon_desc is not None
+                            and target_horizon_desc is not None
+                        ):
+                            source_h_marginals, target_h_marginals, source_h_scores = (
+                                self.chta.horizon_marginals(
+                                    base_prob1, base_prob2,
+                                    source_horizon_desc, target_horizon_desc
+                                )
+                            )
+                            _, conditional_stats = self.chta.compute_alignment_loss(
+                                x1,
+                                x2,
+                                source_horizon_desc,
+                                target_horizon_desc,
+                                source_h_marginals,
+                                target_h_marginals,
+                            )
+                            CHTA_horizon_losses.append(
+                                conditional_stats["horizon_losses"] * OT_loss_scale
+                            )
+                            CHTA_source_scores.append(source_h_scores)
+                            CHTA_diagnostics.append(conditional_stats)
 
             elif self.DA == 'CMMD':
                 if (epoch>=self.DAepoch_args): 
@@ -513,6 +611,28 @@ class STRep(nn.Module):
             source_city_weights = None
             CHTA_loss = task_loss.new_zeros(())
 
+        if PatternMoE_horizon_losses:
+            pattern_source_losses = torch.stack(PatternMoE_horizon_losses, dim=0)
+            pattern_source_scores = torch.stack(PatternMoE_source_scores, dim=0)
+            pattern_source_weights = torch.softmax(
+                pattern_source_scores / max(self.pattern_moe_source_temperature, 1e-6),
+                dim=0,
+            )
+            PatternMoE_loss = (
+                pattern_source_weights * pattern_source_losses
+            ).sum(dim=0).mean() * self.pattern_moe_loss_weight * self.DAcoef_args
+        else:
+            pattern_source_weights = None
+            PatternMoE_loss = task_loss.new_zeros(())
+
+        if self.pattern_moe is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
+            PatternMoE_smoothness = (
+                self.pattern_moe.smoothness_loss() * self.pattern_moe_smoothness_weight
+            )
+            target_loss_weight = self.pattern_moe_target_loss_weight
+        else:
+            PatternMoE_smoothness = task_loss.new_zeros(())
+
         if self.chta is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
             CHTA_smoothness = self.chta.smoothness_loss()
             CHTA_smoothness = self.chta_smoothness_weight * CHTA_smoothness
@@ -524,7 +644,7 @@ class STRep(nn.Module):
         # The few-shot target loss is now an explicit, low-weight Stage-I
         # objective.  In the projected-gradient path it remains the reference
         # direction and is also added back with target_loss_weight.
-        transfer_loss = task_loss + DA_loss + CHTA_loss + CHTA_smoothness
+        transfer_loss = task_loss + DA_loss + CHTA_loss + CHTA_smoothness + PatternMoE_loss + PatternMoE_smoothness
         model_loss = transfer_loss + target_loss_weight * target_task_loss
 
         if epoch % 25 == 0 and CHTA_diagnostics:
@@ -539,6 +659,23 @@ class STRep(nn.Module):
                 "CHTA_source_city_weights",
                 source_city_weights.detach().cpu().numpy().round(4).tolist()
                 if source_city_weights is not None else None,
+            )
+
+        if epoch % 25 == 0 and PatternMoE_diagnostics:
+            router = torch.stack([d["router_weights"] for d in PatternMoE_diagnostics], dim=0)
+            diversity = torch.stack([d["plan_diversity"] for d in PatternMoE_diagnostics]).mean()
+            row_error = torch.stack([d["max_row_marginal_error"] for d in PatternMoE_diagnostics]).max()
+            col_error = torch.stack([d["max_col_marginal_error"] for d in PatternMoE_diagnostics]).max()
+            print(
+                "PatternMoE_loss", float(PatternMoE_loss.detach()),
+                "PatternMoE_router_by_horizon",
+                router.mean(dim=0).detach().cpu().numpy().round(4).tolist(),
+                "PatternMoE_plan_diversity", float(diversity),
+                "PatternMoE_row_marginal_error", float(row_error),
+                "PatternMoE_col_marginal_error", float(col_error),
+                "PatternMoE_source_city_weights",
+                pattern_source_weights.detach().cpu().numpy().round(4).tolist()
+                if pattern_source_weights is not None else None,
             )
 
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
