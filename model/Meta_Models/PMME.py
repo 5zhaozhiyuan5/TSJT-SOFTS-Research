@@ -284,6 +284,7 @@ class STRep(nn.Module):
         total_mse = []
         total_rmse = []
         total_mape = []
+        train_horizon_metrics = []
         
         task_losses = []
         rep_source = []
@@ -349,6 +350,20 @@ class STRep(nn.Module):
                 total_rmse.append(RMSE.cpu().detach().numpy())
                 total_mae.append(MAE.cpu().detach().numpy())
                 total_mape.append(MAPE.cpu().detach().numpy())
+                with torch.no_grad():
+                    difference = out.detach() - y.detach()
+                    per_horizon_mse = difference.square().mean(dim=(0, 1))
+                    per_horizon_mae = difference.abs().mean(dim=(0, 1))
+                    per_horizon_rmse = per_horizon_mse.sqrt()
+                    per_horizon_mape = (
+                        difference.abs() / y.detach().abs().clamp_min(1e-6)
+                    ).mean(dim=(0, 1))
+                    train_horizon_metrics.append((
+                        per_horizon_mae.cpu().numpy(),
+                        per_horizon_rmse.cpu().numpy(),
+                        per_horizon_mse.cpu().numpy(),
+                        per_horizon_mape.cpu().numpy(),
+                    ))
 
                 if i>0:
                     task_losses.append(task_loss)
@@ -862,12 +877,15 @@ class STRep(nn.Module):
             "source_city_weights": pattern_source_weights if pattern_source_weights is not None else [],
             "finite_total_loss": bool(torch.isfinite(model_loss.detach()).all()),
         })
-        if total_mae and np.asarray(total_mae[0]).ndim > 0:
-            horizon_mae = np.stack(total_mae, axis=0).mean(axis=0)
-            horizon_rmse = np.stack(total_rmse, axis=0).mean(axis=0)
-            horizon_mse = np.stack(total_mse, axis=0).mean(axis=0)
-            horizon_mape = np.stack(total_mape, axis=0).mean(axis=0)
-            minutes_per_step = float(getattr(self.data_args, "processed_interval_minutes", 5)) if not isinstance(self.data_args, dict) else float(self.data_args.get("processed_interval_minutes", 5))
+        if train_horizon_metrics:
+            horizon_mae = np.stack([item[0] for item in train_horizon_metrics], axis=0).mean(axis=0)
+            horizon_rmse = np.stack([item[1] for item in train_horizon_metrics], axis=0).mean(axis=0)
+            horizon_mse = np.stack([item[2] for item in train_horizon_metrics], axis=0).mean(axis=0)
+            horizon_mape = np.stack([item[3] for item in train_horizon_metrics], axis=0).mean(axis=0)
+            minutes_per_step = (
+                self.pattern_moe.minutes_per_step if self.pattern_moe is not None
+                else (self.chta.minutes_per_step if self.chta is not None else 5.0)
+            )
             self.diagnostics.log_horizon(
                 epoch, len(horizon_mae), minutes_per_step,
                 horizon_mae, horizon_rmse, horizon_mse, horizon_mape,
