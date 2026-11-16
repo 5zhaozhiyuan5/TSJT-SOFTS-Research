@@ -141,6 +141,7 @@ class STRep(nn.Module):
         chta_cfg = model_args.get('chta', {})
         self.chta_enabled = bool(chta_cfg.get('enabled', False))
         self.chta_loss_weight = float(chta_cfg.get('loss_weight', 0.1))
+        self.chta_source_temperature = float(chta_cfg.get('source_temperature', 0.25))
         self.chta_smoothness_weight = float(chta_cfg.get('smoothness_weight', 1e-4))
         self.chta_target_loss_weight = float(chta_cfg.get('target_loss_weight', 0.1))
         self.chta = None
@@ -297,7 +298,8 @@ class STRep(nn.Module):
         print(shape0_list)
 
         DA_losses = []
-        CHTA_losses = []
+        CHTA_horizon_losses = []
+        CHTA_source_scores = []
         CHTA_diagnostics = []
         y_norm_sources = []
         y_norm_targets = []
@@ -453,7 +455,7 @@ class STRep(nn.Module):
                         and source_horizon_desc is not None
                         and target_horizon_desc is not None
                     ):
-                        source_h_marginals, target_h_marginals = self.chta.horizon_marginals(
+                        source_h_marginals, target_h_marginals, source_h_scores = self.chta.horizon_marginals(
                             base_prob1, base_prob2, source_horizon_desc, target_horizon_desc
                         )
                         conditional_loss, conditional_stats = self.chta.compute_alignment_loss(
@@ -464,12 +466,10 @@ class STRep(nn.Module):
                             source_h_marginals,
                             target_h_marginals,
                         )
-                        CHTA_losses.append(
-                            conditional_loss
-                            * self.chta_loss_weight
-                            * self.DAcoef_args
-                            * OT_loss_scale
+                        CHTA_horizon_losses.append(
+                            conditional_stats["horizon_losses"] * OT_loss_scale
                         )
+                        CHTA_source_scores.append(source_h_scores)
                         CHTA_diagnostics.append(conditional_stats)
 
             elif self.DA == 'CMMD':
@@ -497,7 +497,21 @@ class STRep(nn.Module):
                     
         task_loss = sum(task_losses)
         DA_loss = sum(DA_losses) if DA_losses else task_loss.new_zeros(())
-        CHTA_loss = sum(CHTA_losses) if CHTA_losses else task_loss.new_zeros(())
+        if CHTA_horizon_losses:
+            source_horizon_loss = torch.stack(CHTA_horizon_losses, dim=0)
+            source_horizon_score = torch.stack(CHTA_source_scores, dim=0)
+            # Normalize source-city compatibility independently at each
+            # physical horizon, rather than summing the three source domains
+            # with one fixed coefficient.
+            source_city_weights = torch.softmax(
+                source_horizon_score / max(self.chta_source_temperature, 1e-6), dim=0
+            )
+            CHTA_loss = (
+                source_city_weights * source_horizon_loss
+            ).sum(dim=0).mean() * self.chta_loss_weight * self.DAcoef_args
+        else:
+            source_city_weights = None
+            CHTA_loss = task_loss.new_zeros(())
 
         if self.chta is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
             CHTA_smoothness = self.chta.smoothness_loss()
@@ -522,6 +536,9 @@ class STRep(nn.Module):
                 "CHTA_plan_diversity", float(mean_diversity),
                 "CHTA_row_marginal_error", float(max_row_error),
                 "CHTA_col_marginal_error", float(max_col_error),
+                "CHTA_source_city_weights",
+                source_city_weights.detach().cpu().numpy().round(4).tolist()
+                if source_city_weights is not None else None,
             )
 
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):

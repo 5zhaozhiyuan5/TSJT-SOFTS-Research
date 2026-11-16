@@ -66,7 +66,10 @@ sample's future-change descriptor and the opposite domain's descriptor
 centroid. The gated weights are normalized to form horizon-specific marginals.
 
 Thus the GP classifier architecture is not replaced; the marginal weights
-used by OT become horizon-conditioned.
+used by OT become horizon-conditioned. The weighted source compatibility score
+is also normalized across the available source cities separately at each
+anchor, producing a source-city-by-horizon contribution matrix rather than one
+fixed global source weight.
 
 ## Conditional transport
 
@@ -82,8 +85,9 @@ For each source/target pair:
    conditional plan near the shared base plan.
 
 The conditional plans are therefore distinct while sharing a base plan and
-using only small sampled matrices. The original full PMME GeomLoss OT term is
-kept as the base distribution-alignment objective.
+using only small sampled matrices. Conditional losses are combined using
+source-city weights normalized independently at each horizon. The original
+full PMME GeomLoss OT term is kept as the base distribution-alignment objective.
 
 ## Stage-I objective and gradient path
 

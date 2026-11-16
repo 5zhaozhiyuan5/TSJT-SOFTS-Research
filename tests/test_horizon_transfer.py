@@ -55,11 +55,14 @@ class ContinuousHorizonTransferTest(unittest.TestCase):
 
         source_base = torch.rand(source_rep.shape[0]) + 0.1
         target_base = torch.rand(target_rep.shape[0]) + 0.1
-        source_marginals, target_marginals = self.module.horizon_marginals(
+        source_marginals, target_marginals, source_scores = self.module.horizon_marginals(
             source_base, target_base, source_desc, target_desc
         )
         self.assertEqual(tuple(source_marginals.shape), (4, source_rep.shape[0]))
         self.assertEqual(tuple(target_marginals.shape), (4, target_rep.shape[0]))
+        self.assertEqual(tuple(source_scores.shape), (4,))
+        source_city_weights = torch.softmax(source_scores / 0.25, dim=0)
+        self.assertTrue(torch.allclose(source_city_weights.sum(), torch.tensor(1.0), atol=1e-6))
         self.assertTrue(torch.allclose(source_marginals.sum(dim=1), torch.ones(4), atol=1e-6))
         self.assertTrue(torch.allclose(target_marginals.sum(dim=1), torch.ones(4), atol=1e-6))
 

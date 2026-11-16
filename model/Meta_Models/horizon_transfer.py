@@ -186,7 +186,7 @@ class ContinuousHorizonTransferAlignment(nn.Module):
             raise ValueError("descriptor anchor dimension does not match anchor_steps")
         source_base = _normalize_weights(base_source_weights.detach())
         target_base = _normalize_weights(base_target_weights.detach())
-        source_rows, target_rows = [], []
+        source_rows, target_rows, source_scores = [], [], []
         for k in range(len(self.anchor_steps)):
             source_desc = source_descriptors[:, k, :]
             target_desc = target_descriptors[:, k, :]
@@ -199,7 +199,14 @@ class ContinuousHorizonTransferAlignment(nn.Module):
             target_gate = 0.5 + torch.exp(-target_distance / scale)
             source_rows.append(_normalize_weights(source_base * source_gate))
             target_rows.append(_normalize_weights(target_base * target_gate))
-        return torch.stack(source_rows, dim=0), torch.stack(target_rows, dim=0)
+            # A horizon-specific source-domain compatibility score. PMME
+            # normalizes these scores across the three source cities.
+            source_scores.append((source_base * source_gate).sum())
+        return (
+            torch.stack(source_rows, dim=0),
+            torch.stack(target_rows, dim=0),
+            torch.stack(source_scores, dim=0),
+        )
 
     def _sample_indices(self, count: int, device: torch.device) -> torch.Tensor:
         if count <= self.max_samples:
@@ -306,7 +313,8 @@ class ContinuousHorizonTransferAlignment(nn.Module):
             row_errors.append((plan.sum(dim=1) - _normalize_weights(src_m[k])).abs().max())
             col_errors.append((plan.sum(dim=0) - _normalize_weights(tgt_m[k])).abs().max())
 
-        loss = torch.stack(conditional_losses).mean()
+        horizon_losses = torch.stack(conditional_losses)
+        loss = horizon_losses.mean()
         if len(film_states) > 1:
             smooth_terms = []
             for left, right, h0, h1 in zip(
@@ -330,6 +338,9 @@ class ContinuousHorizonTransferAlignment(nn.Module):
             "smoothness": smoothness.detach(),
             "sampled_source": loss.new_tensor(float(src.shape[0])).detach(),
             "sampled_target": loss.new_tensor(float(tgt.shape[0])).detach(),
+            # Keep this vector attached: PMME uses it for horizon-wise
+            # source-city weighting of the conditional alignment objective.
+            "horizon_losses": horizon_losses,
         }
         return loss, diagnostics
 

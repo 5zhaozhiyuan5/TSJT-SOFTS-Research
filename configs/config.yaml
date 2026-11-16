@@ -68,6 +68,7 @@ model:
     max_samples: 128
     future_weight: 1.0
     prior_kl_weight: 1.0
+    source_temperature: 0.25
     loss_weight: 0.1
     smoothness_weight: 0.0001
     target_loss_weight: 0.1
