@@ -807,15 +807,16 @@ class STRep(nn.Module):
         def gradient_summary(module):
             params = list(module.parameters())
             total = max(len(params), 1)
-            grad_sq, none_count, nonfinite_count = [], 0, 0
+            grad_sq, nonfinite_counts, none_count = [], [], 0
             for parameter in params:
                 if parameter.grad is None:
                     none_count += 1
                     continue
                 grad = parameter.grad.detach().float()
-                nonfinite_count += int((~torch.isfinite(grad)).sum().item())
+                nonfinite_counts.append((~torch.isfinite(grad)).sum())
                 grad_sq.append(torch.nan_to_num(grad).pow(2).sum())
             grad_norm = torch.sqrt(torch.stack(grad_sq).sum()) if grad_sq else torch.zeros(())
+            nonfinite_count = int(torch.stack(nonfinite_counts).sum().item()) if nonfinite_counts else 0
             return grad_norm, none_count / total, nonfinite_count
 
         if (self.projection_args == 0):
