@@ -25,6 +25,7 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
+from horizon_metric import HorizonConditionedLowRankMetric
 
 def log_verbose(args, msg):
     print(msg)
@@ -133,14 +134,37 @@ class STRep(nn.Module):
         self.current_epoch = 0
 
         self.model = PatchFSL(data_args, model_args, task_args, memory_size_args, projection_args, model_name, PatchFSL_cfg, args).to(self.device)
-        
+
+        # Stage-I only: horizon-conditioned low-rank metric over the backbone's
+        # window-level representation. Stage-II remains in its official module.
+        hclm_cfg = model_args.get('hclm', {})
+        self.hclm_enabled = bool(hclm_cfg.get('enabled', False))
+        self.hclm_relation_weight = float(hclm_cfg.get('relation_weight', 0.25))
+        self.hclm_smoothness_weight = float(hclm_cfg.get('smoothness_weight', 1e-4))
+        self.hclm = None
+        if self.hclm_enabled:
+            self.hclm = HorizonConditionedLowRankMetric(
+                input_dim=int(hclm_cfg.get('input_dim', 128)),
+                rank=int(hclm_cfg.get('rank', 8)),
+                basis_dim=int(hclm_cfg.get('basis_dim', 8)),
+                anchor_minutes=tuple(hclm_cfg.get('anchor_minutes', [10, 60, 120, 180])),
+                max_minutes=float(hclm_cfg.get('max_minutes', 180)),
+            ).to(self.device)
+
+        self.optimized_parameters = list(self.model.parameters())
+        if self.hclm is not None:
+            self.optimized_parameters.extend(list(self.hclm.parameters()))
+
         for name, params in self.model.named_parameters():
             log_verbose(args,"{} : {}, require_grads : {}".format(name, params.shape,params.requires_grad))
         
         # print(self.model)
         log_verbose(args,"model params: {}".format(count_parameters(self.model)))
 
-        self.main_optim = optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=1e-2)
+        if self.hclm is not None:
+            for name, params in self.hclm.named_parameters():
+                log_verbose(args, "hclm.{} : {}, require_grads : {}".format(name, params.shape, params.requires_grad))
+        self.main_optim = optim.AdamW(self.optimized_parameters, lr=self.lr, weight_decay=1e-2)
         
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
         
@@ -265,10 +289,17 @@ class STRep(nn.Module):
             labels1, labels2 = torch.zeros(size1, device=self.device), torch.ones(size2, device=self.device) 
             labels = torch.cat((labels1, labels2), dim=0)
 
-            x1,y1 = rep_source[index], y_source[index] 
+            x1,y1 = rep_source[index], y_source[index]
             x2,y2 = rep_target[index], y_target[index]
             shape0 = x1.shape[1]
-                    
+
+            # Compute a compact horizon-conditioned relation embedding from the
+            # SOFTS/iTransformer window representation before flattening nodes.
+            relation1, relation2 = None, None
+            if self.hclm is not None and self.DA == 'OT':
+                relation1 = self.hclm(x1)
+                relation2 = self.hclm(x2)
+
             y_norm_sources.append(y1)
             y_norm_targets.append(y2)
 
@@ -276,6 +307,9 @@ class STRep(nn.Module):
             x2 = x2.view(-1, x2.size(-1))
             y1 = y1.view(-1, y1.size(-1))
             y2 = y2.view(-1, y2.size(-1))
+            if relation1 is not None:
+                relation1 = relation1.reshape(-1, relation1.size(-1))
+                relation2 = relation2.reshape(-1, relation2.size(-1))
             
 
             if self.classifier_args>1e-6:
@@ -363,8 +397,14 @@ class STRep(nn.Module):
                     x_y_scale = math.sqrt(self.xySquaredRatio_args)
                     y1, y2 = y1*x_y_scale, y2*x_y_scale
                     
-                    x = torch.cat((x1,y1),dim=-1) 
-                    y = torch.cat((x2,y2),dim=-1) # y: target  
+                    x_blocks = [x1, y1]
+                    y_blocks = [x2, y2]
+                    if relation1 is not None:
+                        relation_scale = math.sqrt(max(self.hclm_relation_weight, 0.0))
+                        x_blocks.append(relation1 * relation_scale)
+                        y_blocks.append(relation2 * relation_scale)
+                    x = torch.cat(x_blocks, dim=-1)
+                    y = torch.cat(y_blocks, dim=-1)  # y: target
                     
                     if (ratio1>0.00 and ratio2>0.00):
                         OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args *OT_loss_scale
@@ -401,7 +441,15 @@ class STRep(nn.Module):
         else:
             DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
         
-        model_loss += (task_loss + DA_loss) 
+        model_loss += (task_loss + DA_loss)
+        if (
+            self.hclm is not None
+            and self.DA == 'OT'
+            and epoch >= self.DAepoch_args
+            and len(DA_losses) > 0
+            and self.hclm_smoothness_weight > 0
+        ):
+            model_loss += self.hclm_smoothness_weight * self.hclm.smoothness_loss()
 
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
             
@@ -443,12 +491,12 @@ class STRep(nn.Module):
             self.main_optim.zero_grad()
             model_loss.backward(retain_graph=True)
             
-            flat_A, mapping = flatten_and_pad_grads(self.model.parameters())
+            flat_A, mapping = flatten_and_pad_grads(self.optimized_parameters)
             
             self.main_optim.zero_grad()
             target_task_loss.backward(retain_graph=True)
             
-            flat_B, _ = flatten_and_pad_grads(self.model.parameters())
+            flat_B, _ = flatten_and_pad_grads(self.optimized_parameters)
             
             flat_proj_A = pcgrad_one_sided(flat_A, flat_B)
             
