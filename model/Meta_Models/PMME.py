@@ -169,6 +169,8 @@ class STRep(nn.Module):
         self.pattern_moe_enabled = bool(pattern_cfg.get('enabled', False))
         if self.pattern_moe_enabled and self.chta_enabled:
             raise ValueError("Enable either pattern_moe or legacy chta, not both.")
+        if self.pattern_moe_enabled and self.DA != 'OT':
+            raise ValueError("pattern_moe currently requires DA='OT'.")
         self.pattern_moe = None
         self.pattern_moe_loss_weight = float(pattern_cfg.get('loss_weight', 1.0))
         self.pattern_moe_source_temperature = float(pattern_cfg.get('source_temperature', 0.25))
@@ -611,6 +613,9 @@ class STRep(nn.Module):
             source_city_weights = None
             CHTA_loss = task_loss.new_zeros(())
 
+        target_loss_weight = (
+            self.pattern_moe_target_loss_weight if self.pattern_moe is not None else 0.0
+        )
         if PatternMoE_horizon_losses:
             pattern_source_losses = torch.stack(PatternMoE_horizon_losses, dim=0)
             pattern_source_scores = torch.stack(PatternMoE_source_scores, dim=0)
