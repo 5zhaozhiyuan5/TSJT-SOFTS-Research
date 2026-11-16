@@ -203,6 +203,20 @@ class STRep(nn.Module):
         param_norm_before = torch.sqrt(sum(
             p.detach().float().pow(2).sum() for p in params_for_diagnostics
         ))
+        parameter_sample_before = []
+        remaining_sample = 4096
+        for parameter in params_for_diagnostics:
+            if remaining_sample <= 0:
+                break
+            flat = parameter.detach().reshape(-1)
+            take = min(remaining_sample, flat.numel())
+            if take:
+                parameter_sample_before.append(flat[:take].float().clone())
+                remaining_sample -= take
+        parameter_sample_before = (
+            torch.cat(parameter_sample_before)
+            if parameter_sample_before else torch.zeros(1, device=self.device)
+        )
         
         total_mae = []
         total_mse = []
@@ -353,7 +367,17 @@ class STRep(nn.Module):
             self.diagnostics.log_gradient(
                 epoch, "stage2_model", grad_norm, param_norm_before,
                 grad_none / max(len(params_for_diagnostics), 1),
-                nonfinite_grad_count, param_norm_after, stage="stage2",
+                nonfinite_grad_count, param_norm_after,
+                parameter_delta_norm=torch.norm(
+                    torch.cat([
+                        parameter.detach().reshape(-1)[:max(0, 4096 - sum(
+                            min(4096, p.numel()) for p in params_for_diagnostics[:index]
+                        ))].float()
+                        for index, parameter in enumerate(params_for_diagnostics)
+                        if sum(min(4096, p.numel()) for p in params_for_diagnostics[:index]) < 4096
+                    ])[:parameter_sample_before.numel()] - parameter_sample_before
+                ),
+                stage="stage2",
             )
             lr = self.main_optim.param_groups[0]["lr"] if self.main_optim.param_groups else self.lr
             self.diagnostics.log_runtime(
