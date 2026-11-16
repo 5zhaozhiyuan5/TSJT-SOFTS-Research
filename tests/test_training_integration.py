@@ -140,6 +140,13 @@ class StageITrainingIntegrationTest(unittest.TestCase):
             args=self.args,
         )
         stage1.model.forecasting_model = TinyBackbone()
+        # The test swaps the backbone after STRep construction, so rebuild the
+        # optimizer to include the synthetic backbone parameters as production
+        # construction would do for the official SOFTS/iTransformer parameters.
+        stage1.optimized_parameters = list(stage1.model.parameters()) + list(stage1.hclm.parameters())
+        stage1.main_optim = torch.optim.AdamW(
+            stage1.optimized_parameters, lr=stage1.lr, weight_decay=1e-2
+        )
 
         target = make_data(46, 325, 1)
         sources = [
