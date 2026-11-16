@@ -461,7 +461,7 @@ class STRep(nn.Module):
         
         total_mse_horizon,total_rmse_horizon, total_mae_horizon, total_mape_horizon, total_loss = self.test_batch(0, 1, finetune_dataset, "test") 
     
-        validation_phase = "stage2_few_shot_validation"
+        validation_phase = "stage2_target_few_shot_train_eval"
         validation_score = []
         
         for i in range(self.task_args['source']['pred_num']):
