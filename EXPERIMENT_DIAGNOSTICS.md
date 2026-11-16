@@ -29,7 +29,9 @@ loss terms, change gradients, or alter optimizer updates.
 - Stage-I and Stage-II scalar epoch metrics, per-step training metrics, gradient
   summaries, and runtime are written once per training epoch.
 - Pattern/MoE/OT diagnostics are written for each source-city alignment call and
-  each configured horizon anchor (normally 10, 60, 120 and 180 minutes).
+  each configured horizon anchor (normally 10, 60, 120 and 180 minutes), only
+  after the configured `DAepoch` warm-up. The supplied launch script uses
+  `DAepoch=1500`, so an empty alignment CSV during epochs 0--1499 is expected.
 - Evaluation metrics are written at each existing evaluation event, separately
   for few-shot validation and test. The existing evaluation schedule is not
   changed by this diagnostics patch.
