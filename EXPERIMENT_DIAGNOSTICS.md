@@ -18,7 +18,7 @@ loss terms, change gradients, or alter optimizer updates.
 | `moe_router.csv` | Per-source-batch and horizon router weights, pairwise router spread/top-1 fraction, entropy, expert costs | Detect expert collapse or unchanging gates |
 | `pattern_bank.csv` | Initial prototype-bank statistics for each historical scale | Check bank construction and scale coverage |
 | `pattern_usage.csv` | Per-scale prototype assignment usage, entropy, top-1 fraction, and mean pairwise cost | Detect unused/collapsed prototypes |
-| `ot_diagnostics.csv` | Per-horizon conditional OT loss, plan diversity, row/column marginal errors, sample counts | Check whether conditional transport differs and converges |
+| `ot_diagnostics.csv` | Per-horizon conditional OT loss, plan diversity/entropy/concentration, row/column marginal errors, sample counts | Check whether conditional transport differs, collapses to a few pairs, and converges |
 | `gradient_diagnostics.csv` | Stage-I/II module gradient norm, missing-gradient fraction, non-finite gradient count, parameter norms and sampled update magnitude | Detect disconnected modules, exploding/invalid gradients, or negligible updates |
 | `runtime.csv` | Epoch time, cumulative runtime, learning rate, CUDA allocated/reserved memory | Diagnose speed and memory issues |
 | `stage2_metrics.csv` | Official PMME Stage-II losses and source prediction metrics | Diagnose target adaptation training |
@@ -47,8 +47,10 @@ loss terms, change gradients, or alter optimizer updates.
    is expected; compare trends and configured iteration counts rather than
    treating a single small residual as proof of useful domain transfer.
 4. Plan diversity measures how different horizon-conditioned transport plans
-   are. Higher diversity is not automatically better; compare it with
-   horizon-wise validation/test metrics.
+   are. Plan entropy and row entropy describe how diffuse the transport weights
+   are; maximum weight and row top-1 mass indicate concentration. Neither high
+   nor low entropy is inherently best. Compare these values with horizon-wise
+   validation/test metrics and marginal errors.
 5. Parameter update magnitude is estimated from the first 4096 flattened
    parameter values in each module to keep logging memory overhead small. It
    complements, but does not replace, a full checkpoint comparison.
