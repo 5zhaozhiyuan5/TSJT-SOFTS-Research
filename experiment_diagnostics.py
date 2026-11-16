@@ -44,6 +44,7 @@ class ExperimentDiagnostics:
 
     FILES = {
         "epoch": "epoch_metrics.csv",
+        "stage2_epoch": "stage2_metrics.csv",
         "horizon": "horizon_metrics.csv",
         "router": "moe_router.csv",
         "pattern": "pattern_bank.csv",
@@ -235,8 +236,9 @@ class ExperimentDiagnostics:
                 })
 
     def log_gradient(self, epoch, module_name, grad_norm, parameter_norm, grad_none_fraction,
-                     nonfinite_grad_count, parameter_norm_after=None):
+                     nonfinite_grad_count, parameter_norm_after=None, stage="stage1"):
         self.write("gradient", {
+            "stage": stage,
             "epoch": epoch,
             "module": module_name,
             "gradient_norm": grad_norm,
@@ -246,10 +248,11 @@ class ExperimentDiagnostics:
             "nonfinite_gradient_count": nonfinite_grad_count,
         })
 
-    def log_runtime(self, epoch, elapsed_seconds, optimizer_lr, device):
+    def log_runtime(self, epoch, elapsed_seconds, optimizer_lr, device, stage="stage1"):
         cuda_allocated = torch.cuda.memory_allocated(device) if torch.cuda.is_available() and str(device).startswith("cuda") else 0
         cuda_reserved = torch.cuda.memory_reserved(device) if torch.cuda.is_available() and str(device).startswith("cuda") else 0
         self.write("runtime", {
+            "stage": stage,
             "epoch": epoch,
             "elapsed_seconds": elapsed_seconds,
             "elapsed_total_seconds": time.time() - self.started_at,
