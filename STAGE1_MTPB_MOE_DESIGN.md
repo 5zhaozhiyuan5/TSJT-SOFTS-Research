@@ -16,35 +16,53 @@ It is deliberately **not** a full MTPB port:
 ## Data flow
 
 1. The existing PMME wrapper runs SOFTS and returns rep and out.
-2. train_DA_OT.py builds five source-only pattern banks from history windows at
-   1/3/6/12/24-hour scales (12/36/72/144/288 steps on the common 5-minute grid).
-3. The five scale banks are grouped into three lightweight alignment experts:
+2. datasets.py declares each raw sampling interval and maps the current
+   METR-LA/PEMS-BAY (5-min) and Chengdu/Shenzhen (10-min) inputs onto the
+   existing common 5-minute grid before window generation.
+3. train_DA_OT.py converts physical pattern durations [60, 180, 360, 720,
+   1440] minutes into steps using the processed grid, then builds five
+   source-only pattern banks. On the current 5-minute grid these are
+   [12, 36, 72, 144, 288] steps. A raw 10-minute grid would resolve them to
+   [6, 18, 36, 72, 144] steps instead.
+4. The five scale banks are grouped into three lightweight alignment experts:
    - short-scale: 1h + 3h;
    - middle-scale: 6h + 12h;
    - long-scale: 24h.
-4. For each source/target batch pair, each expert converts historical windows
-   into soft assignments over shared source prototypes. Pairwise Hellinger
-   distances between assignments form the expert-specific pattern costs.
-5. A dense horizon-conditioned router receives pooled SOFTS context, the
-   training-only future-change descriptors, and the physical horizon code. It
-   outputs three weights for each of the four horizon anchors.
-6. The weighted pattern cost is combined with horizon-conditioned SOFTS
+5. Each patch is normalized independently before prototype construction. Query
+   patches use the same normalization, preventing a mismatch between bank
+   construction and online batch matching.
+6. For each source/target sample pair, each expert converts the corresponding
+   historical windows into soft assignments over shared source prototypes.
+   Pairwise Hellinger distances form the expert-specific pattern costs.
+7. A dense router receives the pair's SOFTS contexts, training-only future-change
+   descriptors, and physical horizon code. It produces three expert weights
+   separately for every source/target pair and horizon anchor.
+8. The weighted pattern cost is combined with horizon-conditioned SOFTS
    representation cost and future-change cost.
-7. PMME's DVGP probabilities remain the sample-reliability weights. A shared
+9. PMME's DVGP probabilities remain the sample-reliability weights. A shared
    base transport plan is computed from history representations, and each
    horizon plan is KL-regularized toward that base plan.
-8. The conditional MoE-OT losses replace the old full-sequence GeomLoss OT
-   term when pattern_moe.enabled=true. They are the Stage-I main alignment
-   objective, not an extra CHTA auxiliary loss.
+10. The conditional MoE-OT losses replace the old full-sequence GeomLoss OT
+    term when pattern_moe.enabled=true. They are the Stage-I main alignment
+    objective, not an extra CHTA auxiliary loss.
 
 ## Important implementation details
 
-- Horizon anchors: steps [2, 12, 24, 36], i.e. 10/60/120/180 minutes.
-- Pattern bank scale steps: [12, 36, 72, 144, 288], i.e. 1/3/6/12/24 hours.
+- Physical horizon anchors are [10, 60, 120, 180] minutes. They resolve to
+  [2, 12, 24, 36] steps on the current 5-minute grid.
+- Physical pattern scales are [60, 180, 360, 720, 1440] minutes. They resolve
+  to [12, 36, 72, 144, 288] steps on the current 5-minute grid.
+- The data loader explicitly records raw and processed sampling intervals.
+  Chengdu/Shenzhen are interpolated using the repository's existing 2x path;
+  METR-LA/PEMS-BAY are already on the 5-minute grid.
+- The training entrypoint checks that the largest scale fits the configured
+  history window and that horizon anchors fit the prediction horizon.
 - Pattern prototypes are deterministic NumPy k-means centers built from a
   bounded sample of source-city training windows.
-- Each history window is normalized sample-wise before patch descriptors are
-  formed. This reduces city-specific speed-scale effects.
+- Every extracted patch is normalized independently, matching the query-time
+  patch normalization and reducing city-specific speed-scale effects.
+- Router diagnostics report pair-averaged expert weights, pair-level entropy,
+  expert costs, router smoothness, plan diversity, and marginal errors.
 - The router is dense softmax over three experts. Top-1/Top-2 sparse routing is
   intentionally not used in this first version because the target domain has
   only three days of support data.
@@ -52,6 +70,8 @@ It is deliberately **not** a full MTPB port:
   horizon-specific DVGP marginals.
 - Source-city losses continue to use the existing horizon-wise compatibility
   weighting derived from DVGP/future-change descriptors.
+- Router weights are also regularized for smooth changes between adjacent
+  physical horizon anchors.
 - The existing one-sided PCGrad and low-weight target Stage-I supervision are
   retained.
 
