@@ -721,14 +721,6 @@ class STRep(nn.Module):
                 self.pattern_moe.anchor_steps,
                 self.pattern_moe.minutes_per_step,
             )
-        if PatternMoE_diagnostics:
-            self.diagnostics.log_epoch({
-                "epoch": epoch,
-                "source_city_weights": pattern_source_weights if pattern_source_weights is not None else [],
-                "pattern_moe_loss": PatternMoE_loss,
-                "pattern_moe_smoothness": PatternMoE_smoothness,
-            })
-
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
             
             dot = torch.dot(grad_a, grad_b)
@@ -907,6 +899,7 @@ class STRep(nn.Module):
         
         total_mse_horizon,total_rmse_horizon, total_mae_horizon, total_mape_horizon, total_loss = self.test_batch(0, 1, finetune_dataset, "test") 
     
+        phase_name = "few_shot_validation"
         validation_score = []
         
         for i in range(self.task_args['source']['pred_num']):
@@ -931,6 +924,16 @@ class STRep(nn.Module):
             validation_score.append(total_mae)
 
             print('Horizon {} : Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, MAPE: {:.5f}'.format(i, total_mse, total_rmse, total_mae, total_mape))
+            minutes_per_step = self.pattern_moe.minutes_per_step if self.pattern_moe is not None else (self.chta.minutes_per_step if self.chta is not None else 5.0)
+            self.diagnostics.log_evaluation(
+                phase_name, self.current_epoch, i, minutes_per_step,
+                total_mae, total_rmse, total_mse, total_mape, total_len,
+            )
+            minutes_per_step = self.pattern_moe.minutes_per_step if self.pattern_moe is not None else (self.chta.minutes_per_step if self.chta is not None else 5.0)
+            self.diagnostics.log_evaluation(
+                phase_name, self.current_epoch, i, minutes_per_step,
+                total_mae, total_rmse, total_mse, total_mape, total_len,
+            )
             
         
         print("[INFO] Enter test phase")
@@ -939,6 +942,7 @@ class STRep(nn.Module):
         print('length', length) # 265
         total_mse_horizon,total_rmse_horizon, total_mae_horizon, total_mape_horizon, total_loss = self.test_batch(0,length+1, test_dataset,"test")   
         
+        phase_name = "test"
         testing_score = []
         
         for i in range(self.task_args['source']['pred_num']):
