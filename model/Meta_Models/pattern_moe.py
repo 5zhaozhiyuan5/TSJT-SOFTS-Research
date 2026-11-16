@@ -504,6 +504,8 @@ class HorizonPatternMoEAlignment(nn.Module):
         expert_cost_means = []
         film_states = []
         row_errors, col_errors = [], []
+        plan_entropies, normalized_plan_entropies = [], []
+        mean_row_entropies, plan_max_weights, row_top1_masses = [], [], []
         router_pair_stds, router_top1_fractions = [], []
 
         for horizon_index, time_code in enumerate(time_codes):
@@ -582,6 +584,19 @@ class HorizonPatternMoEAlignment(nn.Module):
                 + self.epsilon * self.prior_kl_weight * kl
             )
             conditional_plans.append(plan)
+            safe_plan = plan.detach().clamp_min(1e-12)
+            plan_entropy = -(safe_plan * safe_plan.log()).sum()
+            plan_entropies.append(plan_entropy)
+            normalized_plan_entropies.append(
+                plan_entropy / math.log(max(safe_plan.numel(), 2))
+            )
+            row_distribution = safe_plan / safe_plan.sum(dim=1, keepdim=True).clamp_min(1e-12)
+            row_entropy = -(
+                row_distribution * row_distribution.clamp_min(1e-12).log()
+            ).sum(dim=1)
+            mean_row_entropies.append(row_entropy.mean())
+            plan_max_weights.append(safe_plan.max())
+            row_top1_masses.append(safe_plan.max(dim=1).values.sum())
             router_weights.append(gate.mean(dim=(0, 1)))
             expert_cost_means.append(expert_costs.mean(dim=(1, 2)))
             row_errors.append(
@@ -652,6 +667,11 @@ class HorizonPatternMoEAlignment(nn.Module):
             "col_marginal_errors": torch.stack(col_errors).detach(),
             "router_pair_std": torch.stack(router_pair_stds).detach(),
             "router_top1_fraction": torch.stack(router_top1_fractions).detach(),
+            "plan_entropy": torch.stack(plan_entropies).detach(),
+            "normalized_plan_entropy": torch.stack(normalized_plan_entropies).detach(),
+            "mean_row_entropy": torch.stack(mean_row_entropies).detach(),
+            "plan_max_weight": torch.stack(plan_max_weights).detach(),
+            "row_top1_mass": torch.stack(row_top1_masses).detach(),
             "pattern_usage": pattern_usage.detach(),
             "pattern_entropy": pattern_entropy.detach(),
             "pattern_top1_fraction": pattern_top1_fraction.detach(),
