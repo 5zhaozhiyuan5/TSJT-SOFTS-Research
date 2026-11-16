@@ -14,7 +14,7 @@ loss terms, change gradients, or alter optimizer updates.
 | `log.txt` | Existing human-readable training messages and configuration | Quick inspection |
 | `epoch_metrics.csv` | Stage-I epoch losses, source/target loss terms, MAE/RMSE/MSE/MAPE, finite-loss flag, source-city weights | Detect convergence, loss imbalance and instability |
 | `horizon_metrics.csv` | Per-output-step train metrics for Stage-I and Stage-II | Locate which forecast steps degrade |
-| `evaluation_metrics.csv` | Per-output-step few-shot validation, test, and Stage-II final-test metrics, with sample counts | Compare horizon-wise generalization |
+| `evaluation_metrics.csv` | Per-output-step target few-shot training-set evaluation, test, and Stage-II final-test metrics, with sample counts | Compare horizon-wise generalization |
 | `moe_router.csv` | Per-source-batch and horizon router weights, pairwise router spread/top-1 fraction, entropy, expert costs | Detect expert collapse or unchanging gates |
 | `pattern_bank.csv` | Initial prototype-bank statistics for each historical scale | Check bank construction and scale coverage |
 | `pattern_usage.csv` | Per-scale combined/source/target prototype usage, source-target usage gap, entropy, top-1 fraction, and mean pairwise cost | Detect unused/collapsed prototypes and source-target pattern coverage mismatch |
