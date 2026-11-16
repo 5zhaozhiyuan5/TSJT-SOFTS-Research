@@ -613,9 +613,7 @@ class STRep(nn.Module):
             source_city_weights = None
             CHTA_loss = task_loss.new_zeros(())
 
-        target_loss_weight = (
-            self.pattern_moe_target_loss_weight if self.pattern_moe is not None else 0.0
-        )
+        target_loss_weight = 0.0
         if PatternMoE_horizon_losses:
             pattern_source_losses = torch.stack(PatternMoE_horizon_losses, dim=0)
             pattern_source_scores = torch.stack(PatternMoE_source_scores, dim=0)
