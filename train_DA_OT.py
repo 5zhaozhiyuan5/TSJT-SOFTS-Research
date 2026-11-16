@@ -250,10 +250,10 @@ if __name__ == '__main__':
     best_validation_score = [1e5,1e5,1e5]
     best_testing_score = [1e5,1e5,1e5]
     
-    log_verbose(args,dict(vars(args)))
+    log_verbose(args,{key: value for key, value in vars(args).items() if key != "diagnostics"})
     log_verbose(args,config)
 
-    yaml.dump([dict(vars(args)), config], open(os.path.join(args.save_dir, "config.yaml"), "w"))
+    yaml.dump([{key: value for key, value in vars(args).items() if key != "diagnostics"}, config], open(os.path.join(args.save_dir, "config.yaml"), "w"))
     
     for i in range(task_args['source']['train_epochs']):
         length = source_dataset.__len__()
@@ -444,10 +444,10 @@ if __name__ == '__main__':
         best_validation_score = [1e5,1e5,1e5]
         best_testing_score = [1e5,1e5,1e5]
         
-        log_verbose(args,dict(vars(args)))
+        log_verbose(args,{key: value for key, value in vars(args).items() if key != "diagnostics"})
         log_verbose(args,config)
     
-        yaml.dump([dict(vars(args)), config], open(os.path.join(args.save_dir, "config.yaml"), "w"))
+        yaml.dump([{key: value for key, value in vars(args).items() if key != "diagnostics"}, config], open(os.path.join(args.save_dir, "config.yaml"), "w"))
         
         for i in range(task_args['source']['finetune_epochs']):
             length = source_dataset.__len__()
