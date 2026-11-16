@@ -17,10 +17,12 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
       - name: Install CPU PyTorch
-        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - name: Install GeomLoss
-        run: python -m pip install geomloss==0.2.6
+        run: python -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+      - name: Install PMME runtime dependencies
+        run: python -m pip install torch-geometric==2.6.1 gpytorch==1.14 geomloss==0.2.6 einops==0.8.1 scikit-learn pyyaml tqdm
       - name: Compile project Python files
-        run: python -m compileall -q model/Meta_Models train_DA_OT.py
-      - name: Run HCLM and SOFTS smoke tests
-        run: python -m unittest discover -s tests -p "test_horizon_metric.py" -v
+        run: python -m compileall -q model/Meta_Models train_DA_OT.py datasets.py utils.py
+      - name: Verify training entrypoint imports
+        run: python train_DA_OT.py --help
+      - name: Run module and training integration tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
