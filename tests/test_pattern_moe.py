@@ -6,6 +6,7 @@ import torch
 from model.Meta_Models.pattern_moe import (
     HorizonPatternMoEAlignment,
     build_multiscale_pattern_bank,
+    physical_minutes_to_steps,
 )
 from model.Meta_Models.horizon_transfer import build_future_change_descriptors
 
@@ -31,6 +32,62 @@ class PatternMoEAlignmentTest(unittest.TestCase):
         )
         self.assertEqual(tuple(bank.shape), (5, 4, 8))
         self.assertTrue(torch.isfinite(bank).all())
+
+    def test_physical_durations_resolve_on_five_and_ten_minute_grids(self):
+        scale_minutes = (60, 180, 360, 720, 1440)
+        anchor_minutes = (10, 60, 120, 180)
+        self.assertEqual(
+            physical_minutes_to_steps(scale_minutes, 5),
+            (12, 36, 72, 144, 288),
+        )
+        self.assertEqual(
+            physical_minutes_to_steps(scale_minutes, 10),
+            (6, 18, 36, 72, 144),
+        )
+        self.assertEqual(
+            physical_minutes_to_steps(anchor_minutes, 5),
+            (2, 12, 24, 36),
+        )
+        self.assertEqual(
+            physical_minutes_to_steps(anchor_minutes, 10),
+            (1, 6, 12, 18),
+        )
+        with self.assertRaises(ValueError):
+            physical_minutes_to_steps((10, 60), 6)
+
+    def test_ten_minute_raw_grid_can_build_physical_twenty_four_hour_bank(self):
+        source_arrays = {
+            "city_10min": np.random.randn(5, 4, 144, 1).astype(np.float32),
+        }
+        scale_steps = physical_minutes_to_steps((60, 180, 360, 720, 1440), 10)
+        bank = build_multiscale_pattern_bank(
+            source_arrays,
+            scale_steps=scale_steps,
+            num_prototypes=3,
+            descriptor_bins=8,
+            max_windows_per_city=4,
+            max_nodes_per_city=3,
+            max_patches_per_scale=300,
+            seed=19,
+        )
+        self.assertEqual(tuple(bank.shape), (5, 3, 8))
+        self.assertTrue(torch.isfinite(bank).all())
+
+    def test_pattern_bank_is_invariant_to_per_patch_affine_speed_scaling(self):
+        base = np.random.randn(5, 4, 288, 1).astype(np.float32)
+        shifted_scaled = 3.5 * base + 17.0
+        kwargs = dict(
+            scale_steps=(12, 36, 72, 144, 288),
+            num_prototypes=4,
+            descriptor_bins=8,
+            max_windows_per_city=4,
+            max_nodes_per_city=3,
+            max_patches_per_scale=500,
+            seed=23,
+        )
+        bank_a = build_multiscale_pattern_bank({"city": base}, **kwargs)
+        bank_b = build_multiscale_pattern_bank({"city": shifted_scaled}, **kwargs)
+        torch.testing.assert_close(bank_a, bank_b, atol=2e-5, rtol=2e-5)
 
     def test_horizon_moe_ot_is_differentiable_and_uses_three_experts(self):
         bank = torch.randn(5, 6, 12)
@@ -84,9 +141,14 @@ class PatternMoEAlignmentTest(unittest.TestCase):
             source_base,
             target_base,
         )
-        (loss + 1e-4 * module.smoothness_loss()).backward()
+        (
+            loss
+            + 1e-4 * module.smoothness_loss()
+            + 1e-4 * diagnostics["router_smoothness_loss"]
+        ).backward()
 
         self.assertTrue(torch.isfinite(loss))
+        self.assertTrue(torch.isfinite(diagnostics["router_smoothness_loss"]))
         self.assertEqual(tuple(diagnostics["router_weights"].shape), (4, 3))
         self.assertTrue(
             torch.allclose(
