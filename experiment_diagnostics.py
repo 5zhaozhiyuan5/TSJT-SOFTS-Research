@@ -119,6 +119,15 @@ class ExperimentDiagnostics:
             previous_hook(exc_type, exc_value, exc_tb)
         sys.excepthook = _hook
 
+    def update_metadata(self, metadata):
+        path = os.path.join(self.save_dir, "run_metadata.json")
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        payload.setdefault("metadata", {}).update(metadata or {})
+        payload["updated_at"] = datetime.now().astimezone().isoformat()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+
     def log_pattern_bank(self, pattern_bank, scales, city_names=None):
         bank = torch.as_tensor(pattern_bank).detach().float().cpu()
         for scale_index in range(bank.shape[0]):
