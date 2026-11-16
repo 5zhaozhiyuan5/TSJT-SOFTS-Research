@@ -18,8 +18,9 @@ import random
 curr_time = time.strftime('%Y-%m-%d-%H-%M-%S')
 
 parser = argparse.ArgumentParser(description='PMME')
-parser.add_argument('--config_filename', default='./configs/config.yaml', type=str,
-                        help='Configuration filename for restoring the model.')
+parser.add_argument('--config_filename', '--config_file', dest='config_filename',
+                    default='./configs/config.yaml', type=str,
+                    help='Configuration filename for restoring the model.')
 parser.add_argument('--test_dataset', default='pems-bay', type=str)
 parser.add_argument('--train_epochs', default=0, type=int)
 parser.add_argument('--finetune_epochs', default=300,type=int)
