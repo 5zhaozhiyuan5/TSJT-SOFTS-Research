@@ -50,11 +50,13 @@ class HorizonMetricSmokeTest(unittest.TestCase):
 
         source_relation = metric(source_rep).reshape(-1, metric.output_dim)
         target_relation = metric(target_rep).reshape(-1, metric.output_dim)
+        source_labels = torch.randn(6, 36)
+        target_labels = torch.randn(8, 36)
         source_cost_features = torch.cat(
-            [source_rep.reshape(-1, 128), 0.5 * source_relation], dim=-1
+            [source_rep.reshape(-1, 128), 10.0 * source_labels, 0.5 * source_relation], dim=-1
         )
         target_cost_features = torch.cat(
-            [target_rep.reshape(-1, 128), 0.5 * target_relation], dim=-1
+            [target_rep.reshape(-1, 128), 10.0 * target_labels, 0.5 * target_relation], dim=-1
         )
         source_weights = torch.full((source_cost_features.shape[0],), 1.0 / source_cost_features.shape[0])
         target_weights = torch.full((target_cost_features.shape[0],), 1.0 / target_cost_features.shape[0])
@@ -66,8 +68,8 @@ class HorizonMetricSmokeTest(unittest.TestCase):
         )
         loss.backward()
 
-        self.assertEqual(tuple(source_cost_features.shape), (6, 160))
-        self.assertEqual(tuple(target_cost_features.shape), (8, 160))
+        self.assertEqual(tuple(source_cost_features.shape), (6, 196))
+        self.assertEqual(tuple(target_cost_features.shape), (8, 196))
         self.assertTrue(torch.isfinite(loss))
         self.assertGreater(float(source_rep.grad.abs().sum()), 0.0)
         self.assertGreater(float(target_rep.grad.abs().sum()), 0.0)
