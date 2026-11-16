@@ -12,6 +12,7 @@ sys.path.append('./model')
 sys.path.append('./model/Meta_Models')
 
 from PMME import *
+from pattern_moe import build_multiscale_pattern_bank
 from pathlib import Path
 import random
 
@@ -98,12 +99,42 @@ if __name__ == '__main__':
 
     for data in source_dataset.data_list:
         log_verbose(args,"source dataset has {}. X : {}, y : {}".format(data,source_dataset.x_list[data].shape,source_dataset.y_list[data].shape))
+
+    # Build the MTPB-inspired pattern bank from source-city training windows
+    # only. The target city and all target test windows are excluded.
+    pattern_bank = None
+    pattern_cfg = model_args.get("pattern_moe", {})
+    if bool(pattern_cfg.get("enabled", False)):
+        source_pattern_arrays = {
+            name: source_dataset.x_list[name]
+            for name in source_dataset.data_list
+            if name != args.test_dataset
+        }
+        if not source_pattern_arrays:
+            raise RuntimeError("pattern_moe is enabled but no source-city windows were found.")
+        pattern_bank = build_multiscale_pattern_bank(
+            source_pattern_arrays,
+            scale_steps=tuple(pattern_cfg.get("scale_steps", [12, 36, 72, 144, 288])),
+            num_prototypes=int(pattern_cfg.get("num_prototypes", 10)),
+            descriptor_bins=int(pattern_cfg.get("descriptor_bins", 16)),
+            max_windows_per_city=int(pattern_cfg.get("max_windows_per_city", 24)),
+            max_nodes_per_city=int(pattern_cfg.get("max_nodes_per_city", 24)),
+            max_patches_per_scale=int(pattern_cfg.get("max_patches_per_scale", 8000)),
+            seed=seed,
+        ).to(args.device)
+        log_verbose(
+            args,
+            "[PatternBank] built source-only multi-scale bank with shape {}".format(
+                tuple(pattern_bank.shape)
+            ),
+        )
+
     print('data_args', data_args)
     finetune_dataset = traffic_dataset(data_args, task_args['target_few_shot'], data_list, 'target_maml', test_data=args.test_dataset)
     test_dataset = traffic_dataset(data_args, task_args['source'], data_list, 'test', test_data=args.test_dataset)
     log_verbose(args,"data args : {}\ntask_args : {}\nmodel_args : {}\nPatchFSL_cfg : {}\nSTmodel : {}".format(data_args, task_args, model_args, PatchFSL_cfg, args.STmodel))
 
-    rep_model = STRep(args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio, 0, args.projection, args.model_name, args.DA, data_args, task_args, model_args, PatchFSL_cfg, args) 
+    rep_model = STRep(args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio, 0, args.projection, args.model_name, args.DA, data_args, task_args, model_args, PatchFSL_cfg, args, pattern_bank=pattern_bank) 
     
     # rep_model = STRep(data_args, task_args, model_args, PatchFSL_cfg, args)
     best_loss = 9999999999999.0
