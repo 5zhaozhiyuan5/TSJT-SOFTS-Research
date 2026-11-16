@@ -485,8 +485,17 @@ class HorizonPatternMoEAlignment(nn.Module):
         # statistics do not participate in the loss or gradient computation.
         combined_assignments = torch.cat((source_pattern, target_pattern), dim=0).detach()
         pattern_usage = combined_assignments.mean(dim=0)
+        source_pattern_usage = source_pattern.detach().mean(dim=0)
+        target_pattern_usage = target_pattern.detach().mean(dim=0)
+        source_target_pattern_gap = (source_pattern_usage - target_pattern_usage).abs().mean(dim=-1)
         pattern_entropy = -(
             pattern_usage.clamp_min(1e-8) * pattern_usage.clamp_min(1e-8).log()
+        ).sum(dim=-1)
+        source_pattern_entropy = -(
+            source_pattern_usage.clamp_min(1e-8) * source_pattern_usage.clamp_min(1e-8).log()
+        ).sum(dim=-1)
+        target_pattern_entropy = -(
+            target_pattern_usage.clamp_min(1e-8) * target_pattern_usage.clamp_min(1e-8).log()
         ).sum(dim=-1)
         pattern_top1_fraction = combined_assignments.argmax(dim=-1).float().mean(dim=0)
         per_scale_cost_means = torch.stack(
@@ -674,7 +683,12 @@ class HorizonPatternMoEAlignment(nn.Module):
             "plan_max_weight": torch.stack(plan_max_weights).detach(),
             "row_top1_mass": torch.stack(row_top1_masses).detach(),
             "pattern_usage": pattern_usage.detach(),
+            "source_pattern_usage": source_pattern_usage.detach(),
+            "target_pattern_usage": target_pattern_usage.detach(),
+            "source_target_pattern_gap": source_target_pattern_gap.detach(),
             "pattern_entropy": pattern_entropy.detach(),
+            "source_pattern_entropy": source_pattern_entropy.detach(),
+            "target_pattern_entropy": target_pattern_entropy.detach(),
             "pattern_top1_fraction": pattern_top1_fraction.detach(),
             "per_scale_cost_means": per_scale_cost_means.detach(),
             "scale_steps": list(self.scale_steps),
