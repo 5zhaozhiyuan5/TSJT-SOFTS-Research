@@ -238,6 +238,16 @@ class ExperimentDiagnostics:
                     "assignment_entropy": entropy[scale_index] if entropy is not None else None,
                     "top1_fraction": top1_usage[scale_index] if top1_usage is not None else None,
                     "prototype_usage": usage[scale_index],
+                    "source_prototype_usage": diagnostics.get("source_pattern_usage")[scale_index]
+                    if diagnostics.get("source_pattern_usage") is not None else None,
+                    "target_prototype_usage": diagnostics.get("target_pattern_usage")[scale_index]
+                    if diagnostics.get("target_pattern_usage") is not None else None,
+                    "source_pattern_entropy": diagnostics.get("source_pattern_entropy")[scale_index]
+                    if diagnostics.get("source_pattern_entropy") is not None else None,
+                    "target_pattern_entropy": diagnostics.get("target_pattern_entropy")[scale_index]
+                    if diagnostics.get("target_pattern_entropy") is not None else None,
+                    "source_target_usage_gap": diagnostics.get("source_target_pattern_gap")[scale_index]
+                    if diagnostics.get("source_target_pattern_gap") is not None else None,
                     "mean_pairwise_cost": scale_costs[scale_index] if scale_costs is not None else None,
                 })
 
