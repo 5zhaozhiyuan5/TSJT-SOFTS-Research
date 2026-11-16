@@ -27,6 +27,7 @@ from iTransformer.iTransformer_new import Model as iTransformer
 from DA_tools import *
 from horizon_transfer import ContinuousHorizonTransferAlignment, build_future_change_descriptors
 from pattern_moe import HorizonPatternMoEAlignment
+from experiment_diagnostics import ExperimentDiagnostics
 
 def log_verbose(args, msg):
     print(msg)
@@ -129,6 +130,17 @@ class STRep(nn.Module):
         self.model_args = model_args
         self.PatchFSL_cfg = PatchFSL_cfg
         self.args = args
+        self.diagnostics = ExperimentDiagnostics(
+            getattr(args, "save_dir", "."),
+            metadata={
+                "seed": getattr(args, "seed", None),
+                "target_dataset": getattr(args, "test_dataset", None),
+                "source_datasets": getattr(args, "data_list", None),
+                "model_name": model_name,
+                "alignment": DA,
+                "diagnostic_scope": "Stage-I training and evaluation",
+            },
+        )
 
         self.lr = model_args['STnet']['lr']
         self.device = PatchFSL_cfg['device']
@@ -259,6 +271,7 @@ class STRep(nn.Module):
     
     
     def meta_train_revise(self, data, matrix, epoch): 
+        epoch_started = time.perf_counter()
         
         total_mae = []
         total_mse = []
@@ -700,6 +713,22 @@ class STRep(nn.Module):
                 if pattern_source_weights is not None else None,
             )
 
+        for source_index, diagnostic in enumerate(PatternMoE_diagnostics):
+            self.diagnostics.log_alignment(
+                epoch,
+                source_index,
+                diagnostic,
+                self.pattern_moe.anchor_steps,
+                self.pattern_moe.minutes_per_step,
+            )
+        if PatternMoE_diagnostics:
+            self.diagnostics.log_epoch({
+                "epoch": epoch,
+                "source_city_weights": pattern_source_weights if pattern_source_weights is not None else [],
+                "pattern_moe_loss": PatternMoE_loss,
+                "pattern_moe_smoothness": PatternMoE_smoothness,
+            })
+
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
             
             dot = torch.dot(grad_a, grad_b)
@@ -730,10 +759,40 @@ class STRep(nn.Module):
 
         print('self.projection_args', self.projection_args)
 
+        diagnostic_modules = {"backbone": self.model}
+        if self.pattern_moe is not None:
+            diagnostic_modules["pattern_moe"] = self.pattern_moe
+        if self.chta is not None:
+            diagnostic_modules["chta"] = self.chta
+
+        def parameter_norm(module):
+            squared = [p.detach().float().pow(2).sum() for p in module.parameters()]
+            return torch.sqrt(torch.stack(squared).sum()) if squared else torch.zeros(())
+
+        parameter_norm_before = {
+            name: parameter_norm(module) for name, module in diagnostic_modules.items()
+        }
+
+        def gradient_summary(module):
+            params = list(module.parameters())
+            total = max(len(params), 1)
+            grad_sq, none_count, nonfinite_count = [], 0, 0
+            for parameter in params:
+                if parameter.grad is None:
+                    none_count += 1
+                    continue
+                grad = parameter.grad.detach().float()
+                nonfinite_count += int((~torch.isfinite(grad)).sum().item())
+                grad_sq.append(torch.nan_to_num(grad).pow(2).sum())
+            grad_norm = torch.sqrt(torch.stack(grad_sq).sum()) if grad_sq else torch.zeros(())
+            return grad_norm, none_count / total, nonfinite_count
 
         if (self.projection_args == 0):
             self.main_optim.zero_grad()
             model_loss.backward()
+            grad_summaries = {
+                name: gradient_summary(module) for name, module in diagnostic_modules.items()
+            }
             self.main_optim.step()
         else:
             self.main_optim.zero_grad()
@@ -747,13 +806,59 @@ class STRep(nn.Module):
             flat_proj_A = pcgrad_one_sided(flat_A, flat_B)
             flat_final = flat_proj_A + target_loss_weight * flat_B
             write_back_flat_grads(flat_final, mapping)
+            grad_summaries = {
+                name: gradient_summary(module) for name, module in diagnostic_modules.items()
+            }
 
             self.main_optim.step()
             self.main_optim.zero_grad()
-        
-            self.current_epoch += 1
-        
-            
+
+        for name, module in diagnostic_modules.items():
+            grad_norm, none_fraction, nonfinite_count = grad_summaries[name]
+            self.diagnostics.log_gradient(
+                epoch, name, grad_norm, parameter_norm_before[name], none_fraction,
+                nonfinite_count, parameter_norm(module),
+            )
+
+        def _mean_metric(values):
+            return float(np.nanmean(np.asarray(values, dtype=np.float64))) if values else float("nan")
+
+        epoch_mae = _mean_metric(total_mae)
+        epoch_rmse = _mean_metric(total_rmse)
+        epoch_mse = _mean_metric(total_mse)
+        epoch_mape = _mean_metric(total_mape)
+        self.diagnostics.log_epoch({
+            "epoch": epoch,
+            "total_loss": model_loss,
+            "forecast_loss": task_loss,
+            "target_loss": target_task_loss,
+            "generic_da_loss": DA_loss,
+            "chta_loss": CHTA_loss,
+            "pattern_moe_loss": PatternMoE_loss,
+            "pattern_moe_smoothness": PatternMoE_smoothness,
+            "mae_mean": epoch_mae,
+            "rmse_mean": epoch_rmse,
+            "mse_mean": epoch_mse,
+            "mape_mean": epoch_mape,
+            "source_city_weights": pattern_source_weights if pattern_source_weights is not None else [],
+            "finite_total_loss": bool(torch.isfinite(model_loss.detach()).all()),
+        })
+        if total_mae and np.asarray(total_mae[0]).ndim > 0:
+            horizon_mae = np.stack(total_mae, axis=0).mean(axis=0)
+            horizon_rmse = np.stack(total_rmse, axis=0).mean(axis=0)
+            horizon_mse = np.stack(total_mse, axis=0).mean(axis=0)
+            horizon_mape = np.stack(total_mape, axis=0).mean(axis=0)
+            minutes_per_step = float(getattr(self.data_args, "processed_interval_minutes", 5)) if not isinstance(self.data_args, dict) else float(self.data_args.get("processed_interval_minutes", 5))
+            self.diagnostics.log_horizon(
+                epoch, len(horizon_mae), minutes_per_step,
+                horizon_mae, horizon_rmse, horizon_mse, horizon_mape,
+            )
+        optimizer_lr = self.main_optim.param_groups[0]["lr"] if self.main_optim.param_groups else self.lr
+        self.diagnostics.log_runtime(
+            epoch, time.perf_counter() - epoch_started, optimizer_lr, self.device
+        )
+        self.current_epoch += 1
+
         return model_loss.detach().cpu().numpy(),np.mean(total_mse), np.mean(total_rmse), np.mean(total_mae),np.mean(total_mape)
         
         
