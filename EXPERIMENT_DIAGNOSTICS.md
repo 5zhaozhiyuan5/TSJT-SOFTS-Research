@@ -59,8 +59,12 @@ loss terms, change gradients, or alter optimizer updates.
    outputs; evaluation metrics aggregate all evaluated samples per forecast
    step. MAPE uses a small denominator clamp to avoid division by zero.
 7. The existing model-selection and evaluation policy is intentionally
-   unchanged. In particular, this patch does not change which split is used
-   for checkpoint selection.
+   unchanged. In the current launcher, the first evaluation pass uses
+   `finetune_dataset` (the target few-shot adaptation data), not a separate
+   held-out validation split. It is therefore labelled
+   `target_few_shot_train_eval`; do not interpret it as independent validation.
+   The test split remains separately labelled `test`. This patch does not
+   change which split is used for checkpoint selection.
 
 ## Quick inspection
 
