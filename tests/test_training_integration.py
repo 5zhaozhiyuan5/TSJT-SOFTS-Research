@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch_geometric.data import Data
+from geomloss import SamplesLoss as GeomlossSamplesLoss
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 META_MODELS = os.path.join(ROOT, "model", "Meta_Models")
@@ -36,15 +37,25 @@ class TinyBackbone(nn.Module):
 
 
 class FastSmokeSinkhorn:
-    """Keeps the complete STRep update test small; real Sinkhorn is tested separately."""
+    """Run the real GeomLoss Sinkhorn on a deterministic small subset."""
 
     def __init__(self, **kwargs):
-        self.kwargs = kwargs
+        self.loss = GeomlossSamplesLoss(
+            loss="sinkhorn", p=1, backend="tensorized", debias=False, blur=0.05
+        )
 
     def __call__(self, alpha, x, beta, y):
-        x_sample = x[:: max(1, x.shape[0] // 32)][:32]
-        y_sample = y[:: max(1, y.shape[0] // 32)][:32]
-        return torch.cdist(x_sample, y_sample, p=1).mean()
+        x_idx = torch.linspace(
+            0, x.shape[0] - 1, steps=min(32, x.shape[0]), device=x.device
+        ).long()
+        y_idx = torch.linspace(
+            0, y.shape[0] - 1, steps=min(32, y.shape[0]), device=y.device
+        ).long()
+        alpha_sample = alpha[x_idx]
+        beta_sample = beta[y_idx]
+        alpha_sample = alpha_sample / alpha_sample.sum()
+        beta_sample = beta_sample / beta_sample.sum()
+        return self.loss(alpha_sample, x[x_idx], beta_sample, y[y_idx])
 
 
 def make_data(batch_size, node_count, seed):
