@@ -356,16 +356,17 @@ class STRep(nn.Module):
         flat_proj_A = pcgrad_one_sided(flat_A, flat_B)
         write_back_flat_grads(flat_proj_A, mapping)
         grad_sq = []
+        nonfinite_counts = []
         grad_none = 0
-        nonfinite_grad_count = 0
         for parameter in params_for_diagnostics:
             if parameter.grad is None:
                 grad_none += 1
                 continue
             grad = parameter.grad.detach().float()
-            nonfinite_grad_count += int((~torch.isfinite(grad)).sum().item())
+            nonfinite_counts.append((~torch.isfinite(grad)).sum())
             grad_sq.append(torch.nan_to_num(grad).pow(2).sum())
         grad_norm = torch.sqrt(torch.stack(grad_sq).sum()) if grad_sq else torch.zeros(())
+        nonfinite_grad_count = int(torch.stack(nonfinite_counts).sum().item()) if nonfinite_counts else 0
         self.main_optim.step()
         self.main_optim.zero_grad()
 
