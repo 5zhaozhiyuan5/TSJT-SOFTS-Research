@@ -16,11 +16,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from horizon_transfer import (
-    _normalize_weights,
-    _pairwise_squared_cost,
-    _sinkhorn_from_log_kernel,
-)
+try:
+    from .horizon_transfer import (
+        _normalize_weights,
+        _pairwise_squared_cost,
+        _sinkhorn_from_log_kernel,
+    )
+except ImportError:
+    # PMME adds model/Meta_Models to sys.path and imports this module directly.
+    from horizon_transfer import (
+        _normalize_weights,
+        _pairwise_squared_cost,
+        _sinkhorn_from_log_kernel,
+    )
 
 
 DEFAULT_SCALE_MINUTES = (60, 180, 360, 720, 1440)
