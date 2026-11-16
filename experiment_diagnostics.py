@@ -149,13 +149,14 @@ class ExperimentDiagnostics:
     def log_epoch(self, row):
         self.write("epoch", row)
 
-    def log_horizon(self, epoch, horizon_steps, minutes_per_step, mae, rmse, mse=None, mape=None):
+    def log_horizon(self, epoch, horizon_steps, minutes_per_step, mae, rmse, mse=None, mape=None, stage="stage1"):
         mae = np.asarray(mae).reshape(-1)
         rmse = np.asarray(rmse).reshape(-1)
         mse = None if mse is None else np.asarray(mse).reshape(-1)
         mape = None if mape is None else np.asarray(mape).reshape(-1)
         for index in range(min(len(mae), len(rmse))):
             row = {
+                "stage": stage,
                 "epoch": epoch,
                 "horizon_index": index,
                 "horizon_step": index + 1,
