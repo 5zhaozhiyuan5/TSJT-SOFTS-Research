@@ -130,17 +130,19 @@ class STRep(nn.Module):
         self.model_args = model_args
         self.PatchFSL_cfg = PatchFSL_cfg
         self.args = args
-        self.diagnostics = ExperimentDiagnostics(
-            getattr(args, "save_dir", "."),
-            metadata={
-                "seed": getattr(args, "seed", None),
-                "target_dataset": getattr(args, "test_dataset", None),
-                "source_datasets": getattr(args, "data_list", None),
-                "model_name": model_name,
-                "alignment": DA,
-                "diagnostic_scope": "Stage-I training and evaluation",
-            },
-        )
+        self.diagnostics = getattr(args, "diagnostics", None)
+        if self.diagnostics is None:
+            self.diagnostics = ExperimentDiagnostics(
+                getattr(args, "save_dir", "."),
+                metadata={
+                    "seed": getattr(args, "seed", None),
+                    "target_dataset": getattr(args, "test_dataset", None),
+                    "source_datasets": getattr(args, "data_list", None),
+                    "model_name": model_name,
+                    "alignment": DA,
+                    "diagnostic_scope": "Stage-I training and evaluation",
+                },
+            )
 
         self.lr = model_args['STnet']['lr']
         self.device = PatchFSL_cfg['device']
@@ -233,6 +235,11 @@ class STRep(nn.Module):
             for name, params in self.pattern_moe.named_parameters():
                 log_verbose(args, "pattern_moe.{} : {}, require_grads : {}".format(name, params.shape, params.requires_grad))
             log_verbose(args, "pattern bank shape: {}".format(tuple(self.pattern_moe.pattern_prototypes.shape)))
+            self.diagnostics.log_pattern_bank(
+                self.pattern_moe.pattern_prototypes,
+                self.pattern_moe.scale_steps,
+                city_names=str(getattr(args, "data_list", "")).split("_"),
+            )
         self.main_optim = optim.AdamW(self.optimized_parameters, lr=self.lr, weight_decay=1e-2)
         
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
