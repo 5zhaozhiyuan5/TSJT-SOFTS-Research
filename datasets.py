@@ -96,9 +96,12 @@ class traffic_dataset(Dataset):
             # Convert every city to the explicitly configured common time grid.
             # In the current PMME protocol, METR-LA/PEMS-BAY are 5-min data;
             # Chengdu/Shenzhen are 10-min data and use the legacy 2x interpolation.
+            legacy_raw_interval = (
+                10 if dataset_name in ['chengdu_m', 'shenzhen'] else self.processed_interval_minutes
+            )
             raw_interval = int(
                 self.data_args[dataset_name].get(
-                    "sampling_interval_minutes", self.processed_interval_minutes
+                    "sampling_interval_minutes", legacy_raw_interval
                 )
             )
             processed_interval = self.processed_interval_minutes
