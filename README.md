@@ -18,6 +18,12 @@ This branch combines:
 3. A physical-horizon router for 10/60/120/180-minute conditional alignment.
 4. PMME DVGP sample-reliability weights and a shared-base conditional OT prior.
 
+The current dataset loader maps METR-LA/PEMS-BAY (raw 5-minute) and
+Chengdu/Shenzhen (raw 10-minute, legacy 2x interpolation) onto a common
+5-minute grid. Pattern and horizon durations are configured in physical
+minutes and converted to steps at runtime. The 24-hour pattern therefore
+requires 288 history steps on this grid.
+
 The full design and implementation boundary are documented in
 [STAGE1_MTPB_MOE_DESIGN.md](STAGE1_MTPB_MOE_DESIGN.md).
 
