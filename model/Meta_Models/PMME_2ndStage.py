@@ -434,10 +434,11 @@ class STRep(nn.Module):
 
             print('Horizon {} : Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, MAPE: {:.5f}'.format(i, total_mse, total_rmse, total_mae, total_mape))
             minutes_per_step = float(self.data_args.get("processed_interval_minutes", 5)) if isinstance(self.data_args, dict) else 5.0
-            self.diagnostics.log_evaluation(
-                validation_phase, self.current_epoch, i, minutes_per_step,
-                total_mae, total_rmse, total_mse, total_mape, total_len,
-            )
+            if self.diagnostics is not None:
+                self.diagnostics.log_evaluation(
+                    validation_phase, self.current_epoch, i, minutes_per_step,
+                    total_mae, total_rmse, total_mse, total_mape, total_len,
+                )
             
         
         print("[INFO] Enter test phase")
@@ -475,10 +476,11 @@ class STRep(nn.Module):
 
             print('Horizon {} : Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, MAPE: {:.5f}'.format(i, total_mse, total_rmse, total_mae, total_mape))
             minutes_per_step = float(self.data_args.get("processed_interval_minutes", 5)) if isinstance(self.data_args, dict) else 5.0
-            self.diagnostics.log_evaluation(
-                test_phase, self.current_epoch, i, minutes_per_step,
-                total_mae, total_rmse, total_mse, total_mape, total_len,
-            )
+            if self.diagnostics is not None:
+                self.diagnostics.log_evaluation(
+                    test_phase, self.current_epoch, i, minutes_per_step,
+                    total_mae, total_rmse, total_mse, total_mape, total_len,
+                )
             #print('Horizon {} : Unnormed MSE : {:.5f}, RMSE : {:.5f}, 
 
         return validation_score, testing_score
@@ -557,10 +559,11 @@ class STRep(nn.Module):
 
             print('Horizon {} : Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, MAPE: {:.5f}'.format(i, total_mse, total_rmse, total_mae, total_mape))
             minutes_per_step = float(self.data_args.get("processed_interval_minutes", 5)) if isinstance(self.data_args, dict) else 5.0
-            self.diagnostics.log_evaluation(
-                "stage2_final_test", self.current_epoch, i, minutes_per_step,
-                total_mae, total_rmse, total_mse, total_mape, total_len,
-            )
+            if self.diagnostics is not None:
+                self.diagnostics.log_evaluation(
+                    "stage2_final_test", self.current_epoch, i, minutes_per_step,
+                    total_mae, total_rmse, total_mse, total_mape, total_len,
+                )
 
         return testing_score
     
