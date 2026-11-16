@@ -1,0 +1,22 @@
+name: Stage-I HCLM smoke tests
+
+on:
+  push:
+    branches:
+      - stage-1-hclm
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: python -m pip install --upgrade pip torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Compile project Python files
+        run: python -m compileall -q model/Meta_Models train_DA_OT.py
+      - name: Run HCLM and SOFTS smoke tests
+        run: python -m unittest discover -s tests -p "test_horizon_metric.py" -v
