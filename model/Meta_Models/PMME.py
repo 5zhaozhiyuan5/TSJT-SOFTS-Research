@@ -639,7 +639,8 @@ class STRep(nn.Module):
             target_loss_weight = self.chta_target_loss_weight
         else:
             CHTA_smoothness = task_loss.new_zeros(())
-            target_loss_weight = 0.0
+            if self.pattern_moe is None:
+                target_loss_weight = 0.0
 
         # The few-shot target loss is now an explicit, low-weight Stage-I
         # objective.  In the projected-gradient path it remains the reference
