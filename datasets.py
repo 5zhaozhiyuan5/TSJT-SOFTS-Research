@@ -25,6 +25,14 @@ class traffic_dataset(Dataset):
         self.test_data = test_data
         self.target_days = target_days
         self.predefined_data_list = data_list
+        # All datasets are converted to this common grid before windowing.
+        self.processed_interval_minutes = int(
+            self.data_args.get("processed_interval_minutes", 5)
+        )
+        if self.processed_interval_minutes <= 0:
+            raise ValueError("data.processed_interval_minutes must be positive")
+        self.raw_sampling_interval_minutes = {}
+        self.dataset_sampling_interval_minutes = {}
         # if(self.stage == 'pretrain' or self.stage == 'cluster'):
         #     self.add_target = False
         self.load_data(stage, test_data)
@@ -39,6 +47,8 @@ class traffic_dataset(Dataset):
         self.x_list, self.y_list = {}, {}
         self.means_list, self.stds_list = {}, {}
         self.batchnum_list = {}
+        self.raw_sampling_interval_minutes = {}
+        self.dataset_sampling_interval_minutes = {}
         
         data_keys = np.array(self.data_args['data_keys'])
         if(self.predefined_data_list != None):
@@ -83,17 +93,52 @@ class traffic_dataset(Dataset):
             # [N, 2, L]
             X = torch.cat((X[:,0, :].unsqueeze(1), X[:,-1,:].unsqueeze(1)), dim = 1)
             
-            # Interpolation. Chengdu and Shenzhen interpolated to 5min level.
-            interp = False
-            if(dataset_name in ['chengdu_m','shenzhen']):
-                interp = True
-            
-            if(interp):
-                interp_X = torch.nn.functional.interpolate(X, size = 2 * X.shape[-1] - 1,mode='linear',align_corners=True)
-                # inter_speed.squeeze_(1)
-                interp_X = torch.cat((interp_X[:,:,:1],interp_X),dim=-1)
-                interp_X[:,1,0] = ((interp_X[:,1,1] - 1) + 2016 ) % 2016 # 2016 is the week slot
+            # Convert every city to the explicitly configured common time grid.
+            # In the current PMME protocol, METR-LA/PEMS-BAY are 5-min data;
+            # Chengdu/Shenzhen are 10-min data and use the legacy 2x interpolation.
+            raw_interval = int(
+                self.data_args[dataset_name].get(
+                    "sampling_interval_minutes", self.processed_interval_minutes
+                )
+            )
+            processed_interval = self.processed_interval_minutes
+            if raw_interval <= 0 or raw_interval < processed_interval:
+                raise ValueError(
+                    f"{dataset_name}: invalid raw sampling interval {raw_interval} "
+                    f"for processed interval {processed_interval}"
+                )
+            if raw_interval % processed_interval != 0:
+                raise ValueError(
+                    f"{dataset_name}: raw interval {raw_interval} min is not an "
+                    f"integer multiple of processed interval {processed_interval} min"
+                )
+            self.raw_sampling_interval_minutes[dataset_name] = raw_interval
+            self.dataset_sampling_interval_minutes[dataset_name] = processed_interval
+
+            interp = raw_interval != processed_interval
+            if interp:
+                ratio = raw_interval // processed_interval
+                if ratio != 2 or dataset_name not in ['chengdu_m', 'shenzhen']:
+                    raise ValueError(
+                        f"{dataset_name}: this loader only supports the existing "
+                        f"2x interpolation path, got {raw_interval}->{processed_interval} min"
+                    )
+                interp_X = torch.nn.functional.interpolate(
+                    X,
+                    size=2 * X.shape[-1] - 1,
+                    mode='linear',
+                    align_corners=True,
+                )
+                # Preserve the original PMME preprocessing convention.
+                interp_X = torch.cat((interp_X[:, :, :1], interp_X), dim=-1)
+                interp_X[:, 1, 0] = ((interp_X[:, 1, 1] - 1) + 2016) % 2016
                 X = interp_X
+
+            print(
+                f"[INFO] {dataset_name}: raw_interval={raw_interval}min, "
+                f"processed_interval={processed_interval}min, "
+                f"processed_steps={X.shape[-1]}"
+            )
 
             X = X.numpy()
             # mean and std 
