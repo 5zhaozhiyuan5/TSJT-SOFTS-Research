@@ -166,6 +166,20 @@ class PatternMoEAlignmentTest(unittest.TestCase):
         # is exact up to floating-point error.
         self.assertLess(float(diagnostics["max_row_marginal_error"]), 3e-2)
         self.assertLess(float(diagnostics["max_col_marginal_error"]), 1e-2)
+        for key in (
+            "plan_entropy",
+            "normalized_plan_entropy",
+            "mean_row_entropy",
+            "plan_max_weight",
+            "row_top1_mass",
+            "pattern_usage",
+            "pattern_entropy",
+            "pattern_top1_fraction",
+            "router_pair_std",
+            "router_top1_fraction",
+        ):
+            self.assertIn(key, diagnostics)
+            self.assertTrue(torch.isfinite(diagnostics[key]).all())
 
 
 if __name__ == "__main__":
