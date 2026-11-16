@@ -23,7 +23,34 @@ from horizon_transfer import (
 )
 
 
-DEFAULT_SCALE_STEPS = (12, 36, 72, 144, 288)  # 1/3/6/12/24 hours on a 5-min grid
+DEFAULT_SCALE_MINUTES = (60, 180, 360, 720, 1440)
+DEFAULT_SCALE_STEPS = (12, 36, 72, 144, 288)  # default 5-minute grid
+
+
+def physical_minutes_to_steps(
+    durations_minutes: Sequence[int],
+    minutes_per_step: float,
+) -> tuple[int, ...]:
+    """Convert physical durations to exact steps on the preprocessed time grid."""
+    interval = float(minutes_per_step)
+    if interval <= 0:
+        raise ValueError("minutes_per_step must be positive")
+    steps = []
+    for duration in durations_minutes:
+        minutes = float(duration)
+        if minutes <= 0:
+            raise ValueError("all physical durations must be positive")
+        raw_steps = minutes / interval
+        rounded_steps = int(round(raw_steps))
+        if rounded_steps < 1 or abs(raw_steps - rounded_steps) > 1e-6:
+            raise ValueError(
+                f"{minutes:g} minutes cannot be represented exactly on a "
+                f"{interval:g}-minute grid"
+            )
+        steps.append(rounded_steps)
+    if tuple(sorted(steps)) != tuple(steps) or len(set(steps)) != len(steps):
+        raise ValueError("physical durations must be strictly increasing")
+    return tuple(steps)
 
 
 def _as_speed_windows(value) -> np.ndarray:
@@ -97,10 +124,12 @@ def build_multiscale_pattern_bank(
         Float tensor [5, num_prototypes, descriptor_bins].
     """
     scales = tuple(int(step) for step in scale_steps)
-    if len(scales) != 5 or tuple(sorted(scales)) != scales:
-        raise ValueError("scale_steps must contain five increasing scales")
+    if len(scales) != 5 or tuple(sorted(scales)) != scales or min(scales) < 1:
+        raise ValueError("scale_steps must contain five positive increasing scales")
     if num_prototypes < 2 or descriptor_bins < 4:
         raise ValueError("num_prototypes >= 2 and descriptor_bins >= 4 are required")
+    if max_windows_per_city < 1 or max_nodes_per_city < 1 or max_patches_per_scale < 1:
+        raise ValueError("pattern-bank sampling limits must all be positive")
     if not source_arrays:
         raise ValueError("at least one source-city array is required")
 
@@ -110,11 +139,13 @@ def build_multiscale_pattern_bank(
     for city_index, city_name in enumerate(sorted(source_arrays)):
         windows = _as_speed_windows(source_arrays[city_name])
         window_count, node_count, history_len = windows.shape
-        usable_scales = [scale for scale in scales if scale <= history_len]
-        if len(usable_scales) != len(scales):
+        if window_count < 1 or node_count < 1:
+            raise ValueError(f"{city_name} contains no usable history windows or nodes")
+        if max(scales) > history_len:
             raise ValueError(
-                f"{city_name} history length {history_len} is shorter than "
-                f"the largest configured scale {max(scales)}"
+                f"{city_name} history length is {history_len} steps, but the largest "
+                f"configured physical scale requires {max(scales)} steps. Check the "
+                "preprocessed sampling interval and his_num."
             )
 
         selected_windows = rng.choice(
@@ -136,15 +167,16 @@ def build_multiscale_pattern_bank(
                     posinf=0.0,
                     neginf=0.0,
                 ).astype(np.float32, copy=False)
-                mean = float(sequence.mean())
-                std = float(sequence.std())
-                sequence = (sequence - mean) / max(std, 1e-4)
-
                 for scale_index, scale in enumerate(scales):
-                    # MTPB-style patch extraction at each historical scale.
+                    # Extract historical patches at the configured physical scale.
+                    # Normalize each patch independently, matching the query-time
+                    # normalization in _pattern_assignments exactly.
                     starts = range(0, history_len - scale + 1, scale)
                     for start in starts:
                         patch = sequence[start : start + scale]
+                        patch_mean = float(patch.mean())
+                        patch_std = float(patch.std())
+                        patch = (patch - patch_mean) / max(patch_std, 1e-4)
                         descriptors_by_scale[scale_index].append(
                             _resample_patch(patch, descriptor_bins)
                         )
@@ -442,6 +474,7 @@ class HorizonPatternMoEAlignment(nn.Module):
         conditional_losses = []
         conditional_plans = []
         router_weights = []
+        router_entropies = []
         expert_cost_means = []
         film_states = []
         row_errors, col_errors = [], []
@@ -496,6 +529,11 @@ class HorizonPatternMoEAlignment(nn.Module):
             )
             gate = torch.softmax(
                 self.router(router_input) / self.router_temperature, dim=-1
+            )
+            router_entropies.append(
+                -(
+                    gate.clamp_min(1e-8) * gate.clamp_min(1e-8).log()
+                ).sum(dim=-1).mean()
             )
             pattern_cost = (expert_costs.permute(1, 2, 0) * gate).sum(dim=-1)
             combined_cost = (
@@ -563,13 +601,28 @@ class HorizonPatternMoEAlignment(nn.Module):
             else loss.new_zeros(())
         )
         router_tensor = torch.stack(router_weights, dim=0)
-        router_entropy = -(
-            router_tensor.clamp_min(1e-8) * router_tensor.clamp_min(1e-8).log()
-        ).sum(dim=-1).mean()
+        router_entropy = torch.stack(router_entropies).mean()
+        router_smoothness_terms = []
+        for left, right, step0, step1 in zip(
+            router_tensor[:-1],
+            router_tensor[1:],
+            self.anchor_steps[:-1],
+            self.anchor_steps[1:],
+        ):
+            interval = float(step1 - step0) / float(self.horizon_steps)
+            router_smoothness_terms.append(
+                (right - left).square().mean() / max(interval, 1e-6)
+            )
+        router_smoothness = (
+            torch.stack(router_smoothness_terms).mean()
+            if router_smoothness_terms
+            else loss.new_zeros(())
+        )
         diagnostics = {
             "horizon_losses": horizon_losses,
             "router_weights": router_tensor.detach(),
             "router_entropy": router_entropy.detach(),
+            "router_smoothness_loss": router_smoothness,
             "expert_cost_means": torch.stack(expert_cost_means).detach(),
             "plan_diversity": plan_diversity.detach(),
             "max_row_marginal_error": torch.stack(row_errors).max().detach(),
