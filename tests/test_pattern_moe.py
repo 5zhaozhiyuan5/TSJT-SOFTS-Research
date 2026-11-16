@@ -55,9 +55,9 @@ class PatternMoEAlignmentTest(unittest.TestCase):
         target_rep = torch.randn(9, 128, requires_grad=True)
         source_history = torch.randn(7, 288)
         target_history = torch.randn(9, 288)
-        source_future = torch.randn(2, 7, 36)
+        source_future = torch.randn(1, 7, 36)
         target_future = torch.randn(3, 3, 36)
-        source_last = torch.randn(2, 7)
+        source_last = torch.randn(1, 7)
         target_last = torch.randn(3, 3)
 
         source_desc = build_future_change_descriptors(
