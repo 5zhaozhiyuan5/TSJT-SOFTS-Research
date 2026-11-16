@@ -1,6 +1,7 @@
 import unittest
 
 import torch
+from geomloss import SamplesLoss
 
 from model.Meta_Models.horizon_metric import HorizonConditionedLowRankMetric
 from model.Meta_Models.SOFTS.SOFTS_new import Model as SOFTS
@@ -55,12 +56,19 @@ class HorizonMetricSmokeTest(unittest.TestCase):
         target_cost_features = torch.cat(
             [target_rep.reshape(-1, 128), 0.5 * target_relation], dim=-1
         )
-        pairwise_cost = torch.cdist(source_cost_features, target_cost_features)
-        loss = pairwise_cost.mean()
+        source_weights = torch.full((source_cost_features.shape[0],), 1.0 / source_cost_features.shape[0])
+        target_weights = torch.full((target_cost_features.shape[0],), 1.0 / target_cost_features.shape[0])
+        sinkhorn = SamplesLoss(
+            loss="sinkhorn", p=1, backend="tensorized", debias=False, blur=0.05
+        )
+        loss = sinkhorn(
+            source_weights, source_cost_features, target_weights, target_cost_features
+        )
         loss.backward()
 
-        self.assertEqual(tuple(pairwise_cost.shape), (6, 8))
-        self.assertTrue(torch.isfinite(pairwise_cost).all())
+        self.assertEqual(tuple(source_cost_features.shape), (6, 160))
+        self.assertEqual(tuple(target_cost_features.shape), (8, 160))
+        self.assertTrue(torch.isfinite(loss))
         self.assertGreater(float(source_rep.grad.abs().sum()), 0.0)
         self.assertGreater(float(target_rep.grad.abs().sum()), 0.0)
 
