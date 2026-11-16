@@ -47,6 +47,7 @@ class ExperimentDiagnostics:
         "horizon": "horizon_metrics.csv",
         "router": "moe_router.csv",
         "pattern": "pattern_bank.csv",
+        "pattern_usage": "pattern_usage.csv",
         "ot": "ot_diagnostics.csv",
         "gradient": "gradient_diagnostics.csv",
         "runtime": "runtime.csv",
@@ -211,7 +212,7 @@ class ExperimentDiagnostics:
         scale_costs = diagnostics.get("per_scale_cost_means")
         if usage is not None:
             for scale_index in range(len(usage)):
-                self.write("pattern", {
+                self.write("pattern_usage", {
                     "stage": "training_query",
                     "epoch": epoch,
                     "source_index": source_index,
