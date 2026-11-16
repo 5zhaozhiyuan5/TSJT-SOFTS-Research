@@ -190,5 +190,77 @@ class StageITrainingIntegrationTest(unittest.TestCase):
         )
 
 
+    def test_one_stage1_meta_update_with_pattern_moe_as_main_alignment(self):
+        pattern_model_args = {
+            "STnet": {"lr": 1e-3},
+            "chta": {"enabled": False},
+            "pattern_moe": {
+                "enabled": True,
+                "input_dim": 128,
+                "horizon_steps": 36,
+                "minutes_per_step": 5,
+                "anchor_steps": [2, 12, 24, 36],
+                "scale_steps": [12, 36, 72, 144, 288],
+                "time_dim": 12,
+                "hidden_dim": 32,
+                "relation_dim": 16,
+                "epsilon": 0.08,
+                "sinkhorn_iterations": 12,
+                "max_samples": 24,
+                "pattern_temperature": 0.2,
+                "router_temperature": 1.0,
+                "future_weight": 1.0,
+                "pattern_weight": 0.5,
+                "prior_kl_weight": 1.0,
+                "loss_weight": 1.0,
+                "smoothness_weight": 1e-4,
+                "target_loss_weight": 0.1,
+            },
+        }
+        pattern_bank = torch.randn(5, 8, 16)
+        stage1 = PMME.STRep(
+            classifier_args=0.0,
+            DAepoch_args=0,
+            DAcoef_args=0.01,
+            xySquaredRatio_args=100.0,
+            memory_size_args=0,
+            projection_args=1,
+            model_name="SOFTS",
+            DA="OT",
+            data_args={},
+            task_args={},
+            model_args=pattern_model_args,
+            PatchFSL_cfg=self.patch_cfg,
+            args=self.args,
+            pattern_bank=pattern_bank,
+        )
+        stage1.model.forecasting_model = TinyBackbone()
+        stage1.optimized_parameters = (
+            list(stage1.model.parameters()) + list(stage1.pattern_moe.parameters())
+        )
+        stage1.main_optim = torch.optim.AdamW(
+            stage1.optimized_parameters, lr=stage1.lr, weight_decay=1e-2
+        )
+
+        target = make_data(46, 325, 11)
+        sources = [
+            make_data(1, 207, 12),
+            make_data(1, 524, 13),
+            make_data(1, 627, 14),
+        ]
+        data = [target] + sources
+        matrices = [torch.eye(item.node_num) for item in data]
+
+        before_router = stage1.pattern_moe.router[-1].weight.detach().clone()
+        result = stage1.meta_train_revise(data, matrices, epoch=0)
+
+        self.assertEqual(len(result), 5)
+        self.assertTrue(all(np.isfinite(float(value)) for value in result))
+        self.assertFalse(
+            torch.equal(before_router, stage1.pattern_moe.router[-1].weight.detach())
+        )
+        self.assertIsNone(stage1.chta)
+
+
 if __name__ == "__main__":
     unittest.main()
