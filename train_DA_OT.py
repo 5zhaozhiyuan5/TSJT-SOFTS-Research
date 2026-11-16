@@ -18,6 +18,7 @@ from pattern_moe import (
 )
 from pathlib import Path
 import random
+from experiment_diagnostics import ExperimentDiagnostics
 
 curr_time = time.strftime('%Y-%m-%d-%H-%M-%S')
 
@@ -55,6 +56,20 @@ if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 save_dir = Path(save_dir)
 args.save_dir = save_dir
+args.diagnostics = ExperimentDiagnostics(
+    save_dir,
+    metadata={
+        "cli_args": {key: str(value) for key, value in vars(args).items()},
+        "run_description": args.description,
+        "seed": args.seed,
+        "target_dataset": args.test_dataset,
+        "source_dataset_selector": args.data_list,
+        "target_days": args.target_days,
+        "requested_model": args.model_name,
+        "alignment": args.DA,
+    },
+)
+args.diagnostics.install_exception_hook()
 
 #a = torch.rand(8000, 1000, 1000, device='cuda:0')
 
@@ -202,6 +217,26 @@ if __name__ == '__main__':
     print('data_args', data_args)
     finetune_dataset = traffic_dataset(data_args, task_args['target_few_shot'], data_list, 'target_maml', test_data=args.test_dataset)
     test_dataset = traffic_dataset(data_args, task_args['source'], data_list, 'test', test_data=args.test_dataset)
+    args.diagnostics.update_metadata({
+        "resolved_source_cities": list(source_dataset.data_list),
+        "target_dataset": args.test_dataset,
+        "processed_interval_minutes": int(source_dataset.processed_interval_minutes),
+        "history_steps": int(source_dataset.his_num),
+        "prediction_steps": int(task_args["source"]["pred_num"]),
+        "target_few_shot_samples": len(finetune_dataset),
+        "test_samples": len(test_dataset),
+        "source_window_shapes": {
+            name: list(source_dataset.x_list[name].shape)
+            for name in source_dataset.data_list
+        },
+        "pattern_bank_enabled": bool(pattern_cfg.get("enabled", False)),
+        "configured_anchor_minutes": pattern_cfg.get("anchor_minutes", []),
+        "resolved_anchor_steps": pattern_cfg.get("anchor_steps", []),
+        "configured_scale_minutes": pattern_cfg.get("scale_minutes", []),
+        "resolved_scale_steps": pattern_cfg.get("scale_steps", []),
+        "source_train_epochs": int(task_args["source"]["train_epochs"]),
+        "stage2_finetune_epochs": int(task_args["source"]["finetune_epochs"]),
+    })
     log_verbose(args,"data args : {}\ntask_args : {}\nmodel_args : {}\nPatchFSL_cfg : {}\nSTmodel : {}".format(data_args, task_args, model_args, PatchFSL_cfg, args.STmodel))
 
     rep_model = STRep(args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio, 0, args.projection, args.model_name, args.DA, data_args, task_args, model_args, PatchFSL_cfg, args, pattern_bank=pattern_bank) 
