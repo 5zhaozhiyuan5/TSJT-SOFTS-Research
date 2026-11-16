@@ -25,6 +25,7 @@ from gpytorch.likelihoods import BernoulliLikelihood, LaplaceLikelihood
 
 from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
+from experiment_diagnostics import ExperimentDiagnostics
 
 def log_verbose(args, msg):
     print(msg)
@@ -174,6 +175,7 @@ class STRep(nn.Module):
         self.model_args = model_args
         self.PatchFSL_cfg = PatchFSL_cfg
         self.args = args
+        self.diagnostics = getattr(args, "diagnostics", None)
 
         self.lr = model_args['STnet']['lr']
         self.model_name = args.STmodel
@@ -196,6 +198,11 @@ class STRep(nn.Module):
             self.main_optim = optim.AdamW(param_groups)
     
     def meta_train_revise(self, data, matrix, epoch, target=False): # matrix没有用到
+        epoch_started = time.perf_counter()
+        params_for_diagnostics = list(self.model.parameters())
+        param_norm_before = torch.sqrt(sum(
+            p.detach().float().pow(2).sum() for p in params_for_diagnostics
+        ))
         
         total_mae = []
         total_mse = []
@@ -306,16 +313,54 @@ class STRep(nn.Module):
         flat_B, _ = flatten_and_pad_grads(self.model.parameters())
         flat_proj_A = pcgrad_one_sided(flat_A, flat_B)
         write_back_flat_grads(flat_proj_A, mapping)
+        grad_sq = []
+        grad_none = 0
+        nonfinite_grad_count = 0
+        for parameter in params_for_diagnostics:
+            if parameter.grad is None:
+                grad_none += 1
+                continue
+            grad = parameter.grad.detach().float()
+            nonfinite_grad_count += int((~torch.isfinite(grad)).sum().item())
+            grad_sq.append(torch.nan_to_num(grad).pow(2).sum())
+        grad_norm = torch.sqrt(torch.stack(grad_sq).sum()) if grad_sq else torch.zeros(())
         self.main_optim.step()
         self.main_optim.zero_grad()
-
 
         model_loss = task_loss
         
         if epoch%25==0:
             print('len(task_losses), len(OT_losses)', len(task_losses), len(OT_losses))
+
+        mse_value = float(np.mean(total_mse))
+        rmse_value = float(np.mean(total_rmse))
+        mae_value = float(np.mean(total_mae))
+        mape_value = float(np.mean(total_mape))
+        if self.diagnostics is not None:
+            param_norm_after = torch.sqrt(sum(
+                p.detach().float().pow(2).sum() for p in params_for_diagnostics
+            ))
+            self.diagnostics.write("stage2_epoch", {
+                "epoch": epoch,
+                "stage2_forecast_loss": model_loss,
+                "source_mae_mean": mae_value,
+                "source_rmse_mean": rmse_value,
+                "source_mse_mean": mse_value,
+                "source_mape_mean": mape_value,
+                "target_reference_loss": target_task_loss,
+                "finite_loss": bool(torch.isfinite(model_loss.detach()).all()),
+            })
+            self.diagnostics.log_gradient(
+                epoch, "stage2_model", grad_norm, param_norm_before,
+                grad_none / max(len(params_for_diagnostics), 1),
+                nonfinite_grad_count, param_norm_after, stage="stage2",
+            )
+            lr = self.main_optim.param_groups[0]["lr"] if self.main_optim.param_groups else self.lr
+            self.diagnostics.log_runtime(
+                epoch, time.perf_counter() - epoch_started, lr, self.device, stage="stage2"
+            )
         
-        return model_loss.detach().cpu().numpy(),np.mean(total_mse), np.mean(total_rmse), np.mean(total_mae),np.mean(total_mape)
+        return model_loss.detach().cpu().numpy(),mse_value,rmse_value,mae_value,mape_value
         
         
     def forward(self, data, matrix):
