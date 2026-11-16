@@ -1,10 +1,11 @@
-name: Stage-I CHTA smoke tests
+name: Stage-I transfer alignment smoke tests
 
 on:
   push:
     branches:
       - stage-1-chta
       - stage-1-hclm
+      - stage-1-mtpb-moe
   workflow_dispatch:
 
 jobs:
