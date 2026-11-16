@@ -354,6 +354,7 @@ class STRep(nn.Module):
         CHTA_diagnostics = []
         PatternMoE_horizon_losses = []
         PatternMoE_source_scores = []
+        PatternMoE_router_smoothness_losses = []
         PatternMoE_diagnostics = []
         y_norm_sources = []
         y_norm_targets = []
@@ -531,6 +532,9 @@ class STRep(nn.Module):
                                 conditional_stats["horizon_losses"] * OT_loss_scale
                             )
                             PatternMoE_source_scores.append(source_h_scores)
+                            PatternMoE_router_smoothness_losses.append(
+                                conditional_stats["router_smoothness_loss"]
+                            )
                             PatternMoE_diagnostics.append(conditional_stats)
                     else:
                         # Legacy PMME/CHTA path retained for controlled ablations.
@@ -629,8 +633,13 @@ class STRep(nn.Module):
             PatternMoE_loss = task_loss.new_zeros(())
 
         if self.pattern_moe is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
+            PatternMoE_smoothness = self.pattern_moe.smoothness_loss()
+            if PatternMoE_router_smoothness_losses:
+                PatternMoE_smoothness = PatternMoE_smoothness + torch.stack(
+                    PatternMoE_router_smoothness_losses
+                ).mean()
             PatternMoE_smoothness = (
-                self.pattern_moe.smoothness_loss() * self.pattern_moe_smoothness_weight
+                PatternMoE_smoothness * self.pattern_moe_smoothness_weight
             )
             target_loss_weight = self.pattern_moe_target_loss_weight
         else:
@@ -667,13 +676,22 @@ class STRep(nn.Module):
 
         if epoch % 25 == 0 and PatternMoE_diagnostics:
             router = torch.stack([d["router_weights"] for d in PatternMoE_diagnostics], dim=0)
+            entropy = torch.stack([d["router_entropy"] for d in PatternMoE_diagnostics]).mean()
+            expert_costs = torch.stack([d["expert_cost_means"] for d in PatternMoE_diagnostics]).mean(dim=0)
             diversity = torch.stack([d["plan_diversity"] for d in PatternMoE_diagnostics]).mean()
             row_error = torch.stack([d["max_row_marginal_error"] for d in PatternMoE_diagnostics]).max()
             col_error = torch.stack([d["max_col_marginal_error"] for d in PatternMoE_diagnostics]).max()
+            router_smoothness = torch.stack(
+                [d["router_smoothness_loss"].detach() for d in PatternMoE_diagnostics]
+            ).mean()
             print(
                 "PatternMoE_loss", float(PatternMoE_loss.detach()),
+                "PatternMoE_smoothness", float(PatternMoE_smoothness.detach()),
                 "PatternMoE_router_by_horizon",
                 router.mean(dim=0).detach().cpu().numpy().round(4).tolist(),
+                "PatternMoE_router_entropy", float(entropy),
+                "PatternMoE_expert_costs", expert_costs.cpu().numpy().round(4).tolist(),
+                "PatternMoE_router_smoothness", float(router_smoothness),
                 "PatternMoE_plan_diversity", float(diversity),
                 "PatternMoE_row_marginal_error", float(row_error),
                 "PatternMoE_col_marginal_error", float(col_error),
