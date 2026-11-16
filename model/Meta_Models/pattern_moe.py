@@ -435,8 +435,10 @@ class HorizonPatternMoEAlignment(nn.Module):
         )
 
         time_codes = self.encode_horizons(self.anchor_steps, source.device, source.dtype)
-        source_context = self.router_context(normalized_source.mean(dim=0))
-        target_context = self.router_context(normalized_target.mean(dim=0))
+        # Pairwise contexts let the router choose experts for each source/target
+        # sample pair, rather than assigning one global gate to the whole batch.
+        source_context = self.router_context(normalized_source)
+        target_context = self.router_context(normalized_target)
         conditional_losses = []
         conditional_plans = []
         router_weights = []
@@ -471,20 +473,31 @@ class HorizonPatternMoEAlignment(nn.Module):
 
             history_cost = _pairwise_squared_cost(source_feature, target_feature)
             future_cost = _pairwise_squared_cost(source_future, target_future)
-            descriptor_context = torch.cat(
-                (
-                    source_desc[:, horizon_index, :].mean(dim=0),
-                    target_desc[:, horizon_index, :].mean(dim=0),
-                ),
-                dim=-1,
+            source_context_pair = source_context[:, None, :].expand(-1, target.shape[0], -1)
+            target_context_pair = target_context[None, :, :].expand(source.shape[0], -1, -1)
+            source_descriptor_pair = source_desc[:, horizon_index, :][:, None, :].expand(
+                -1, target.shape[0], -1
+            )
+            target_descriptor_pair = target_desc[:, horizon_index, :][None, :, :].expand(
+                source.shape[0], -1, -1
+            )
+            time_context_pair = time_code.view(1, 1, -1).expand(
+                source.shape[0], target.shape[0], -1
             )
             router_input = torch.cat(
-                (source_context, target_context, descriptor_context, time_code), dim=-1
+                (
+                    source_context_pair,
+                    target_context_pair,
+                    source_descriptor_pair,
+                    target_descriptor_pair,
+                    time_context_pair,
+                ),
+                dim=-1,
             )
             gate = torch.softmax(
                 self.router(router_input) / self.router_temperature, dim=-1
             )
-            pattern_cost = (expert_costs * gate.view(3, 1, 1)).sum(dim=0)
+            pattern_cost = (expert_costs.permute(1, 2, 0) * gate).sum(dim=-1)
             combined_cost = (
                 history_cost
                 + self.future_weight * future_cost
@@ -510,7 +523,7 @@ class HorizonPatternMoEAlignment(nn.Module):
                 + self.epsilon * self.prior_kl_weight * kl
             )
             conditional_plans.append(plan)
-            router_weights.append(gate)
+            router_weights.append(gate.mean(dim=(0, 1)))
             expert_cost_means.append(expert_costs.mean(dim=(1, 2)))
             row_errors.append(
                 (plan.sum(dim=1) - _normalize_weights(source_m[horizon_index])).abs().max()
