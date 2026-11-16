@@ -12,7 +12,10 @@ sys.path.append('./model')
 sys.path.append('./model/Meta_Models')
 
 from PMME import *
-from pattern_moe import build_multiscale_pattern_bank
+from pattern_moe import (
+    build_multiscale_pattern_bank,
+    physical_minutes_to_steps,
+)
 from pathlib import Path
 import random
 
@@ -101,20 +104,87 @@ if __name__ == '__main__':
         log_verbose(args,"source dataset has {}. X : {}, y : {}".format(data,source_dataset.x_list[data].shape,source_dataset.y_list[data].shape))
 
     # Build the MTPB-inspired pattern bank from source-city training windows
-    # only. The target city and all target test windows are excluded.
+    # only. Dataset preprocessing first maps METR-LA/PEMS-BAY and the
+    # interpolated Chengdu/Shenzhen series onto one declared time grid.
     pattern_bank = None
     pattern_cfg = model_args.get("pattern_moe", {})
     if bool(pattern_cfg.get("enabled", False)):
+        processed_minutes = int(source_dataset.processed_interval_minutes)
+        declared_minutes = pattern_cfg.get("minutes_per_step")
+        if declared_minutes is not None and int(declared_minutes) != processed_minutes:
+            raise ValueError(
+                "pattern_moe.minutes_per_step does not match the dataset's "
+                f"processed interval ({declared_minutes} vs {processed_minutes} minutes)"
+            )
+
+        scale_minutes = tuple(
+            int(value) for value in pattern_cfg.get(
+                "scale_minutes", [60, 180, 360, 720, 1440]
+            )
+        )
+        anchor_minutes = tuple(
+            int(value) for value in pattern_cfg.get(
+                "anchor_minutes", [10, 60, 120, 180]
+            )
+        )
+        scale_steps = physical_minutes_to_steps(scale_minutes, processed_minutes)
+        anchor_steps = physical_minutes_to_steps(anchor_minutes, processed_minutes)
+        horizon_steps = int(task_args["source"]["pred_num"])
+        if max(anchor_steps) > horizon_steps:
+            raise ValueError(
+                f"largest horizon anchor is {max(anchor_steps)} steps, but "
+                f"the forecasting horizon is only {horizon_steps} steps"
+            )
+        if max(scale_steps) > int(source_dataset.his_num):
+            raise ValueError(
+                f"largest pattern scale requires {max(scale_steps)} history steps, "
+                f"but task.source.his_num={source_dataset.his_num}. Increase the "
+                "history window or reduce scale_minutes."
+            )
+
+        # Pass the resolved physical grid into PMME so the module and bank use
+        # exactly the same step mapping.
+        pattern_cfg["minutes_per_step"] = processed_minutes
+        pattern_cfg["scale_steps"] = list(scale_steps)
+        pattern_cfg["anchor_steps"] = list(anchor_steps)
+        pattern_cfg["horizon_steps"] = horizon_steps
+
         source_pattern_arrays = {
             name: source_dataset.x_list[name]
             for name in source_dataset.data_list
             if name != args.test_dataset
         }
         if not source_pattern_arrays:
-            raise RuntimeError("pattern_moe is enabled but no source-city windows were found.")
+            raise RuntimeError(
+                "pattern_moe is enabled but no source-city windows were found."
+            )
+        for city_name, windows in source_pattern_arrays.items():
+            if windows.shape[-2] != int(source_dataset.his_num):
+                raise ValueError(
+                    f"{city_name}: expected {source_dataset.his_num} history steps "
+                    f"on the {processed_minutes}-minute grid, got {windows.shape}"
+                )
+
+        log_verbose(
+            args,
+            "[PatternBank] physical scales={}min -> {} steps; "
+            "horizons={}min -> {} steps; processed_grid={}min".format(
+                list(scale_minutes),
+                list(scale_steps),
+                list(anchor_minutes),
+                list(anchor_steps),
+                processed_minutes,
+            ),
+        )
+        log_verbose(
+            args,
+            "[PatternBank] source-only cities={} (target {} excluded)".format(
+                sorted(source_pattern_arrays), args.test_dataset
+            ),
+        )
         pattern_bank = build_multiscale_pattern_bank(
             source_pattern_arrays,
-            scale_steps=tuple(pattern_cfg.get("scale_steps", [12, 36, 72, 144, 288])),
+            scale_steps=scale_steps,
             num_prototypes=int(pattern_cfg.get("num_prototypes", 10)),
             descriptor_bins=int(pattern_cfg.get("descriptor_bins", 16)),
             max_windows_per_city=int(pattern_cfg.get("max_windows_per_city", 24)),
