@@ -772,6 +772,23 @@ class STRep(nn.Module):
             name: parameter_norm(module) for name, module in diagnostic_modules.items()
         }
 
+        def parameter_sample(module, limit=4096):
+            chunks = []
+            remaining = limit
+            for parameter in module.parameters():
+                if remaining <= 0:
+                    break
+                flat = parameter.detach().reshape(-1)
+                take = min(remaining, flat.numel())
+                if take:
+                    chunks.append(flat[:take].float().clone())
+                    remaining -= take
+            return torch.cat(chunks) if chunks else torch.zeros(1, device=self.device)
+
+        parameter_samples_before = {
+            name: parameter_sample(module) for name, module in diagnostic_modules.items()
+        }
+
         def gradient_summary(module):
             params = list(module.parameters())
             total = max(len(params), 1)
@@ -817,6 +834,9 @@ class STRep(nn.Module):
             self.diagnostics.log_gradient(
                 epoch, name, grad_norm, parameter_norm_before[name], none_fraction,
                 nonfinite_count, parameter_norm(module),
+                parameter_delta_norm=torch.norm(
+                    parameter_sample(module) - parameter_samples_before[name]
+                ),
             )
 
         def _mean_metric(values):
