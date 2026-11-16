@@ -17,7 +17,7 @@ loss terms, change gradients, or alter optimizer updates.
 | `evaluation_metrics.csv` | Per-output-step few-shot validation, test, and Stage-II final-test metrics, with sample counts | Compare horizon-wise generalization |
 | `moe_router.csv` | Per-source-batch and horizon router weights, pairwise router spread/top-1 fraction, entropy, expert costs | Detect expert collapse or unchanging gates |
 | `pattern_bank.csv` | Initial prototype-bank statistics for each historical scale | Check bank construction and scale coverage |
-| `pattern_usage.csv` | Per-scale prototype assignment usage, entropy, top-1 fraction, and mean pairwise cost | Detect unused/collapsed prototypes |
+| `pattern_usage.csv` | Per-scale combined/source/target prototype usage, source-target usage gap, entropy, top-1 fraction, and mean pairwise cost | Detect unused/collapsed prototypes and source-target pattern coverage mismatch |
 | `ot_diagnostics.csv` | Per-horizon conditional OT loss, plan diversity/entropy/concentration, row/column marginal errors, sample counts | Check whether conditional transport differs, collapses to a few pairs, and converges |
 | `gradient_diagnostics.csv` | Stage-I/II module gradient norm, missing-gradient fraction, non-finite gradient count, parameter norms and sampled update magnitude | Detect disconnected modules, exploding/invalid gradients, or negligible updates |
 | `runtime.csv` | Epoch time, cumulative runtime, learning rate, CUDA allocated/reserved memory | Diagnose speed and memory issues |
@@ -40,9 +40,10 @@ loss terms, change gradients, or alter optimizer updates.
 1. Router weights are averages over sampled source-target pairs. Pairwise
    standard deviation and top-1 fractions are also recorded; averages alone
    can hide pair-level collapse.
-2. Pattern usage is the mean soft assignment across sampled source and target
-   history windows. It is a diagnostic of prototype utilization, not a claim
-   that prototypes have human-interpretable semantic labels.
+2. Pattern usage is reported for source and target samples separately as well as
+   jointly. The source-target usage gap indicates whether the two domains use
+   the prototype bank differently. It is a diagnostic of prototype utilization,
+   not a claim that prototypes have human-interpretable semantic labels.
 3. OT marginal errors are finite-iteration Sinkhorn residuals. A nonzero value
    is expected; compare trends and configured iteration counts rather than
    treating a single small residual as proof of useful domain transfer.
