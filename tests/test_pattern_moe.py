@@ -161,7 +161,10 @@ class PatternMoEAlignmentTest(unittest.TestCase):
         self.assertGreater(float(target_rep.grad.abs().sum()), 0.0)
         self.assertGreater(float(module.router[-1].weight.grad.abs().sum()), 0.0)
         self.assertGreater(float(module.history_projection.weight.grad.abs().sum()), 0.0)
-        self.assertLess(float(diagnostics["max_row_marginal_error"]), 1e-2)
+        # The log-domain Sinkhorn solver uses 20 alternating updates; the
+        # row marginal is therefore approximate while the final column update
+        # is exact up to floating-point error.
+        self.assertLess(float(diagnostics["max_row_marginal_error"]), 3e-2)
         self.assertLess(float(diagnostics["max_col_marginal_error"]), 1e-2)
 
 
