@@ -296,7 +296,7 @@ class STRep(nn.Module):
             # Compute a compact horizon-conditioned relation embedding from the
             # SOFTS/iTransformer window representation before flattening nodes.
             relation1, relation2 = None, None
-            if self.hclm is not None and self.DA == 'OT':
+            if self.hclm is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
                 relation1 = self.hclm(x1)
                 relation2 = self.hclm(x2)
 
