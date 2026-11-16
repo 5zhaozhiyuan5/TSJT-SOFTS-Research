@@ -260,6 +260,20 @@ class StageITrainingIntegrationTest(unittest.TestCase):
             torch.equal(before_router, stage1.pattern_moe.router[-1].weight.detach())
         )
         self.assertIsNone(stage1.chta)
+        for filename in (
+            "run_metadata.json",
+            "epoch_metrics.csv",
+            "pattern_bank.csv",
+            "pattern_usage.csv",
+            "moe_router.csv",
+            "ot_diagnostics.csv",
+            "gradient_diagnostics.csv",
+            "runtime.csv",
+        ):
+            self.assertTrue(
+                os.path.exists(os.path.join(self.tmp.name, filename)),
+                msg="missing diagnostics output: " + filename,
+            )
 
 
 if __name__ == "__main__":
