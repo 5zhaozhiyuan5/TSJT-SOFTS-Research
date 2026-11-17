@@ -2,6 +2,9 @@ data:
   data_keys: ['metr-la', 'pems-bay', 'shenzhen', 'chengdu_m']
   # Common grid after the loader's legacy interpolation step.
   processed_interval_minutes: 5
+  # Prevent target-test distribution leakage: fit target-city normalization
+  # statistics on the first target_days only, then reuse them for test data.
+  target_normalization_scope: target_train
   metr-la:
     sampling_interval_minutes: 5
     dataset_path: data/metr-la/dataset_expand.npy
@@ -105,6 +108,8 @@ model:
     max_samples: 128
     pattern_temperature: 0.15
     router_temperature: 1.0
+    # learned | uniform | expert1 | expert2 | expert3; CLI can override this.
+    router_mode: learned
     # Soft anti-collapse floor: only prevents any expert's aggregate usage
     # from falling below 5%; it does not enforce uniform expert assignments.
     router_min_usage: 0.05
