@@ -203,6 +203,8 @@ class ExperimentDiagnostics:
                 "horizon_minutes": step * minutes_per_step,
                 "conditional_ot_loss": horizon_losses[h_index] if horizon_losses is not None else None,
                 "router_entropy": diagnostics.get("router_entropy"),
+                "router_mean_usage": diagnostics.get("router_mean_usage"),
+                "router_balance_loss": diagnostics.get("router_balance_loss"),
                 "plan_diversity": diagnostics.get("plan_diversity"),
                 "plan_entropy": diagnostics.get("plan_entropy")[h_index] if diagnostics.get("plan_entropy") is not None else None,
                 "normalized_plan_entropy": diagnostics.get("normalized_plan_entropy")[h_index] if diagnostics.get("normalized_plan_entropy") is not None else None,
