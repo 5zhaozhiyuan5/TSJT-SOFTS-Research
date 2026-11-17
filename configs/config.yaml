@@ -101,6 +101,10 @@ model:
     max_samples: 128
     pattern_temperature: 0.15
     router_temperature: 1.0
+    # Soft anti-collapse floor: only prevents any expert's aggregate usage
+    # from falling below 5%; it does not enforce uniform expert assignments.
+    router_min_usage: 0.05
+    router_balance_weight: 0.1
     future_weight: 1.0
     pattern_weight: 0.5
     prior_kl_weight: 1.0
