@@ -603,9 +603,17 @@ class HorizonPatternMoEAlignment(nn.Module):
                 ).sum(dim=-1).mean()
             )
             router_pair_stds.append(gate.detach().std(dim=(0, 1), unbiased=False))
-            router_top1_fractions.append(
-                F.one_hot(gate.detach().argmax(dim=-1), num_classes=3).float().mean(dim=(0, 1))
-            )
+            if self.router_mode == "uniform":
+                # All experts are tied in the uniform arm; split tie credit
+                # evenly instead of letting argmax arbitrarily favor Expert 1.
+                router_top1_fractions.append(
+                    torch.full((3,), 1.0 / 3.0, device=gate.device, dtype=gate.dtype)
+                )
+            else:
+                router_top1_fractions.append(
+                    F.one_hot(gate.detach().argmax(dim=-1), num_classes=3)
+                    .float().mean(dim=(0, 1))
+                )
             pattern_cost = (expert_costs.permute(1, 2, 0) * gate).sum(dim=-1)
             combined_cost = (
                 history_cost
