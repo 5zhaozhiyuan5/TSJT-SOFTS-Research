@@ -221,6 +221,7 @@ class STRep(nn.Module):
                 pattern_weight=float(pattern_cfg.get('pattern_weight', 0.5)),
                 prior_kl_weight=float(pattern_cfg.get('prior_kl_weight', 1.0)),
                 router_min_usage=float(pattern_cfg.get('router_min_usage', 0.05)),
+                router_mode=str(pattern_cfg.get('router_mode', 'learned')),
             ).to(self.device)
 
         self.optimized_parameters = list(self.model.parameters())
