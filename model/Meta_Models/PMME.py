@@ -189,6 +189,11 @@ class STRep(nn.Module):
         self.pattern_moe_loss_weight = float(pattern_cfg.get('loss_weight', 1.0))
         self.pattern_moe_source_temperature = float(pattern_cfg.get('source_temperature', 0.25))
         self.pattern_moe_smoothness_weight = float(pattern_cfg.get('smoothness_weight', 1e-4))
+        # Keep FiLM horizon-conditioning smoothness, but independently control
+        # router smoothness so the ablation can remove only cross-horizon gate coupling.
+        self.pattern_moe_router_smoothness_weight = float(
+            pattern_cfg.get('router_smoothness_weight', 0.0)
+        )
         self.pattern_moe_target_loss_weight = float(pattern_cfg.get('target_loss_weight', 0.1))
         self.pattern_moe_router_balance_weight = float(pattern_cfg.get('router_balance_weight', 0.1))
         if self.pattern_moe_enabled:
@@ -674,14 +679,18 @@ class STRep(nn.Module):
             PatternMoE_loss = task_loss.new_zeros(())
 
         if self.pattern_moe is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
-            PatternMoE_smoothness = self.pattern_moe.smoothness_loss()
-            if PatternMoE_router_smoothness_losses:
-                PatternMoE_smoothness = PatternMoE_smoothness + torch.stack(
-                    PatternMoE_router_smoothness_losses
-                ).mean()
+            # FiLM smoothness is retained. Router smoothness is a separate,
+            # independently switchable term for the NoRouterSmooth ablation.
             PatternMoE_smoothness = (
-                PatternMoE_smoothness * self.pattern_moe_smoothness_weight
+                self.pattern_moe.smoothness_loss() * self.pattern_moe_smoothness_weight
             )
+            if PatternMoE_router_smoothness_losses:
+                PatternMoE_router_smoothness = (
+                    torch.stack(PatternMoE_router_smoothness_losses).mean()
+                    * self.pattern_moe_router_smoothness_weight
+                )
+            else:
+                PatternMoE_router_smoothness = task_loss.new_zeros(())
             if PatternMoE_router_balance_losses:
                 PatternMoE_router_balance = (
                     torch.stack(PatternMoE_router_balance_losses).mean()
@@ -692,6 +701,7 @@ class STRep(nn.Module):
             target_loss_weight = self.pattern_moe_target_loss_weight
         else:
             PatternMoE_smoothness = task_loss.new_zeros(())
+            PatternMoE_router_smoothness = task_loss.new_zeros(())
             PatternMoE_router_balance = task_loss.new_zeros(())
 
         if self.chta is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
@@ -708,7 +718,8 @@ class STRep(nn.Module):
         # direction and is also added back with target_loss_weight.
         transfer_loss = (
             task_loss + DA_loss + CHTA_loss + CHTA_smoothness
-            + PatternMoE_loss + PatternMoE_smoothness + PatternMoE_router_balance
+            + PatternMoE_loss + PatternMoE_smoothness
+            + PatternMoE_router_smoothness + PatternMoE_router_balance
         )
         model_loss = transfer_loss + target_loss_weight * target_task_loss
 
@@ -739,6 +750,8 @@ class STRep(nn.Module):
             print(
                 "PatternMoE_loss", float(PatternMoE_loss.detach()),
                 "PatternMoE_smoothness", float(PatternMoE_smoothness.detach()),
+                "PatternMoE_router_smoothness", float(PatternMoE_router_smoothness.detach()),
+                "PatternMoE_router_smoothness_weight", self.pattern_moe_router_smoothness_weight,
                 "PatternMoE_router_balance", float(PatternMoE_router_balance.detach()),
                 "PatternMoE_router_by_horizon",
                 router.mean(dim=0).detach().cpu().numpy().round(4).tolist(),
@@ -889,6 +902,8 @@ class STRep(nn.Module):
             "chta_loss": CHTA_loss,
             "pattern_moe_loss": PatternMoE_loss,
             "pattern_moe_smoothness": PatternMoE_smoothness,
+            "pattern_moe_router_smoothness": PatternMoE_router_smoothness,
+            "pattern_moe_router_smoothness_weight": self.pattern_moe_router_smoothness_weight,
             "pattern_moe_router_balance": PatternMoE_router_balance,
             "mae_mean": epoch_mae,
             "rmse_mean": epoch_rmse,
