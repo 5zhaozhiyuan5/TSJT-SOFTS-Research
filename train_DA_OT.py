@@ -38,6 +38,12 @@ parser.add_argument('--gpu', default=0, type = int)
 parser.add_argument('--STmodel',default='SOFTS',type=str)
 parser.add_argument('--his_num',default=288,type=int)
 parser.add_argument('--save_dir', type=str)
+parser.add_argument(
+    '--pattern_moe_router_mode',
+    choices=['learned', 'uniform', 'expert1', 'expert2', 'expert3'],
+    default=None,
+    help='Override pattern_moe.router_mode for controlled expert ablations.',
+)
 
 parser.add_argument('--classifier',default=0.3,type=float)
 parser.add_argument('--xySquaredRatio',default=10,type=float) 
@@ -51,10 +57,16 @@ args = parser.parse_args()
 
 args.curr_time = curr_time
 print('args.test_dataset',args.test_dataset)
-save_dir = os.path.join(".", "logged_files", args.test_dataset, args.data_list , args.curr_time)
-if not os.path.exists(save_dir):
-    os.makedirs(save_dir)
-save_dir = Path(save_dir)
+run_description = str(args.description).strip().replace(" ", "_").replace("/", "_").replace("\\", "_")
+requested_router_mode = args.pattern_moe_router_mode or "config"
+if args.save_dir:
+    save_dir = Path(args.save_dir)
+else:
+    save_dir = (
+        Path(".") / "logged_files" / args.test_dataset / args.data_list
+        / f"{args.curr_time}_{run_description}_router-{requested_router_mode}_seed{args.seed}"
+    )
+save_dir.mkdir(parents=True, exist_ok=True)
 args.save_dir = save_dir
 args.diagnostics = ExperimentDiagnostics(
     save_dir,
@@ -67,6 +79,8 @@ args.diagnostics = ExperimentDiagnostics(
         "target_days": args.target_days,
         "requested_model": args.model_name,
         "alignment": args.DA,
+        "requested_router_mode": requested_router_mode,
+        "target_normalization_scope": "target_train",
     },
 )
 args.diagnostics.install_exception_hook()
@@ -99,6 +113,22 @@ if __name__ == '__main__':
     config['task']['source']['train_epochs'] = args.train_epochs
     config['task']['source']['finetune_epochs'] = args.finetune_epochs
 
+    pattern_cfg_override = config.setdefault('model', {}).setdefault('pattern_moe', {})
+    if args.pattern_moe_router_mode is not None:
+        pattern_cfg_override['router_mode'] = args.pattern_moe_router_mode
+    resolved_router_mode = str(pattern_cfg_override.get('router_mode', 'learned')).lower()
+    if resolved_router_mode not in ('learned', 'uniform', 'expert1', 'expert2', 'expert3'):
+        raise ValueError(f"Unsupported pattern_moe.router_mode: {resolved_router_mode}")
+    args.diagnostics.update_metadata({
+        "resolved_router_mode": resolved_router_mode,
+        "target_normalization_scope": config.get('data', {}).get(
+            'target_normalization_scope', 'target_train'
+        ),
+    })
+    stage1_checkpoint_path = args.save_dir / (
+        f"stage1_{args.test_dataset}_{args.model_name}_router-{resolved_router_mode}_seed{args.seed}.pth"
+    )
+
     args.batch_size = config['task']['source']['batch_size']
 
     data_args, task_args, model_args = config['data'], config['task'], config['model']
@@ -112,7 +142,10 @@ if __name__ == '__main__':
     }
 
     ## dataset
-    source_dataset = traffic_dataset(data_args, task_args['source'], data_list, "source", test_data=args.test_dataset)#####
+    source_dataset = traffic_dataset(
+        data_args, task_args['source'], data_list, "source",
+        test_data=args.test_dataset, target_days=args.target_days
+    )#####
     ## check source dataset
 
     for data in source_dataset.data_list:
@@ -215,8 +248,14 @@ if __name__ == '__main__':
         )
 
     print('data_args', data_args)
-    finetune_dataset = traffic_dataset(data_args, task_args['target_few_shot'], data_list, 'target_maml', test_data=args.test_dataset)
-    test_dataset = traffic_dataset(data_args, task_args['source'], data_list, 'test', test_data=args.test_dataset)
+    finetune_dataset = traffic_dataset(
+        data_args, task_args['target_few_shot'], data_list, 'target_maml',
+        test_data=args.test_dataset, target_days=args.target_days
+    )
+    test_dataset = traffic_dataset(
+        data_args, task_args['source'], data_list, 'test',
+        test_data=args.test_dataset, target_days=args.target_days
+    )
     args.diagnostics.update_metadata({
         "resolved_source_cities": list(source_dataset.data_list),
         "target_dataset": args.test_dataset,
@@ -317,7 +356,7 @@ if __name__ == '__main__':
                         best_testing_score = current_testing_score  # check testing score
                     
                     if sum(current_validation_score)<sum(best_validation_score):
-                        torch.save(state, f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth")
+                        torch.save(state, stage1_checkpoint_path)
                         best_validation_score = current_validation_score
                         best_epoch = i
                         print(f'epoch:{i} best!')
@@ -356,7 +395,7 @@ if __name__ == '__main__':
         print('Begin ckpt check!!!!!')
         print()
         
-        model_path = f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth"   
+        model_path = str(stage1_checkpoint_path)   
         
         ckpt = torch.load(model_path, map_location=args.device)
         old_state = ckpt['model_state_dict']    
@@ -400,7 +439,7 @@ if __name__ == '__main__':
     
         rep_model = PMME_2ndStage.STRep(args.classifier, args.DAepoch, args.DAcoef, args.xySquaredRatio, args.MemSize, 1, args.model_name, data_args, task_args, model_args, PatchFSL_cfg, args) # args.temperature
     
-        model_path = f"l1_{args.test_dataset}_{args.model_name}_seed{seed}.pth" 
+        model_path = str(stage1_checkpoint_path) 
         
         ckpt = torch.load(model_path, map_location=args.device)
         old_state = ckpt['model_state_dict']    
