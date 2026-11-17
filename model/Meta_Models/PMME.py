@@ -190,6 +190,7 @@ class STRep(nn.Module):
         self.pattern_moe_source_temperature = float(pattern_cfg.get('source_temperature', 0.25))
         self.pattern_moe_smoothness_weight = float(pattern_cfg.get('smoothness_weight', 1e-4))
         self.pattern_moe_target_loss_weight = float(pattern_cfg.get('target_loss_weight', 0.1))
+        self.pattern_moe_router_balance_weight = float(pattern_cfg.get('router_balance_weight', 0.1))
         if self.pattern_moe_enabled:
             if pattern_bank is None:
                 raise ValueError(
@@ -214,6 +215,7 @@ class STRep(nn.Module):
                 future_weight=float(pattern_cfg.get('future_weight', 1.0)),
                 pattern_weight=float(pattern_cfg.get('pattern_weight', 0.5)),
                 prior_kl_weight=float(pattern_cfg.get('prior_kl_weight', 1.0)),
+                router_min_usage=float(pattern_cfg.get('router_min_usage', 0.05)),
             ).to(self.device)
 
         self.optimized_parameters = list(self.model.parameters())
@@ -390,6 +392,7 @@ class STRep(nn.Module):
         PatternMoE_horizon_losses = []
         PatternMoE_source_scores = []
         PatternMoE_router_smoothness_losses = []
+        PatternMoE_router_balance_losses = []
         PatternMoE_diagnostics = []
         y_norm_sources = []
         y_norm_targets = []
@@ -570,6 +573,9 @@ class STRep(nn.Module):
                             PatternMoE_router_smoothness_losses.append(
                                 conditional_stats["router_smoothness_loss"]
                             )
+                            PatternMoE_router_balance_losses.append(
+                                conditional_stats["router_balance_loss"]
+                            )
                             PatternMoE_diagnostics.append(conditional_stats)
                     else:
                         # Legacy PMME/CHTA path retained for controlled ablations.
@@ -676,9 +682,17 @@ class STRep(nn.Module):
             PatternMoE_smoothness = (
                 PatternMoE_smoothness * self.pattern_moe_smoothness_weight
             )
+            if PatternMoE_router_balance_losses:
+                PatternMoE_router_balance = (
+                    torch.stack(PatternMoE_router_balance_losses).mean()
+                    * self.pattern_moe_router_balance_weight
+                )
+            else:
+                PatternMoE_router_balance = task_loss.new_zeros(())
             target_loss_weight = self.pattern_moe_target_loss_weight
         else:
             PatternMoE_smoothness = task_loss.new_zeros(())
+            PatternMoE_router_balance = task_loss.new_zeros(())
 
         if self.chta is not None and self.DA == 'OT' and epoch >= self.DAepoch_args:
             CHTA_smoothness = self.chta.smoothness_loss()
@@ -692,7 +706,10 @@ class STRep(nn.Module):
         # The few-shot target loss is now an explicit, low-weight Stage-I
         # objective.  In the projected-gradient path it remains the reference
         # direction and is also added back with target_loss_weight.
-        transfer_loss = task_loss + DA_loss + CHTA_loss + CHTA_smoothness + PatternMoE_loss + PatternMoE_smoothness
+        transfer_loss = (
+            task_loss + DA_loss + CHTA_loss + CHTA_smoothness
+            + PatternMoE_loss + PatternMoE_smoothness + PatternMoE_router_balance
+        )
         model_loss = transfer_loss + target_loss_weight * target_task_loss
 
         if epoch % 25 == 0 and CHTA_diagnostics:
@@ -722,6 +739,7 @@ class STRep(nn.Module):
             print(
                 "PatternMoE_loss", float(PatternMoE_loss.detach()),
                 "PatternMoE_smoothness", float(PatternMoE_smoothness.detach()),
+                "PatternMoE_router_balance", float(PatternMoE_router_balance.detach()),
                 "PatternMoE_router_by_horizon",
                 router.mean(dim=0).detach().cpu().numpy().round(4).tolist(),
                 "PatternMoE_router_entropy", float(entropy),
@@ -871,6 +889,7 @@ class STRep(nn.Module):
             "chta_loss": CHTA_loss,
             "pattern_moe_loss": PatternMoE_loss,
             "pattern_moe_smoothness": PatternMoE_smoothness,
+            "pattern_moe_router_balance": PatternMoE_router_balance,
             "mae_mean": epoch_mae,
             "rmse_mean": epoch_rmse,
             "mse_mean": epoch_mse,
