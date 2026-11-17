@@ -241,6 +241,7 @@ class HorizonPatternMoEAlignment(nn.Module):
         future_weight: float = 1.0,
         pattern_weight: float = 0.5,
         prior_kl_weight: float = 1.0,
+        router_min_usage: float = 0.05,
     ):
         super().__init__()
         anchors = tuple(int(v) for v in anchor_steps)
@@ -272,6 +273,9 @@ class HorizonPatternMoEAlignment(nn.Module):
         self.future_weight = float(future_weight)
         self.pattern_weight = float(pattern_weight)
         self.prior_kl_weight = float(prior_kl_weight)
+        self.router_min_usage = float(router_min_usage)
+        if not 0.0 < self.router_min_usage < (1.0 / 3.0):
+            raise ValueError("router_min_usage must be between 0 and 1/3")
 
         # Prototypes are fixed source-only knowledge, not target-test statistics.
         self.register_buffer("pattern_prototypes", pattern_bank.detach().float().clone())
@@ -648,6 +652,13 @@ class HorizonPatternMoEAlignment(nn.Module):
         )
         router_tensor = torch.stack(router_weights, dim=0)
         router_entropy = torch.stack(router_entropies).mean()
+        # Prevent expert death without forcing a uniform 1/3-1/3-1/3
+        # assignment. The floor is applied to aggregate usage across horizons
+        # and sample pairs, so experts may still specialize by horizon.
+        router_mean_usage = router_tensor.mean(dim=0)
+        router_balance_loss = F.relu(
+            self.router_min_usage - router_mean_usage
+        ).square().sum()
         router_smoothness_terms = []
         for left, right, step0, step1 in zip(
             router_tensor[:-1],
@@ -668,6 +679,8 @@ class HorizonPatternMoEAlignment(nn.Module):
             "horizon_losses": horizon_losses,
             "router_weights": router_tensor.detach(),
             "router_entropy": router_entropy.detach(),
+            "router_mean_usage": router_mean_usage.detach(),
+            "router_balance_loss": router_balance_loss,
             "router_smoothness_loss": router_smoothness,
             "expert_cost_means": torch.stack(expert_cost_means).detach(),
             "plan_diversity": plan_diversity.detach(),
