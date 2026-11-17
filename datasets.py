@@ -144,14 +144,39 @@ class traffic_dataset(Dataset):
             )
 
             X = X.numpy()
-            # mean and std 
-            X[:,0,:] = X[:,0,:].astype(np.float64)
-            # print(X.shape)
-            means = np.expand_dims(np.mean(X[:,0,:]),0)
-            X[:,0,:] = X[:,0,:] - means.reshape(1, -1, 1)
-            stds = np.expand_dims(np.std(X[:,0,:]),0)
+            # Fit normalization statistics without looking at target test-period data.
+            # For the target city, all dataset stages (source/target_maml/test)
+            # reuse statistics computed only from the first target_days of history.
+            X[:, 0, :] = X[:, 0, :].astype(np.float64)
+            target_stats_scope = str(
+                self.data_args.get("target_normalization_scope", "target_train")
+            ).lower()
+            if target_stats_scope not in ("target_train", "full_sequence"):
+                raise ValueError(
+                    "data.target_normalization_scope must be 'target_train' or "
+                    f"'full_sequence', got {target_stats_scope!r}"
+                )
+            if dataset_name == self.test_data and target_stats_scope == "target_train":
+                steps_per_day = int(round(24 * 60 / self.processed_interval_minutes))
+                stats_end = min(X.shape[-1], steps_per_day * int(self.target_days))
+                if stats_end < 1:
+                    raise ValueError(
+                        f"{dataset_name}: no target training observations available "
+                        "for normalization"
+                    )
+                normalization_values = X[:, 0, :stats_end]
+            else:
+                normalization_values = X[:, 0, :]
+
+            means = np.expand_dims(np.mean(normalization_values), 0)
+            stds = np.expand_dims(np.std(normalization_values), 0)
+            if not np.isfinite(means).all() or not np.isfinite(stds).all() or float(stds[0]) <= 1e-8:
+                raise ValueError(
+                    f"{dataset_name}: invalid normalization statistics "
+                    f"(mean={means}, std={stds})"
+                )
             self.means_list[dataset_name], self.stds_list[dataset_name] = means, stds
-            X[:,0,:] = X[:,0,:] / stds.reshape(1, -1, 1)
+            X[:, 0, :] = (X[:, 0, :] - means.reshape(1, -1, 1)) / stds.reshape(1, -1, 1)
 
             # [N, 2, L] and 0 is normalized
             if stage == 'source' or stage == 'dann' or stage == 'pretrain' or stage == 'source_train':
