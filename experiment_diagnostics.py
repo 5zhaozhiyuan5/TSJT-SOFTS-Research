@@ -198,6 +198,7 @@ class ExperimentDiagnostics:
             row = {
                 "epoch": epoch,
                 "source_index": source_index,
+                "router_mode": diagnostics.get("router_mode", "unknown"),
                 "horizon_index": h_index,
                 "horizon_step": step,
                 "horizon_minutes": step * minutes_per_step,
