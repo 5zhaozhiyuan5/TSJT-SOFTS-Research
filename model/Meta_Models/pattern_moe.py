@@ -35,6 +35,22 @@ except ImportError:
 DEFAULT_SCALE_MINUTES = (60, 180, 360, 720, 1440)
 DEFAULT_SCALE_STEPS = (12, 36, 72, 144, 288)  # default 5-minute grid
 
+ROUTER_MODES = ("learned", "uniform", "expert1", "expert2", "expert3")
+
+
+def _fixed_router_gate(mode: str, source_count: int, target_count: int,
+                       device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    """Create a deterministic [source, target, 3] gate for expert ablations."""
+    if mode == "uniform":
+        weights = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
+    elif mode in ("expert1", "expert2", "expert3"):
+        expert_index = int(mode[-1]) - 1
+        weights = tuple(1.0 if i == expert_index else 0.0 for i in range(3))
+    else:
+        raise ValueError(f"fixed router gate does not support mode={mode!r}")
+    base = torch.tensor(weights, device=device, dtype=dtype)
+    return base.view(1, 1, 3).expand(source_count, target_count, 3)
+
 
 def physical_minutes_to_steps(
     durations_minutes: Sequence[int],
@@ -242,6 +258,7 @@ class HorizonPatternMoEAlignment(nn.Module):
         pattern_weight: float = 0.5,
         prior_kl_weight: float = 1.0,
         router_min_usage: float = 0.05,
+        router_mode: str = "learned",
     ):
         super().__init__()
         anchors = tuple(int(v) for v in anchor_steps)
@@ -274,6 +291,11 @@ class HorizonPatternMoEAlignment(nn.Module):
         self.pattern_weight = float(pattern_weight)
         self.prior_kl_weight = float(prior_kl_weight)
         self.router_min_usage = float(router_min_usage)
+        self.router_mode = str(router_mode).lower()
+        if self.router_mode not in ROUTER_MODES:
+            raise ValueError(
+                f"router_mode must be one of {ROUTER_MODES}, got {self.router_mode!r}"
+            )
         if not 0.0 < self.router_min_usage < (1.0 / 3.0):
             raise ValueError("router_min_usage must be between 0 and 1/3")
 
@@ -509,8 +531,11 @@ class HorizonPatternMoEAlignment(nn.Module):
         time_codes = self.encode_horizons(self.anchor_steps, source.device, source.dtype)
         # Pairwise contexts let the router choose experts for each source/target
         # sample pair, rather than assigning one global gate to the whole batch.
-        source_context = self.router_context(normalized_source)
-        target_context = self.router_context(normalized_target)
+        if self.router_mode == "learned":
+            source_context = self.router_context(normalized_source)
+            target_context = self.router_context(normalized_target)
+        else:
+            source_context = target_context = None
         conditional_losses = []
         conditional_plans = []
         router_weights = []
@@ -551,18 +576,27 @@ class HorizonPatternMoEAlignment(nn.Module):
             future_cost = _pairwise_squared_cost(source_future, target_future)
             source_time = time_code.unsqueeze(0).expand(source.shape[0], -1)
             target_time = time_code.unsqueeze(0).expand(target.shape[0], -1)
-            source_router_input = torch.cat(
-                (source_context, source_desc[:, horizon_index, :], source_time),
-                dim=-1,
-            )
-            target_router_input = torch.cat(
-                (target_context, target_desc[:, horizon_index, :], target_time),
-                dim=-1,
-            )
-            source_logits = self.router(source_router_input) + self.source_router_bias
-            target_logits = self.router(target_router_input) + self.target_router_bias
-            pair_logits = source_logits[:, None, :] + target_logits[None, :, :]
-            gate = torch.softmax(pair_logits / self.router_temperature, dim=-1)
+            if self.router_mode == "learned":
+                source_router_input = torch.cat(
+                    (source_context, source_desc[:, horizon_index, :], source_time),
+                    dim=-1,
+                )
+                target_router_input = torch.cat(
+                    (target_context, target_desc[:, horizon_index, :], target_time),
+                    dim=-1,
+                )
+                source_logits = self.router(source_router_input) + self.source_router_bias
+                target_logits = self.router(target_router_input) + self.target_router_bias
+                pair_logits = source_logits[:, None, :] + target_logits[None, :, :]
+                gate = torch.softmax(pair_logits / self.router_temperature, dim=-1)
+            else:
+                gate = _fixed_router_gate(
+                    self.router_mode,
+                    source.shape[0],
+                    target.shape[0],
+                    source.device,
+                    source.dtype,
+                )
             router_entropies.append(
                 -(
                     gate.clamp_min(1e-8) * gate.clamp_min(1e-8).log()
@@ -656,9 +690,14 @@ class HorizonPatternMoEAlignment(nn.Module):
         # assignment. The floor is applied to aggregate usage across horizons
         # and sample pairs, so experts may still specialize by horizon.
         router_mean_usage = router_tensor.mean(dim=0)
-        router_balance_loss = F.relu(
-            self.router_min_usage - router_mean_usage
-        ).square().sum()
+        if self.router_mode == "learned":
+            router_balance_loss = F.relu(
+                self.router_min_usage - router_mean_usage
+            ).square().sum()
+        else:
+            # Fixed-gate ablations do not optimize the learned router or its
+            # load-balancing penalty; report zero rather than a constant penalty.
+            router_balance_loss = loss.new_zeros(())
         router_smoothness_terms = []
         for left, right, step0, step1 in zip(
             router_tensor[:-1],
@@ -676,6 +715,7 @@ class HorizonPatternMoEAlignment(nn.Module):
             else loss.new_zeros(())
         )
         diagnostics = {
+            "router_mode": self.router_mode,
             "horizon_losses": horizon_losses,
             "router_weights": router_tensor.detach(),
             "router_entropy": router_entropy.detach(),
