@@ -114,5 +114,9 @@ model:
     prior_kl_weight: 1.0
     source_temperature: 0.25
     loss_weight: 1.0
+    # FiLM time-conditioning smoothness remains enabled.
     smoothness_weight: 0.0001
+    # Ablation: disable only cross-horizon router smoothing; keep its raw
+    # diagnostic in moe_router.csv for comparison with the Balance baseline.
+    router_smoothness_weight: 0.0
     target_loss_weight: 0.1
