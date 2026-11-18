@@ -5,6 +5,8 @@ import torch.optim as optim
 from datasets import traffic_dataset
 from utils import *
 import argparse
+import csv
+import json
 import yaml
 import time
 import sys
@@ -45,6 +47,14 @@ parser.add_argument(
     help='Override pattern_moe.router_mode for controlled expert ablations.',
 )
 
+parser.add_argument(
+    '--pattern_moe_pattern_weight', default=None, type=float,
+    help='Override pattern_moe.pattern_weight (0 removes only the pattern matching cost).',
+)
+parser.add_argument(
+    '--fixed_final_checkpoint', action='store_true',
+    help='Strict protocol: use last-epoch Stage-I and Stage-II checkpoints, never select on target/test metrics.',
+)
 parser.add_argument('--classifier',default=0.3,type=float)
 parser.add_argument('--xySquaredRatio',default=10,type=float) 
 parser.add_argument('--DAcoef',default=0.1,type=float)
@@ -116,11 +126,22 @@ if __name__ == '__main__':
     pattern_cfg_override = config.setdefault('model', {}).setdefault('pattern_moe', {})
     if args.pattern_moe_router_mode is not None:
         pattern_cfg_override['router_mode'] = args.pattern_moe_router_mode
+    if args.pattern_moe_pattern_weight is not None:
+        if not (0.0 <= args.pattern_moe_pattern_weight <= 1.0):
+            raise ValueError("--pattern_moe_pattern_weight must lie in [0, 1]")
+        pattern_cfg_override['pattern_weight'] = args.pattern_moe_pattern_weight
+    if args.fixed_final_checkpoint and (
+        args.train_epochs <= args.DAepoch or args.finetune_epochs <= 0
+    ):
+        raise ValueError("Strict protocol needs train_epochs > DAepoch and finetune_epochs > 0")
     resolved_router_mode = str(pattern_cfg_override.get('router_mode', 'learned')).lower()
     if resolved_router_mode not in ('learned', 'uniform', 'expert1', 'expert2', 'expert3'):
         raise ValueError(f"Unsupported pattern_moe.router_mode: {resolved_router_mode}")
     args.diagnostics.update_metadata({
         "resolved_router_mode": resolved_router_mode,
+        "resolved_pattern_weight": float(pattern_cfg_override.get('pattern_weight', 0.5)),
+        "stage1_checkpoint_policy": "final_epoch" if args.fixed_final_checkpoint else "legacy_best_target",
+        "stage2_checkpoint_policy": "final_epoch" if args.fixed_final_checkpoint else "legacy_best_target",
         "target_normalization_scope": config.get('data', {}).get(
             'target_normalization_scope', 'target_train'
         ),
@@ -128,6 +149,10 @@ if __name__ == '__main__':
     stage1_checkpoint_path = args.save_dir / (
         f"stage1_{args.test_dataset}_{args.model_name}_router-{resolved_router_mode}_seed{args.seed}.pth"
     )
+    stage2_checkpoint_path = args.save_dir / (
+        f"stage2_{args.test_dataset}_{args.model_name}_router-{resolved_router_mode}_seed{args.seed}.pth"
+    )
+    pre_alignment_checkpoint_path = args.save_dir / "stage1_pre_alignment_backbone.pth"
 
     args.batch_size = config['task']['source']['batch_size']
 
@@ -328,6 +353,13 @@ if __name__ == '__main__':
         
         if True:
             model_loss ,mse_loss, rmse_loss, mae_loss, mape_loss = rep_model.meta_train_revise(data, matrix, i)
+            if args.fixed_final_checkpoint and i == args.DAepoch - 1:
+                # Independently verify that both controlled arms begin OT from
+                # the same backbone (and do not use test feedback to select it).
+                torch.save({
+                    'epoch': i,
+                    'backbone_state_dict': rep_model.model.state_dict(),
+                }, pre_alignment_checkpoint_path)
     
             if i%25==0:
                 log_verbose(args,'Epochs {}/{}'.format(i,task_args['source']['train_epochs']))
@@ -335,7 +367,7 @@ if __name__ == '__main__':
             log_verbose(args,"This epoch cost {:.3}s.".format(time.time() - time_1))
             
             # if((i+1)%50==0):
-            if((i+1)%100==0)or i==0:
+            if (((i + 1) % 100 == 0) or i == 0) and not args.fixed_final_checkpoint:
                 state = {
                     'epoch': i,  
                     'model_state_dict': rep_model.state_dict(), 
@@ -367,6 +399,20 @@ if __name__ == '__main__':
                         #    break
        
                 
+    if args.fixed_final_checkpoint:
+        final_stage1_epoch = task_args['source']['train_epochs'] - 1
+        torch.save({
+            'epoch': final_stage1_epoch,
+            'model_state_dict': rep_model.state_dict(),
+            'optimizer_state_dict': rep_model.main_optim.state_dict(),
+        }, stage1_checkpoint_path)
+        args.diagnostics.update_metadata({
+            'stage1_checkpoint_epoch': final_stage1_epoch,
+            'stage1_checkpoint_path': str(stage1_checkpoint_path),
+            'pre_alignment_checkpoint_path': str(pre_alignment_checkpoint_path),
+        })
+        print(f'[StrictProtocol] Stage-I FINAL checkpoint epoch={final_stage1_epoch}: {stage1_checkpoint_path}')
+
     print('Source training Ending!!!')
     # del rep_model
     torch.cuda.empty_cache()
@@ -425,11 +471,12 @@ if __name__ == '__main__':
         rep_model.model.load_state_dict(new_state)
         
     
-        testing_score = rep_model.test_evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
-        indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35] 
-        current_testing_score = [testing_score[i] for i in indices] 
-        print('current_testing_score', current_testing_score) 
-        print('sum(current_testing_score)',sum(current_testing_score))
+        if not args.fixed_final_checkpoint:
+            testing_score = rep_model.test_evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
+            indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]
+            current_testing_score = [testing_score[k] for k in indices]
+            print('current_testing_score', current_testing_score)
+            print('sum(current_testing_score)', sum(current_testing_score))
         
         print('####################')
         print('####################')
@@ -463,11 +510,12 @@ if __name__ == '__main__':
         
         rep_model.model.load_state_dict(new_state)
     
-        testing_score = rep_model.test_evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
-        indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35] 
-        current_testing_score = [testing_score[i] for i in indices] 
-        print('current_testing_score', current_testing_score) 
-        print('sum(current_testing_score)',sum(current_testing_score))
+        if not args.fixed_final_checkpoint:
+            testing_score = rep_model.test_evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
+            indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]
+            current_testing_score = [testing_score[k] for k in indices]
+            print('current_testing_score', current_testing_score)
+            print('sum(current_testing_score)', sum(current_testing_score))
     
         print()
         print('End ckpt check!!!!!')
@@ -529,7 +577,7 @@ if __name__ == '__main__':
                 log_verbose(args,"This epoch cost {:.3}s.".format(time.time() - time_1))
                 
                 # if((i+1)%50==0):
-                if((i+1)%100==0)or i==0:
+                if (((i + 1) % 100 == 0) or i == 0) and not args.fixed_final_checkpoint:
                     state = {
                         'epoch': i,  
                         'model_state_dict': rep_model.state_dict(),  
@@ -561,6 +609,59 @@ if __name__ == '__main__':
                             #    print('No better epoch for over 1000 epochs!!!')
                             #    break
                     
+        if args.fixed_final_checkpoint:
+            final_stage2_epoch = task_args['source']['finetune_epochs'] - 1
+            torch.save({
+                'epoch': final_stage2_epoch,
+                'model_state_dict': rep_model.state_dict(),
+                'optimizer_state_dict': rep_model.main_optim.state_dict(),
+                'stage1_checkpoint_path': str(stage1_checkpoint_path),
+            }, stage2_checkpoint_path)
+            args.diagnostics.update_metadata({
+                'stage2_checkpoint_epoch': final_stage2_epoch,
+                'stage2_checkpoint_path': str(stage2_checkpoint_path),
+            })
+            print(f'[StrictProtocol] Stage-II FINAL checkpoint epoch={final_stage2_epoch}: {stage2_checkpoint_path}')
+
+            # Test once, after training is complete; no test-based selection.
+            rep_model.current_epoch = final_stage2_epoch
+            rep_model.test_evaluation(
+                finetune_dataset, test_dataset, task_args['source']['finetune_epochs']
+            )
+            evaluation_csv = args.save_dir / "evaluation_metrics.csv"
+            with evaluation_csv.open(newline="", encoding="utf-8") as f:
+                final_rows = [
+                    row for row in csv.DictReader(f)
+                    if row['phase'] == 'stage2_final_test'
+                    and int(row['epoch']) == final_stage2_epoch
+                ]
+            report_minutes = [10, 60, 120, 180]
+            result = {
+                str(minutes): {
+                    'rmse': float(row['rmse']),
+                    'mae': float(row['mae']),
+                    'horizon_step': int(row['horizon_step']),
+                }
+                for minutes in report_minutes
+                for row in final_rows
+                if abs(float(row['horizon_minutes']) - minutes) < 1e-6
+            }
+            if len(result) != len(report_minutes):
+                raise RuntimeError(
+                    f'Incomplete final test metrics: found {list(result)}, expected {report_minutes}'
+                )
+            final_report = {
+                'protocol': 'fixed_final_checkpoint_no_test_selection',
+                'router_mode': resolved_router_mode,
+                'pattern_weight': float(pattern_cfg_override.get('pattern_weight', 0.5)),
+                'stage1_checkpoint_epoch': task_args['source']['train_epochs'] - 1,
+                'stage2_checkpoint_epoch': final_stage2_epoch,
+                'results': result,
+            }
+            with (args.save_dir / 'final_metrics.json').open('w', encoding='utf-8') as f:
+                json.dump(final_report, f, indent=2, ensure_ascii=False)
+            print('[StrictProtocol] Final test metrics:', json.dumps(final_report, ensure_ascii=False))
+
         print('2ndStage Source training Ending!!!')
     # del rep_model
     # torch.cuda.empty_cache()
