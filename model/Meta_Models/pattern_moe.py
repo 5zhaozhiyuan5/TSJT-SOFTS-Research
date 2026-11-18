@@ -52,11 +52,13 @@ def _combine_history_future_pattern_costs(
     """
     if future_weight < 0 or pattern_weight < 0:
         raise ValueError("OT cost weights must be nonnegative")
-    return (
-        history_cost
-        + future_weight * future_cost
-        + pattern_weight * pattern_cost
-    ) / (1.0 + future_weight + pattern_weight)
+    base = history_cost + future_weight * future_cost
+    if pattern_weight == 0.0:
+        # No graph dependency on prototypes, not even zero * pattern_cost.
+        return base / (1.0 + future_weight)
+    return (base + pattern_weight * pattern_cost) / (
+        1.0 + future_weight + pattern_weight
+    )
 
 
 def _fixed_router_gate(mode: str, source_count: int, target_count: int,
