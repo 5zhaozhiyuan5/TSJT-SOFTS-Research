@@ -20,20 +20,29 @@ term remain active in every arm.
 
 ## Run
 
-From the repository root:
+From the repository root (default: only the four NEW fixed-gate arms, no repeated learned run):
 
 ```bash
 bash scripts/run_moe_expert_ablation.sh
 ```
 
+For a strictly matched five-arm study under the corrected normalization protocol:
+
+```bash
+MODES="learned uniform expert1 expert2 expert3" bash scripts/run_moe_expert_ablation.sh
+```
+
+For a single arm, use e.g. `MODES="expert2" bash scripts/run_moe_expert_ablation.sh`.
+
 Defaults match the current METR-LA target setup:
 - target: `metr-la`
-- sources: `pems-bay`, `chengdu_m`, `shenzhen`
+- sources (historical order): `chengdu_m`, `shenzhen`, `pems-bay`
 - target few-shot period: first 3 days
 - seed: 1
 - Stage-I: 3000 epochs
 - Stage-II: 6000 epochs
 - DA start epoch: 1500
+- `DAcoef=0.01`, `xySquaredRatio=100`, `projection=1`, `MemSize=10000` (matched to the recorded previous run)
 
 Override defaults through environment variables, for example:
 
@@ -52,9 +61,15 @@ city, normalization mean/std are computed only from the first `target_days` of
 observations and reused for target training and test windows. Source-city
 normalization remains based on the full source series, as before.
 
-Because earlier runs used full-sequence target statistics, rerun the `learned`
-control on this branch. Do not directly treat the old learned-MoE score as a
-strictly matched control for the four fixed-gate arms.
+Earlier runs used full-sequence target statistics. To save GPU time, the default
+runner skips the already completed learned arm, but the previous learned-MoE
+score is **historical context only**, not a statistically matched control for
+fixed-gate arms with corrected normalization. For a valid head-to-head
+comparison, run the learned arm under this branch's new data protocol.
+
+The shell runner also explicitly passes the historical `DAcoef`,
+`xySquaredRatio`, `projection` and `MemSize` flags, rather than relying on
+training-script defaults which differ from the previous experiments.
 
 ## Diagnostics
 
