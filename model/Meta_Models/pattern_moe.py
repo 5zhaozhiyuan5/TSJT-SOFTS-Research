@@ -38,6 +38,27 @@ DEFAULT_SCALE_STEPS = (12, 36, 72, 144, 288)  # default 5-minute grid
 ROUTER_MODES = ("learned", "uniform", "expert1", "expert2", "expert3")
 
 
+def _combine_history_future_pattern_costs(
+    history_cost: torch.Tensor,
+    future_cost: torch.Tensor,
+    pattern_cost: torch.Tensor,
+    future_weight: float,
+    pattern_weight: float,
+) -> torch.Tensor:
+    """Keep history/future conditional OT unchanged while ablating pattern cost.
+
+    A zero pattern_weight MUST not leak prototype matching into the OT cost.
+    The history/future costs are still normalized by their active total weight.
+    """
+    if future_weight < 0 or pattern_weight < 0:
+        raise ValueError("OT cost weights must be nonnegative")
+    return (
+        history_cost
+        + future_weight * future_cost
+        + pattern_weight * pattern_cost
+    ) / (1.0 + future_weight + pattern_weight)
+
+
 def _fixed_router_gate(mode: str, source_count: int, target_count: int,
                        device: torch.device, dtype: torch.dtype) -> torch.Tensor:
     """Create a deterministic [source, target, 3] gate for expert ablations."""
@@ -615,11 +636,13 @@ class HorizonPatternMoEAlignment(nn.Module):
                     .float().mean(dim=(0, 1))
                 )
             pattern_cost = (expert_costs.permute(1, 2, 0) * gate).sum(dim=-1)
-            combined_cost = (
-                history_cost
-                + self.future_weight * future_cost
-                + self.pattern_weight * pattern_cost
-            ) / (1.0 + self.future_weight + self.pattern_weight)
+            combined_cost = _combine_history_future_pattern_costs(
+                history_cost,
+                future_cost,
+                pattern_cost,
+                self.future_weight,
+                self.pattern_weight,
+            )
 
             prior = base_plan.clamp_min(1e-12)
             plan = _sinkhorn_from_log_kernel(
