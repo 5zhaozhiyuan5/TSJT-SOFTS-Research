@@ -51,6 +51,7 @@ class ExperimentDiagnostics:
         "pattern_usage": "pattern_usage.csv",
         "ot": "ot_diagnostics.csv",
         "gradient": "gradient_diagnostics.csv",
+        "alignment_gradient": "alignment_gradient.csv",
         "runtime": "runtime.csv",
         "evaluation": "evaluation_metrics.csv",
     }
@@ -266,6 +267,19 @@ class ExperimentDiagnostics:
             "parameter_sample_delta_norm": parameter_delta_norm,
             "gradient_none_fraction": grad_none_fraction,
             "nonfinite_gradient_count": nonfinite_grad_count,
+        })
+
+    def log_alignment_gradient(self, epoch, ot_grad_norm, forecast_grad_norm,
+                               gradient_cosine, norm_ratio, pattern_weight):
+        """Diagnostic-only unprojected gradients; training optimizer is unchanged."""
+        self.write("alignment_gradient", {
+            "stage": "stage1",
+            "epoch": epoch,
+            "pattern_weight": pattern_weight,
+            "conditional_ot_backbone_grad_norm": ot_grad_norm,
+            "forecast_backbone_grad_norm": forecast_grad_norm,
+            "ot_to_forecast_grad_norm_ratio": norm_ratio,
+            "ot_forecast_gradient_cosine": gradient_cosine,
         })
 
     def log_runtime(self, epoch, elapsed_seconds, optimizer_lr, device, stage="stage1"):
