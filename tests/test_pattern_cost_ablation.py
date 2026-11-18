@@ -19,8 +19,7 @@ def test_zero_pattern_weight_removes_only_pattern_cost_and_gradient():
     result.sum().backward()
     assert torch.allclose(history.grad, torch.full_like(history, 0.5))
     assert torch.allclose(future.grad, torch.full_like(future, 0.5))
-    assert pattern.grad is not None
-    assert torch.count_nonzero(pattern.grad) == 0
+    assert pattern.grad is None
 
 
 def test_uniform_pattern_weight_is_active_and_normalized():
