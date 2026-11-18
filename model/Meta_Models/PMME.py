@@ -724,6 +724,58 @@ class STRep(nn.Module):
         )
         model_loss = transfer_loss + target_loss_weight * target_task_loss
 
+        # Compare the conditional-OT gradient to the forecast gradient on
+        # the SAME SOFTS parameters. This is a diagnostic only: no gradients
+        # are written to .grad and the optimizer/projection path is untouched.
+        # The OT gradient includes history/future costs in both experiment
+        # arms; it must NOT be interpreted as a pattern-only gradient.
+        if (
+            self.pattern_moe is not None
+            and epoch >= self.DAepoch_args
+            and epoch % 100 == 0
+            and PatternMoE_horizon_losses
+            and PatternMoE_loss.requires_grad
+        ):
+            backbone_parameters = [
+                parameter for parameter in self.model.parameters()
+                if parameter.requires_grad
+            ]
+            forecast_gradients = torch.autograd.grad(
+                task_loss, backbone_parameters, retain_graph=True, allow_unused=True
+            )
+            alignment_gradients = torch.autograd.grad(
+                PatternMoE_loss, backbone_parameters, retain_graph=True, allow_unused=True
+            )
+            with torch.no_grad():
+                forecast_sq = task_loss.detach().new_zeros(())
+                alignment_sq = task_loss.detach().new_zeros(())
+                dot_product = task_loss.detach().new_zeros(())
+                for forecast_grad, alignment_grad in zip(
+                    forecast_gradients, alignment_gradients
+                ):
+                    if forecast_grad is not None:
+                        forecast_sq += forecast_grad.float().square().sum()
+                    if alignment_grad is not None:
+                        alignment_sq += alignment_grad.float().square().sum()
+                    if forecast_grad is not None and alignment_grad is not None:
+                        dot_product += (
+                            forecast_grad.float() * alignment_grad.float()
+                        ).sum()
+                forecast_norm = forecast_sq.sqrt()
+                alignment_norm = alignment_sq.sqrt()
+                gradient_cosine = dot_product / (
+                    forecast_norm * alignment_norm
+                ).clamp_min(1e-12)
+                self.diagnostics.log_alignment_gradient(
+                    epoch,
+                    alignment_norm,
+                    forecast_norm,
+                    gradient_cosine,
+                    alignment_norm / forecast_norm.clamp_min(1e-12),
+                    self.pattern_moe.pattern_weight,
+                )
+            del forecast_gradients, alignment_gradients
+
         if epoch % 25 == 0 and CHTA_diagnostics:
             mean_diversity = torch.stack([d["plan_diversity"] for d in CHTA_diagnostics]).mean()
             max_row_error = torch.stack([d["max_row_marginal_error"] for d in CHTA_diagnostics]).max()
