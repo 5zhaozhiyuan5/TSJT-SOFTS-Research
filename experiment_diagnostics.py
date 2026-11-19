@@ -49,6 +49,7 @@ class ExperimentDiagnostics:
         "router": "moe_router.csv",
         "pattern": "pattern_bank.csv",
         "pattern_usage": "pattern_usage.csv",
+        "response": "response_transfer.csv",
         "ot": "ot_diagnostics.csv",
         "gradient": "gradient_diagnostics.csv",
         "alignment_gradient": "alignment_gradient.csv",
