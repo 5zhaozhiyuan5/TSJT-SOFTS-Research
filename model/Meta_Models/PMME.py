@@ -196,14 +196,18 @@ class STRep(nn.Module):
         )
         self.pattern_moe_target_loss_weight = float(pattern_cfg.get('target_loss_weight', 0.1))
         self.pattern_moe_router_balance_weight = float(pattern_cfg.get('router_balance_weight', 0.1))
+        self.pattern_moe_response_loss_weight = float(
+            pattern_cfg.get('response_loss_weight', 0.02)
+        )
         if self.pattern_moe_enabled:
             if pattern_bank is None:
                 raise ValueError(
                     "pattern_moe is enabled but no source-only pattern_bank was supplied. "
                     "Build it from source_dataset.x_list in train_DA_OT.py."
                 )
+            joint_bank = pattern_bank if isinstance(pattern_bank, dict) else None
             self.pattern_moe = HorizonPatternMoEAlignment(
-                pattern_bank=pattern_bank,
+                pattern_bank=joint_bank['prototypes'] if joint_bank is not None else pattern_bank,
                 input_dim=int(pattern_cfg.get('input_dim', 128)),
                 horizon_steps=int(pattern_cfg.get('horizon_steps', task_args.get('source', {}).get('pred_num', 36))),
                 minutes_per_step=float(pattern_cfg.get('minutes_per_step', 5.0)),
@@ -222,6 +226,9 @@ class STRep(nn.Module):
                 prior_kl_weight=float(pattern_cfg.get('prior_kl_weight', 1.0)),
                 router_min_usage=float(pattern_cfg.get('router_min_usage', 0.05)),
                 router_mode=str(pattern_cfg.get('router_mode', 'learned')),
+                response_bank=joint_bank['responses'] if joint_bank is not None else None,
+                scale_weights=joint_bank['scale_weights'] if joint_bank is not None else None,
+                reliability=joint_bank['reliability'] if joint_bank is not None else None,
             ).to(self.device)
 
         self.optimized_parameters = list(self.model.parameters())
@@ -305,6 +312,10 @@ class STRep(nn.Module):
         target_history_windows = []
 
         target_task_loss = 0
+        target_full_history = None
+        target_full_prediction = None
+        target_city_mean = None
+        target_city_std = None
         for i in range(len(data)):  
             task_loss = 0
             batch_size, node_num, seq_len, _ = data[i].x.shape
@@ -328,7 +339,16 @@ class STRep(nn.Module):
                 print(out.shape, rep.shape)
             
             if i == 0:
-                
+                # Retain the full target TRAIN batch for forecast-response
+                # supervision; OT below uses its original 15/15/16 splits.
+                target_full_history = raw_history
+                target_full_prediction = out
+                target_city_mean = torch.as_tensor(
+                    data[i].means, device=out.device, dtype=out.dtype
+                ).reshape(-1)[0]
+                target_city_std = torch.as_tensor(
+                    data[i].stds, device=out.device, dtype=out.dtype
+                ).reshape(-1)[0]
                 split_indices = [15, 15, rep.shape[0] - 30]
                 rep_split = torch.split(rep, split_indices, dim=0)
                 y_unscale_split = torch.split(y_unscale, split_indices, dim=0)
@@ -714,6 +734,54 @@ class STRep(nn.Module):
             if self.pattern_moe is None:
                 target_loss_weight = 0.0
 
+        # Train-only response teacher: the source-only response table is fixed.
+        # Gradient flows through SOFTS outputs, NOT through target labels or
+        # future predictions at test time. Keep the official Stage-II unchanged.
+        PatternResponse_loss = task_loss.new_zeros(())
+        if (
+            self.pattern_moe is not None
+            and self.pattern_moe.router_mode == 'response'
+            and self.DA == 'OT'
+            and epoch >= self.DAepoch_args
+        ):
+            flat_history = target_full_history.reshape(
+                -1, target_full_history.shape[-1]
+            )
+            mean = flat_history.mean(dim=-1, keepdim=True).detach()
+            std = flat_history.std(
+                dim=-1, keepdim=True, unbiased=False
+            ).detach().clamp_min(1e-4)
+            prediction_city_normalized = (
+                target_full_prediction - target_city_mean
+            ) / target_city_std
+            prediction_revin = (
+                prediction_city_normalized.reshape(
+                    -1, prediction_city_normalized.shape[-1]
+                ) - mean
+            ) / std
+            PatternResponse_loss = (
+                self.pattern_moe.response_guidance_loss(
+                    flat_history, prediction_revin
+                ) * self.pattern_moe_response_loss_weight
+            )
+            if epoch % 25 == 0:
+                print(
+                    'PatternResponse_loss', float(PatternResponse_loss.detach()),
+                    'scale_weights',
+                    self.pattern_moe.scale_weights.detach().cpu().numpy().round(4).tolist(),
+                    'reliability',
+                    self.pattern_moe.reliability.detach().cpu().numpy().round(4).tolist(),
+                )
+                for h_index, step in enumerate(self.pattern_moe.anchor_steps):
+                    self.diagnostics.write('response', {
+                        'epoch': epoch,
+                        'horizon_index': h_index,
+                        'horizon_minutes': step * self.pattern_moe.minutes_per_step,
+                        'reliability': float(self.pattern_moe.reliability[h_index]),
+                        'scale_weights': self.pattern_moe.scale_weights[:, h_index],
+                        'response_loss_weighted': float(PatternResponse_loss.detach()),
+                    })
+
         # The few-shot target loss is now an explicit, low-weight Stage-I
         # objective.  In the projected-gradient path it remains the reference
         # direction and is also added back with target_loss_weight.
@@ -721,6 +789,7 @@ class STRep(nn.Module):
             task_loss + DA_loss + CHTA_loss + CHTA_smoothness
             + PatternMoE_loss + PatternMoE_smoothness
             + PatternMoE_router_smoothness + PatternMoE_router_balance
+            + PatternResponse_loss
         )
         model_loss = transfer_loss + target_loss_weight * target_task_loss
 
