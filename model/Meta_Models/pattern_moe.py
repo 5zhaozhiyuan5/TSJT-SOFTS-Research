@@ -22,6 +22,7 @@ try:
         _normalize_weights,
         _pairwise_squared_cost,
         _sinkhorn_from_log_kernel,
+        build_future_change_descriptors,
     )
 except ImportError:
     # PMME adds model/Meta_Models to sys.path and imports this module directly.
@@ -29,13 +30,14 @@ except ImportError:
         _normalize_weights,
         _pairwise_squared_cost,
         _sinkhorn_from_log_kernel,
+        build_future_change_descriptors,
     )
 
 
 DEFAULT_SCALE_MINUTES = (60, 180, 360, 720, 1440)
 DEFAULT_SCALE_STEPS = (12, 36, 72, 144, 288)  # default 5-minute grid
 
-ROUTER_MODES = ("learned", "uniform", "expert1", "expert2", "expert3")
+ROUTER_MODES = ("learned", "uniform", "expert1", "expert2", "expert3", "response")
 
 
 def _combine_history_future_pattern_costs(
@@ -282,6 +284,9 @@ class HorizonPatternMoEAlignment(nn.Module):
         prior_kl_weight: float = 1.0,
         router_min_usage: float = 0.05,
         router_mode: str = "learned",
+        response_bank: torch.Tensor | None = None,
+        scale_weights: torch.Tensor | None = None,
+        reliability: torch.Tensor | None = None,
     ):
         super().__init__()
         anchors = tuple(int(v) for v in anchor_steps)
@@ -324,6 +329,29 @@ class HorizonPatternMoEAlignment(nn.Module):
 
         # Prototypes are fixed source-only knowledge, not target-test statistics.
         self.register_buffer("pattern_prototypes", pattern_bank.detach().float().clone())
+        if self.router_mode == "response":
+            expected = (len(scales), pattern_bank.shape[1], len(anchors), 4)
+            if response_bank is None or tuple(response_bank.shape) != expected:
+                raise ValueError(f"response_bank must be {expected} in response mode")
+            if scale_weights is None or tuple(scale_weights.shape) != (len(scales), len(anchors)):
+                raise ValueError("scale_weights must be [scales,horizons]")
+            if reliability is None or tuple(reliability.shape) != (len(anchors),):
+                raise ValueError("reliability must be [horizons]")
+            if not torch.isfinite(response_bank).all() or not torch.isfinite(scale_weights).all():
+                raise ValueError("nonfinite response knowledge")
+            if (scale_weights < 0).any() or not torch.allclose(
+                scale_weights.sum(0), torch.ones(len(anchors)), atol=1e-4
+            ):
+                raise ValueError("scale weights must be probabilities")
+            if (reliability < 0).any() or (reliability > 1).any():
+                raise ValueError("reliability must lie in [0,1]")
+            self.register_buffer("response_bank", response_bank.detach().float().clone())
+            self.register_buffer("scale_weights", scale_weights.detach().float().clone())
+            self.register_buffer("reliability", reliability.detach().float().clone())
+        else:
+            self.register_buffer("response_bank", torch.empty(0))
+            self.register_buffer("scale_weights", torch.empty(0))
+            self.register_buffer("reliability", torch.empty(0))
 
         self.time_encoder = nn.Sequential(
             nn.Linear(9, hidden_dim),
@@ -550,6 +578,13 @@ class HorizonPatternMoEAlignment(nn.Module):
         per_scale_cost_means = torch.stack(
             [cost.detach().mean() for cost in per_scale_costs]
         )
+        if self.router_mode == "response":
+            source_response = torch.einsum(
+                "nsk,skhd->nshd", source_pattern, self.response_bank
+            )
+            target_response = torch.einsum(
+                "nsk,skhd->nshd", target_pattern, self.response_bank
+            )
 
         time_codes = self.encode_horizons(self.anchor_steps, source.device, source.dtype)
         # Pairwise contexts let the router choose experts for each source/target
@@ -614,7 +649,7 @@ class HorizonPatternMoEAlignment(nn.Module):
                 gate = torch.softmax(pair_logits / self.router_temperature, dim=-1)
             else:
                 gate = _fixed_router_gate(
-                    self.router_mode,
+                    "uniform" if self.router_mode == "response" else self.router_mode,
                     source.shape[0],
                     target.shape[0],
                     source.device,
@@ -626,7 +661,7 @@ class HorizonPatternMoEAlignment(nn.Module):
                 ).sum(dim=-1).mean()
             )
             router_pair_stds.append(gate.detach().std(dim=(0, 1), unbiased=False))
-            if self.router_mode == "uniform":
+            if self.router_mode in ("uniform", "response"):
                 # All experts are tied in the uniform arm; split tie credit
                 # evenly instead of letting argmax arbitrarily favor Expert 1.
                 router_top1_fractions.append(
@@ -637,14 +672,36 @@ class HorizonPatternMoEAlignment(nn.Module):
                     F.one_hot(gate.detach().argmax(dim=-1), num_classes=3)
                     .float().mean(dim=(0, 1))
                 )
-            pattern_cost = (expert_costs.permute(1, 2, 0) * gate).sum(dim=-1)
-            combined_cost = _combine_history_future_pattern_costs(
-                history_cost,
-                future_cost,
-                pattern_cost,
-                self.future_weight,
-                self.pattern_weight,
-            )
+            if self.router_mode == "response":
+                # Five independent, horizon-calibrated scales; no three-expert
+                # grouping. Additive costs keep base history/future weights fixed.
+                response_scale_costs = []
+                for si, shape_cost in enumerate(per_scale_costs):
+                    predicted_response_cost = _pairwise_squared_cost(
+                        source_response[:, si, horizon_index, :],
+                        target_response[:, si, horizon_index, :],
+                    )
+                    response_scale_costs.append(
+                        0.5 * shape_cost + 0.5 * predicted_response_cost
+                    )
+                pattern_cost = (
+                    torch.stack(response_scale_costs, dim=0)
+                    * self.scale_weights[:, horizon_index, None, None]
+                ).sum(dim=0)
+                combined_cost = (
+                    (history_cost + self.future_weight * future_cost)
+                    / (1.0 + self.future_weight)
+                    + self.pattern_weight * self.reliability[horizon_index] * pattern_cost
+                )
+            else:
+                pattern_cost = (expert_costs.permute(1, 2, 0) * gate).sum(dim=-1)
+                combined_cost = _combine_history_future_pattern_costs(
+                    history_cost,
+                    future_cost,
+                    pattern_cost,
+                    self.future_weight,
+                    self.pattern_weight,
+                )
 
             prior = base_plan.clamp_min(1e-12)
             plan = _sinkhorn_from_log_kernel(
@@ -783,6 +840,43 @@ class HorizonPatternMoEAlignment(nn.Module):
             "sampled_target": loss.new_tensor(float(target.shape[0])).detach(),
         }
         return loss, diagnostics
+
+    def response_guidance_loss(
+        self, target_history: torch.Tensor, predicted_revin: torch.Tensor
+    ) -> torch.Tensor:
+        """Small Stage-I teacher loss; source-derived teacher is stop-gradient.
+
+        target_history is CITY-normalized [nodes,history] from target TRAIN.
+        predicted_revin is the SOFTS prediction in per-window RevIN units.
+        """
+        if self.router_mode != "response":
+            return predicted_revin.sum() * 0.0
+        if target_history.ndim != 2 or predicted_revin.ndim != 2:
+            raise ValueError("response guidance requires flattened [samples,time]")
+        if target_history.shape[0] != predicted_revin.shape[0]:
+            raise ValueError("response guidance sample count mismatch")
+        with torch.no_grad():
+            assignments = self._pattern_assignments(target_history.detach())
+            per_scale = torch.einsum(
+                "nsk,skhd->nshd", assignments, self.response_bank
+            )
+            reference = (
+                per_scale * self.scale_weights[None, :, :, None]
+            ).sum(dim=1).detach()
+        mu = target_history.mean(dim=-1, keepdim=True)
+        std = target_history.std(
+            dim=-1, keepdim=True, unbiased=False
+        ).clamp_min(1e-4)
+        last_revin = ((target_history[:, -1:] - mu) / std).squeeze(-1)
+        forecast_descriptor = build_future_change_descriptors(
+            predicted_revin.unsqueeze(1),
+            last_revin.unsqueeze(1),
+            self.anchor_steps,
+        ).squeeze(1)
+        errors = F.smooth_l1_loss(
+            forecast_descriptor, reference, beta=0.25, reduction="none"
+        ).mean(dim=(0, 2))
+        return (errors * self.reliability).mean()
 
     def smoothness_loss(self) -> torch.Tensor:
         states = []
