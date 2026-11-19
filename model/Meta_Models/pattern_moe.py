@@ -855,6 +855,15 @@ class HorizonPatternMoEAlignment(nn.Module):
             raise ValueError("response guidance requires flattened [samples,time]")
         if target_history.shape[0] != predicted_revin.shape[0]:
             raise ValueError("response guidance sample count mismatch")
+        # Bound per-epoch teacher lookup cost; spread the deterministic subset
+        # across all few-shot windows/nodes, not just the first city nodes.
+        if target_history.shape[0] > 1024:
+            indices = torch.linspace(
+                0, target_history.shape[0] - 1, 1024,
+                device=target_history.device
+            ).round().long()
+            target_history = target_history.index_select(0, indices)
+            predicted_revin = predicted_revin.index_select(0, indices)
         with torch.no_grad():
             assignments = self._pattern_assignments(target_history.detach())
             per_scale = torch.einsum(
