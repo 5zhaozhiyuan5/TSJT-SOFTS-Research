@@ -18,6 +18,7 @@ from pattern_moe import (
     build_multiscale_pattern_bank,
     physical_minutes_to_steps,
 )
+from response_pattern import build_joint_pattern_bank, calibrate_target_scales
 from pathlib import Path
 import random
 from experiment_diagnostics import ExperimentDiagnostics
@@ -42,7 +43,7 @@ parser.add_argument('--his_num',default=288,type=int)
 parser.add_argument('--save_dir', type=str)
 parser.add_argument(
     '--pattern_moe_router_mode',
-    choices=['learned', 'uniform', 'expert1', 'expert2', 'expert3'],
+    choices=['learned', 'uniform', 'expert1', 'expert2', 'expert3', 'response'],
     default=None,
     help='Override pattern_moe.router_mode for controlled expert ablations.',
 )
@@ -135,7 +136,7 @@ if __name__ == '__main__':
     ):
         raise ValueError("Strict protocol needs train_epochs > DAepoch and finetune_epochs > 0")
     resolved_router_mode = str(pattern_cfg_override.get('router_mode', 'learned')).lower()
-    if resolved_router_mode not in ('learned', 'uniform', 'expert1', 'expert2', 'expert3'):
+    if resolved_router_mode not in ('learned', 'uniform', 'expert1', 'expert2', 'expert3', 'response'):
         raise ValueError(f"Unsupported pattern_moe.router_mode: {resolved_router_mode}")
     args.diagnostics.update_metadata({
         "resolved_router_mode": resolved_router_mode,
@@ -255,22 +256,51 @@ if __name__ == '__main__':
                 sorted(source_pattern_arrays), args.test_dataset
             ),
         )
-        pattern_bank = build_multiscale_pattern_bank(
-            source_pattern_arrays,
-            scale_steps=scale_steps,
-            num_prototypes=int(pattern_cfg.get("num_prototypes", 10)),
-            descriptor_bins=int(pattern_cfg.get("descriptor_bins", 16)),
-            max_windows_per_city=int(pattern_cfg.get("max_windows_per_city", 24)),
-            max_nodes_per_city=int(pattern_cfg.get("max_nodes_per_city", 24)),
-            max_patches_per_scale=int(pattern_cfg.get("max_patches_per_scale", 8000)),
-            seed=seed,
-        ).to(args.device)
-        log_verbose(
-            args,
-            "[PatternBank] built source-only multi-scale bank with shape {}".format(
-                tuple(pattern_bank.shape)
-            ),
-        )
+        if resolved_router_mode == 'response':
+            # Paired (history, FUTURE) rows come exclusively from source cities.
+            # y_list stores physical-speed training labels (not test targets).
+            pattern_bank = build_joint_pattern_bank(
+                source_histories=source_pattern_arrays,
+                source_futures={
+                    name: source_dataset.y_list[name]
+                    for name in source_pattern_arrays
+                },
+                source_means=source_dataset.means_list,
+                source_stds=source_dataset.stds_list,
+                scale_steps=scale_steps,
+                anchor_steps=anchor_steps,
+                num_prototypes=int(pattern_cfg.get("num_prototypes", 10)),
+                descriptor_bins=int(pattern_cfg.get("descriptor_bins", 16)),
+                pattern_temperature=float(pattern_cfg.get("pattern_temperature", 0.15)),
+                max_windows_per_city=int(pattern_cfg.get("max_windows_per_city", 24)),
+                max_nodes_per_city=int(pattern_cfg.get("max_nodes_per_city", 24)),
+                max_patches_per_scale=int(pattern_cfg.get("max_patches_per_scale", 8000)),
+                support_prior=float(pattern_cfg.get("response_support_prior", 8.0)),
+                seed=seed,
+            )
+            log_verbose(
+                args, "[PatternBank] source-only joint bank P={} R={}".format(
+                    tuple(pattern_bank['prototypes'].shape),
+                    tuple(pattern_bank['responses'].shape),
+                ),
+            )
+        else:
+            pattern_bank = build_multiscale_pattern_bank(
+                source_pattern_arrays,
+                scale_steps=scale_steps,
+                num_prototypes=int(pattern_cfg.get("num_prototypes", 10)),
+                descriptor_bins=int(pattern_cfg.get("descriptor_bins", 16)),
+                max_windows_per_city=int(pattern_cfg.get("max_windows_per_city", 24)),
+                max_nodes_per_city=int(pattern_cfg.get("max_nodes_per_city", 24)),
+                max_patches_per_scale=int(pattern_cfg.get("max_patches_per_scale", 8000)),
+                seed=seed,
+            ).to(args.device)
+            log_verbose(
+                args,
+                "[PatternBank] built source-only multi-scale bank with shape {}".format(
+                    tuple(pattern_bank.shape)
+                ),
+            )
 
     print('data_args', data_args)
     finetune_dataset = traffic_dataset(
@@ -281,6 +311,45 @@ if __name__ == '__main__':
         data_args, task_args['source'], data_list, 'test',
         test_data=args.test_dataset, target_days=args.target_days
     )
+    if bool(pattern_cfg.get("enabled", False)) and resolved_router_mode == 'response':
+        # Calibrate ONLY on the target TRAIN prefix; test_dataset is not accessed.
+        calibration = calibrate_target_scales(
+            bank=pattern_bank,
+            target_histories=finetune_dataset.x_list[args.test_dataset],
+            target_futures=finetune_dataset.y_list[args.test_dataset],
+            target_mean=finetune_dataset.means_list[args.test_dataset],
+            target_std=finetune_dataset.stds_list[args.test_dataset],
+            scale_steps=scale_steps,
+            anchor_steps=anchor_steps,
+            pattern_temperature=float(pattern_cfg.get('pattern_temperature', 0.15)),
+            calibration_temperature=float(pattern_cfg.get('calibration_temperature', 0.5)),
+            shrink_to_uniform=float(pattern_cfg.get('scale_prior_shrinkage', 0.5)),
+            max_windows=int(pattern_cfg.get('target_calibration_windows', 46)),
+            max_nodes=int(pattern_cfg.get('target_calibration_nodes', 64)),
+            seed=seed,
+        )
+        pattern_bank.update(calibration)
+        args.diagnostics.update_metadata({
+            "response_transfer_enabled": True,
+            "target_calibration_windows": int(
+                finetune_dataset.x_list[args.test_dataset].shape[0]
+            ),
+            "target_calibration_examples": int(calibration['target_samples']),
+            "source_bank_response_shape": list(pattern_bank['responses'].shape),
+            "horizon_scale_weights": calibration['scale_weights'].tolist(),
+            "horizon_reliability": calibration['reliability'].tolist(),
+            "relative_calibration_errors": calibration['relative_errors'].tolist(),
+        })
+        log_verbose(
+            args, "[PatternBank] target TRAIN calibration: scale_weights={} reliability={}".format(
+                calibration['scale_weights'].round(decimals=4).tolist(),
+                calibration['reliability'].round(decimals=4).tolist(),
+            ),
+        )
+        pattern_bank = {
+            key: value.to(args.device) if torch.is_tensor(value) else value
+            for key, value in pattern_bank.items()
+        }
     args.diagnostics.update_metadata({
         "resolved_source_cities": list(source_dataset.data_list),
         "target_dataset": args.test_dataset,
