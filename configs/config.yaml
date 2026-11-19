@@ -104,12 +104,18 @@ model:
     hidden_dim: 64
     relation_dim: 32
     epsilon: 0.08
-    sinkhorn_iterations: 20
+    sinkhorn_iterations: 60
     max_samples: 128
     pattern_temperature: 0.15
     router_temperature: 1.0
-    # learned | uniform | expert1 | expert2 | expert3; CLI can override this.
-    router_mode: learned
+    # Stage-I response mode: source-only history/future patterns + target-train calibration.
+    router_mode: response
+    response_support_prior: 8.0
+    calibration_temperature: 0.5
+    scale_prior_shrinkage: 0.5
+    target_calibration_windows: 46
+    target_calibration_nodes: 64
+    response_loss_weight: 0.02
     # Soft anti-collapse floor: only prevents any expert's aggregate usage
     # from falling below 5%; it does not enforce uniform expert assignments.
     router_min_usage: 0.05
