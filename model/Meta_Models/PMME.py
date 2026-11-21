@@ -18,8 +18,7 @@ from block import *
 
 from geomloss.samples_loss import SamplesLoss 
 from torch.utils.data import TensorDataset, DataLoader
-from gpytorch.mlls.variational_elbo import VariationalELBO
-from gpytorch.likelihoods import BernoulliLikelihood, LaplaceLikelihood
+from predictive_overlap import PredictiveOverlapWeighter
 
 from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
@@ -144,39 +143,14 @@ class STRep(nn.Module):
         
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
         
-        input_dim = 36
-        
-        num_inducing = 256
-        inducing_points1 = torch.randn(num_inducing, input_dim).to(self.device) 
-        inducing_points2 = torch.randn(num_inducing, input_dim).to(self.device) 
-        inducing_points3 = torch.randn(num_inducing, input_dim).to(self.device) 
-        
-    
-        self.gp1 = GPClassificationModel(input_dim, inducing_points1).to(self.device)
-        self.gp2 = GPClassificationModel(input_dim, inducing_points2).to(self.device)
-        self.gp3 = GPClassificationModel(input_dim, inducing_points3).to(self.device)
-        
-        self.likelihood1 = BernoulliLikelihood().to(self.device)
-        self.likelihood2 = BernoulliLikelihood().to(self.device)
-        self.likelihood3 = BernoulliLikelihood().to(self.device)
-        
-        self.optimizer1 = torch.optim.Adam([
-            {'params': self.gp1.parameters()},
-            {'params': self.likelihood1.parameters()},
-        ], lr=0.01)
-        
-        self.optimizer2 = torch.optim.Adam([
-            {'params': self.gp2.parameters()},
-            {'params': self.likelihood2.parameters()},
-        ], lr=0.01)
-        
-        self.optimizer3 = torch.optim.Adam([
-            {'params': self.gp3.parameters()},
-            {'params': self.likelihood3.parameters()},
-        ], lr=0.01)
-        
-    
-    
+        # Three source-domain heads replace DVGP's three GP classifiers.
+        # They predict detached, strictly positive source/target masses;
+        # the original conditional weighted-Sinkhorn objective is unchanged.
+        self.overlap_model = PredictiveOverlapWeighter(num_domains=3).to(self.device)
+        self.overlap_optim = torch.optim.Adam(
+            self.overlap_model.parameters(), lr=1e-3
+        )
+
     def meta_train_revise(self, data, matrix, epoch): 
         
         total_mae = []
@@ -278,84 +252,36 @@ class STRep(nn.Module):
             y2 = y2.view(-1, y2.size(-1))
             
 
-            if self.classifier_args>1e-6:
-                y = torch.cat((y1, y2), dim=0).detach()
-                if epoch%25==0:
-                    print('optimizing now')
-
-                if shape0 == shape0_list[0]:
-                    self.elbo1 = VariationalELBO(self.likelihood1, self.gp1, num_data=y.shape[0])
-                    self.optimizer1.zero_grad()
-                    outputs = self.gp1(y)
-                    probs = self.likelihood1(outputs).probs
-                    loss = -self.elbo1(outputs, labels.long())
-                    loss.backward()
-                    self.optimizer1.step()
-                    
-                elif shape0 == shape0_list[1]:
-                    self.elbo2 = VariationalELBO(self.likelihood2, self.gp2, num_data=y.shape[0])
-                    self.optimizer2.zero_grad()
-                    outputs = self.gp2(y)
-                    probs = self.likelihood2(outputs).probs
-                    loss = -self.elbo2(outputs, labels.long())
-                    loss.backward()
-                    self.optimizer2.step()
-                    
-                elif shape0 == shape0_list[2]:
-                    self.elbo3 = VariationalELBO(self.likelihood3, self.gp3, num_data=y.shape[0])
-                    self.optimizer3.zero_grad()
-                    outputs = self.gp3(y)
-                    probs = self.likelihood3(outputs).probs
-                    loss = -self.elbo3(outputs, labels.long())
-                    loss.backward()
-                    self.optimizer3.step()
-               
-                l1 = x1.shape[0]
-                prob1, prob2 = probs[:l1], 1-probs[l1:] 
-                
-                prob1_true = 1-prob1 
-                prob2_true = 1-prob2 
-                
-                mask1 = prob1_true > 0.5
-                
-                count1 = torch.sum(mask1)
-                
-                mask2 = prob2_true > 0.5
-                count2 = torch.sum(mask2)
-                
-                acc = (count1+count2)/(len(prob1)+len(prob2))
-                if epoch%25==0:
-                    print(f'Classifier_Accuracy_update: {acc:.4f}',len(prob1),len(prob2))
-                    print('error_prob_mean', prob1.mean(), prob2.mean()) 
-                    
-                thresh = self.classifier_args 
-                mask1 = prob1 > thresh
-                mask2 = prob2 > thresh
-                count1 = torch.sum(mask1).detach().cpu().numpy()
-                count2 = torch.sum(mask2).detach().cpu().numpy()
-                ratio1 = count1/len(mask1)
-                ratio2 = count2/len(mask2)
-                
-                if ratio1>0.00 and ratio2>0.00:
-                    if epoch%25==0:
-                        print('ratio1, ratio2', ratio1, ratio2)
-                    def threshold(x):   
-                        return torch.where(x > thresh, x, torch.tensor(0.0, device=x.device))
-                    
-                    prob1, prob2 = threshold(prob1).detach(), threshold(prob2).detach() 
-                    alpha = (prob1/torch.sum(prob1)).detach()
-                    beta = (prob2/torch.sum(prob2)).detach()
-                    
-                   
-                    OT_loss_scale = torch.sqrt(((prob1.mean())*(prob2.mean())).detach())
-                    
-                    if epoch%25==0:
-                        print('OT_loss_scale', OT_loss_scale)
-            
+            # A future-supervised historical representation estimates the
+            # same two positive sample-mass vectors as the original DVGP.
+            # Labeled futures supervise overlap ONLY during Stage-I training;
+            # the OT geometry continues to use [rep, scaled_future] unchanged.
+            if self.classifier_args > 1e-6:
+                prob1, prob2, overlap_stats = self.overlap_model.training_weights(
+                    index, x1, x2, y1, y2, self.overlap_optim
+                )
+                alpha = prob1 / prob1.sum().clamp_min(1e-8)
+                beta = prob2 / prob2.sum().clamp_min(1e-8)
+                OT_loss_scale = torch.sqrt(
+                    (prob1.mean() * prob2.mean()).clamp_min(1e-8)
+                ).detach()
+                ratio1, ratio2 = 1.0, 1.0  # masses never hard-thresholded
+                if epoch % 25 == 0:
+                    print('[PredictiveOverlap] source={} domain_loss={:.5f} '
+                          'future_loss={:.5f} source_teacher={:.4f} '
+                          'target_teacher={:.4f} source_mass={:.4f} '
+                          'target_mass={:.4f}'.format(
+                              index, overlap_stats['domain_loss'].item(),
+                              overlap_stats['future_loss'].item(),
+                              overlap_stats['source_teacher'].item(),
+                              overlap_stats['target_teacher'].item(),
+                              prob1.mean().item(), prob2.mean().item()
+                          ))
             else:
-                alpha = torch.ones(size1, device='cuda')/size1  
-                beta = torch.ones(size2, device='cuda')/size2  
-                OT_loss_scale = 1
+                alpha = torch.ones(size1, device=x1.device) / size1
+                beta = torch.ones(size2, device=x2.device) / size2
+                OT_loss_scale = 1.0
+                ratio1, ratio2 = 1.0, 1.0
 
             if self.DA == 'OT':
                 if (epoch>=self.DAepoch_args): 
