@@ -249,6 +249,12 @@ class traffic_dataset(Dataset):
         y_data = y_data.float()
         node_num = self.A_list[select_dataset].shape[0]
         data_i = Data(node_num=node_num, x=x_data, y=y_data,means=self.means_list[select_dataset],stds = self.stds_list[select_dataset])
+        # Diagnostic metadata only: keep the original sliding-window IDs.
+        # It is not consumed by the forecasting model or any loss.
+        if isinstance(indices, torch.Tensor):
+            data_i.window_indices = indices.detach().clone().long()
+        else:
+            data_i.window_indices = torch.arange(indices, indices + x_data.shape[0]).long()
         data_i.edge_index = self.edge_index_list[select_dataset]
         data_i.data_name = select_dataset
         A_wave = self.A_list[select_dataset]
