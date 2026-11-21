@@ -1,74 +1,90 @@
-# Stage-I: predictive-overlap weighting instead of DVGP
+# Stage-I: history-conditioned predictive OT (DVGP replacement)
 
-## Scope
-This branch was forked from `pmme-stage1-research`. Only Stage-I
-`model/Meta_Models/PMME.py` and a new Stage-I weighter are changed.
-`PMME_2ndStage.py` and SOFTS have not been modified.
+## Scope and preservation contract
+Branch: `stage-1-predictive-overlap-ot-20261122`, based on `pmme-stage1-research`.
+Modified code is confined to Stage-I (`PMME.py`, `predictive_overlap.py`,
+`train_DA_OT.py`). Neither SOFTS nor `PMME_2ndStage.py` is changed.
 
-## Why this is not a generic distance replacement
-Official-style PMME uses three separate variational GP domain classifiers
-(one for each source-vs-target pair). The model classifies the **future label
-representation** `y` as source/target and converts domain confusion to the
-two nonnegative marginal mass vectors passed to weighted GeomLoss Sinkhorn.
-The transport support itself is still `[historical_forecasting_rep,
-sqrt(xySquaredRatio)*future_label]`.
+Official-style PMME uses three source-vs-target variational GP domain heads to
+compute nonnegative marginal weights alpha/beta for weighted Sinkhorn. Original
+ground cost is Euclidean p=1 over the joint support
+`[SOFTS_rep, sqrt(xySquaredRatio) * future_label]`.
+We keep **three pairs, the alpha/beta interface, the original joint support,
+the GeomLoss Sinkhorn solver, and the forecast gradient path**.
 
-The alternative keeps **the same pairwise source-vs-target loops, marginal
-vector interface, weighted Sinkhorn, joint support, DA loss coefficient,
-and forecasting model**. It replaces the three GP classifiers with three
-lightweight prediction-aware heads trained on historical backbone features.
+## New Stage-I training pathway
+1. Input: historical flow `H` and known training future `F` per node.
+   Recompute RevIN history using exactly the same historical window, mean,
+   variance and epsilon as in PatchFSL, so it is comparable to `y_unscale`.
+2. Conditional-evolution teacher (training only) separately encodes:
+   - 12 downsampled history positions (historical state and approach trend);
+   - 12 downsampled future positions anchored to **the final history value**,
+     not to the first future value.
+   It compares the two halves with independent Soft-DTW paths so neither
+   crosses the historical/future boundary. An additional recent-history
+   velocity penalty distinguishes approaching a common future from opposite
+   historical trends. Teacher score = exp(-distance / temperature).
+3. Three independent 2-logit heads trained from **history-only SOFTS rep**
+   estimate domain confusion and cross-domain future compatibility.
+   Their floored positive predictions form alpha/beta. Marginal weights are
+   detached as in the DVGP mechanism.
+4. Three independent small 32D pair heads map source and target **historical
+   representation** into a common unit feature space. The pair head is
+   supervised with random source-target training pairs and a continuous
+   history-conditioned teacher score (SmoothL1). Each pair loss is
+   `SmoothL1(0.5*(1+cos(projected_source,projected_target)), teacher_score)`.
+5. For each source-target transport problem, the p=1 ground cost is:
+   `cost_new(i,j) = ||[rep_i,scaled_future_i] - [rep_j,scaled_future_j]||_2
+                      + predictive_cost_coef*(1-cos(pair_embed_i,pair_embed_j))`.
+   This is **the original OT cost plus a learned pairwise supplement**, not
+   a replacement Sinkhorn implementation. GeomLoss `cost=` callback has
+   tensorized shape `[B,N,M]`. The 32D pair embeddings are detached during
+   transport, so the newly trained pair head cannot erase the backbone's
+   original forecast/OT gradient path.
+6. The total Stage-I predictor training objective still combines original
+   source forecasting and weighted OT; auxiliary heads use a separate Adam
+   optimiser, without changing Stage-II.
 
-## Exact data flow
-1. Backbone produces `rep` (history-only) and `y_unscale` (training labels
-   normalized exactly as before).
-2. Each domain head takes a detached per-node `rep` and predicts:
-   - domain logit trained to identify source (0) versus target (1);
-   - continuous future-overlap score trained from a DILATE-style teacher.
-3. Teacher reads **only labeled Stage-I training futures**: future samples
-   are pooled to 12 positions and encoded as level-aware relative changes.
-   Pick three quantile-slope representatives from the opposite domain;
-   calculate soft-DTW shape distortion plus expected squared time displacement.
-   Nearest-prototype compatibility supplies a continuous supervision score.
-4. For each source sample, use a floored geometric combination of probability
-   of being target-like and predicted future overlap. For each target sample,
-   use probability of being source-like and predicted future overlap.
-   Normalise each vector separately to sum to one.
-5. Pass `alpha, x1|scaled_y1, beta, x2|scaled_y2` to the **original**
-   `geomloss.SamplesLoss(loss="sinkhorn", p=1, debias=False, blur=0.001)`.
-   Its transport and prediction gradient path remain unchanged.
+## Operational switches
+`--predictive_cost_coef 1.0` enables learned pairwise cost, `0.0`
+disables it while retaining the learned alpha/beta (recommended ablation).
+`--classifier 0` disables the new weighting and pairwise cost entirely
+(uniform alpha/beta), preserving the original plain Sinkhorn fallback.
 
-## Objective
-`L_aux = BCEWithLogits(domain, source_or_target) +
-0.5*MSE(sigmoid(overlap), DILATE_teacher_score)`.
+## Why the two outputs differ
+- alpha/beta: per-node source/target *transport mass* (domain overlap ×
+  typical conditional future compatibility).
+- predictive pair cost: per-source-target correspondence score. It changes
+  **who should match whom**, not total transport mass.
 
-The teacher score is `exp(-min_prototype_distance/temperature)`, clamped
-to [0.05, 1]. This estimates *training-domain conditional future overlap*;
-it is **not** a calibrated posterior probability. The loss does not claim
-to learn future values at inference when history is ambiguous.
+They are trained with different targets. The output is not a calibrated
+Gaussian-process predictive distribution, and preserving the conditional
+weighted OT does not imply mathematical equivalence to a GP classifier.
 
-Marginal weights are detached as with the GP baseline. The auxiliary head
-is trained with a separate Adam optimiser; the alignment gradients reach
-the forecasting backbone through the unchanged transported features.
+## Limitations and required experiment
+- The teacher observes real future **only in Stage-I training batches**.
+  During target test, only the SOFTS forecasting path is used; no future
+  supervision or source test labels are accessed.
+- Conditional future outcome can remain stochastic for identical histories.
+  The teacher is a proxy, not a guarantee of correct future retrieval.
+- Current training data are mixed 5-minute and 10-minute sources. The
+  reduced-length teacher currently uses relative progress in each forecasting
+  horizon; it has **not** yet been physically time-calibrated across cities.
+- Tensorized GeomLoss has O(N*M) memory; added pairwise cost uses the same
+  full matrix footprint, plus a 32D projected embedding. Inspect peak GPU
+  memory during full training.
+- Passing unit tests is not equivalent to end-to-end validated performance.
 
-## Safeguards
-- Never use target test labels in the teacher or weight network.
-- Keep small positive weights instead of the original hard threshold. This
-  prevents undefined/uninitialised alpha/beta in empty selections.
-- The `classifier_args` switch retains its on/off function, but when on
-  it no longer acts as a hard probability threshold.
-- This experiment uses no target validation examples.
-- The teacher is reduced-length for computational practicality. It is
-  DILATE-style rather than a byte-for-byte reproduction of the original loss.
+## Controlled ablations
+A. original DVGP (branch `pmme-stage1-research`);
+B. replacement weighting only (`--predictive_cost_coef 0`);
+C. replacement weighting + pairwise cost (`--predictive_cost_coef 1`);
+D. plain OT without classification (`--classifier 0`).
 
-## Experiments required before claiming improvement
-1. Original three-DVGP baseline on identical splits/seed.
-2. New weighting with auxiliary future supervision disabled (ablation).
-3. New weighting with auxiliary future supervision enabled (this branch).
-4. Compare downstream MAE/RMSE at 10/60/120/180 minutes, source/target mass
-   distributions, transport loss, training time, and source/target domain
-   accuracy. Include several seeds.
-5. Compare with GP retained plus auxiliary supervision to identify whether
-   the GP provides complementary uncertainty information.
+With identical target 3-day split, Stage-II, SOFTS and seeds, report per-horizon
+MAE/RMSE (10, 60, 120, 180 minutes), mass entropy, OT objective, pair-loss,
+source-target teacher/students correlation, peak GPU memory and wall time.
 
-This branch has not been trained end-to-end; smoke tests only check the
-new component's basic contract.
+## Testing
+`python -m unittest discover -s tests -p 'test_predictive_overlap.py' -v`
+requires torch; the GeomLoss custom-cost integration test requires geomloss.
