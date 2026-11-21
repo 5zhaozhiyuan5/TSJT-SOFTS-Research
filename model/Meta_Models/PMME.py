@@ -18,7 +18,7 @@ from block import *
 
 from geomloss.samples_loss import SamplesLoss 
 from torch.utils.data import TensorDataset, DataLoader
-from predictive_overlap import PredictiveOverlapWeighter
+from predictive_overlap import PredictiveOverlapWeighter, conditional_ot_cost
 
 from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
@@ -147,6 +147,7 @@ class STRep(nn.Module):
         # They predict detached, strictly positive source/target masses;
         # the original conditional weighted-Sinkhorn objective is unchanged.
         self.overlap_model = PredictiveOverlapWeighter(num_domains=3).to(self.device)
+        self.predictive_cost_coef = float(getattr(args, 'predictive_cost_coef', 1.0))
         self.overlap_optim = torch.optim.Adam(
             self.overlap_model.parameters(), lr=1e-3
         )
@@ -163,13 +164,24 @@ class STRep(nn.Module):
         rep_target = []
         y_source = []
         y_target = []
+        hist_source = []
+        hist_target = []
 
         target_task_loss = 0
         for i in range(len(data)):  
             task_loss = 0
             batch_size, node_num, seq_len, _ = data[i].x.shape
             
-            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train') 
+            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train')
+            # Compute historical values in the same RevIN space as y_unscale.
+            history = torch.as_tensor(
+                data[i].x[..., 0], device=rep.device, dtype=rep.dtype
+            )[..., -288:]
+            history_mean = history.mean(-1, keepdim=True).detach()
+            history_std = torch.sqrt(
+                history.var(-1, keepdim=True, unbiased=False).detach() + 1e-9
+            )
+            history = ((history - history_mean) / history_std).detach()
             
             if epoch%25==0:
                 print(out.shape, rep.shape)
@@ -179,13 +191,16 @@ class STRep(nn.Module):
                 split_indices = [15, 15, rep.shape[0] - 30]
                 rep_split = torch.split(rep, split_indices, dim=0)
                 y_unscale_split = torch.split(y_unscale, split_indices, dim=0)
+                hist_split = torch.split(history, split_indices, dim=0)
                 
                 rep_target.extend(rep_split)
                 y_target.extend(y_unscale_split)
+                hist_target.extend(hist_split)
                 
             else:
                 rep_source.append(rep)
                 y_source.append(y_unscale)
+                hist_source.append(history)
                 
             
             if i>0:   
@@ -241,6 +256,7 @@ class STRep(nn.Module):
 
             x1,y1 = rep_source[index], y_source[index] 
             x2,y2 = rep_target[index], y_target[index]
+            h1, h2 = hist_source[index], hist_target[index]
             shape0 = x1.shape[1]
                     
             y_norm_sources.append(y1)
@@ -250,6 +266,8 @@ class STRep(nn.Module):
             x2 = x2.view(-1, x2.size(-1))
             y1 = y1.view(-1, y1.size(-1))
             y2 = y2.view(-1, y2.size(-1))
+            h1 = h1.reshape(-1, h1.size(-1))
+            h2 = h2.reshape(-1, h2.size(-1))
             
 
             # A future-supervised historical representation estimates the
@@ -258,7 +276,7 @@ class STRep(nn.Module):
             # the OT geometry continues to use [rep, scaled_future] unchanged.
             if self.classifier_args > 1e-6:
                 prob1, prob2, overlap_stats = self.overlap_model.training_weights(
-                    index, x1, x2, y1, y2, self.overlap_optim
+                    index, x1, x2, y1, y2, h1, h2, self.overlap_optim
                 )
                 alpha = prob1 / prob1.sum().clamp_min(1e-8)
                 beta = prob2 / prob2.sum().clamp_min(1e-8)
@@ -268,11 +286,12 @@ class STRep(nn.Module):
                 ratio1, ratio2 = 1.0, 1.0  # masses never hard-thresholded
                 if epoch % 25 == 0:
                     print('[PredictiveOverlap] source={} domain_loss={:.5f} '
-                          'future_loss={:.5f} source_teacher={:.4f} '
+                          'future_loss={:.5f} pair_loss={:.5f} source_teacher={:.4f} '
                           'target_teacher={:.4f} source_mass={:.4f} '
                           'target_mass={:.4f}'.format(
                               index, overlap_stats['domain_loss'].item(),
                               overlap_stats['future_loss'].item(),
+                              overlap_stats['pair_loss'].item(),
                               overlap_stats['source_teacher'].item(),
                               overlap_stats['target_teacher'].item(),
                               prob1.mean().item(), prob2.mean().item()
@@ -293,7 +312,28 @@ class STRep(nn.Module):
                     y = torch.cat((x2,y2),dim=-1) # y: target  
                     
                     if (ratio1>0.00 and ratio2>0.00):
-                        OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args *OT_loss_scale
+                        if (self.classifier_args > 1e-6 and
+                                self.predictive_cost_coef > 0):
+                            e1, e2 = self.overlap_model.pair_embeddings(
+                                index, x1, x2
+                            )
+                            # Joint SOFTS representation + future label
+                            # remains the original transport geometry.
+                            base_dim = x.size(-1)
+                            sinkhorn_x = torch.cat((x, e1), dim=-1)
+                            sinkhorn_y = torch.cat((y, e2), dim=-1)
+                            conditional_sinkhorn = SamplesLoss(
+                                loss="sinkhorn", p=1, backend="tensorized",
+                                debias=False, blur=0.001,
+                                cost=conditional_ot_cost(
+                                    base_dim, self.predictive_cost_coef
+                                )
+                            )
+                            alignment = conditional_sinkhorn(
+                                alpha, sinkhorn_x, beta, sinkhorn_y)
+                        else:
+                            alignment = criterion(alpha, x, beta, y)
+                        OT_loss = torch.sum(alignment) * self.DAcoef_args * OT_loss_scale
                     else:
                         OT_loss = 0
                     DA_losses.append(OT_loss)
