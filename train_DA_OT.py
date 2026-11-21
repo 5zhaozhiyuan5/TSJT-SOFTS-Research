@@ -41,6 +41,11 @@ parser.add_argument('--MemSize',default=10000,type=int)
 parser.add_argument('--projection',default=0,type=float)
 parser.add_argument('--model_name',default='SOFTS',type=str)
 parser.add_argument('--DA',default='OT',type=str)
+# Read-only instrumentation; disabled by default to preserve official behavior.
+parser.add_argument('--diagnostic_every', default=0, type=int,
+                    help='Write target GP/OT audit every N source training updates; 0 disables it')
+parser.add_argument('--diagnostic_source_cap', default=256, type=int,
+                    help='Maximum source node-windows for approximate nearest-source support')
 args = parser.parse_args()
 
 args.curr_time = curr_time
