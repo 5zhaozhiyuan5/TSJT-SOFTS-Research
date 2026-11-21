@@ -34,7 +34,9 @@ parser.add_argument('--his_num',default=288,type=int)
 parser.add_argument('--save_dir', type=str)
 
 parser.add_argument('--classifier',default=0.3,type=float)
-parser.add_argument('--xySquaredRatio',default=10,type=float) 
+parser.add_argument('--xySquaredRatio',default=10,type=float)
+parser.add_argument('--predictive_cost_coef', default=1.0, type=float,
+                    help='Additional prediction-aware pairwise OT cost; 0 disables it.') 
 parser.add_argument('--DAcoef',default=0.1,type=float)
 parser.add_argument('--DAepoch',default=50000,type=int)
 parser.add_argument('--MemSize',default=10000,type=int)
