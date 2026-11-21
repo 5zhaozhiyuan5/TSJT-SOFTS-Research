@@ -26,6 +26,8 @@ from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
 
+from pmme_diagnostics import TargetTransferAudit
+
 def log_verbose(args, msg):
     print(msg)
     with open(os.path.join(args.save_dir, "log.txt"), "a") as f:
@@ -128,6 +130,9 @@ class STRep(nn.Module):
         self.PatchFSL_cfg = PatchFSL_cfg
         self.args = args
 
+        # Opt-in logging only; the original optimizer and objective are unchanged.
+        self.transfer_audit = TargetTransferAudit(args)
+
         self.lr = model_args['STnet']['lr']
         self.device = PatchFSL_cfg['device']
         self.current_epoch = 0
@@ -191,11 +196,21 @@ class STRep(nn.Module):
         y_target = []
 
         target_task_loss = 0
+
+        diag_active = self.transfer_audit.active(epoch)
         for i in range(len(data)):  
             task_loss = 0
             batch_size, node_num, seq_len, _ = data[i].x.shape
             
             out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train') 
+
+            if i == 0 and diag_active:
+                # SOFTS STAR uses stochastic pooling in train mode; separately
+                # measure deterministic eval errors at the same pre-update weights.
+                with torch.no_grad():
+                    audit_eval_out, _, _, _, _ = self.model(data[i], stage='test')
+                self.model.forecasting_model.train()
+                self.transfer_audit.capture_target(data[i], out, audit_eval_out, y)
             
             if epoch%25==0:
                 print(out.shape, rep.shape)
@@ -260,6 +275,8 @@ class STRep(nn.Module):
 
         for index in range(len(rep_source)):      
 
+            diag_gp_source, diag_gp_target = None, None
+
             size1, size2 = rep_source[index].shape[0]*rep_source[index].shape[1], rep_target[index].shape[0]*rep_target[index].shape[1]
             # print(size1, size2)
             labels1, labels2 = torch.zeros(size1, device=self.device), torch.ones(size2, device=self.device) 
@@ -312,6 +329,10 @@ class STRep(nn.Module):
                
                 l1 = x1.shape[0]
                 prob1, prob2 = probs[:l1], 1-probs[l1:] 
+
+                if diag_active:
+                    diag_gp_source = prob1.detach().clone()
+                    diag_gp_target = prob2.detach().clone()
                 
                 prob1_true = 1-prob1 
                 prob2_true = 1-prob2 
@@ -395,6 +416,29 @@ class STRep(nn.Module):
                     DA_losses.append(coral(x1, x2)*self.DAcoef_args)
             
                     
+            if diag_active:
+                # beta is valid only if both domains retain positive mass.
+                beta_valid = (self.classifier_args <= 1e-6 or
+                              (ratio1 > 0.00 and ratio2 > 0.00))
+                actual_ot_active = (self.DA == 'OT' and
+                                    epoch >= self.DAepoch_args and
+                                    ratio1 > 0.00 and ratio2 > 0.00)
+                self.transfer_audit.capture_pair(
+                    epoch=epoch,
+                    index=index,
+                    source_data=data[index + 1],
+                    source_rep=x1,
+                    target_rep=x2,
+                    source_future=y1,
+                    target_future=y2,
+                    gp_source=diag_gp_source,
+                    gp_target=diag_gp_target,
+                    beta=(beta if beta_valid else None),
+                    ot_active=actual_ot_active,
+                    ot_loss=(OT_loss if actual_ot_active else None),
+                    source_task_loss=task_losses[index],
+                )
+
         task_loss = task_losses[0] + task_losses[1] + task_losses[2]
         if len(DA_losses) == 0:
             DA_loss = 0
@@ -402,6 +446,10 @@ class STRep(nn.Module):
             DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
         
         model_loss += (task_loss + DA_loss) 
+
+        if diag_active:
+            self.transfer_audit.finish_epoch(epoch, task_loss, DA_loss,
+                                             target_task_loss)
 
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
             
