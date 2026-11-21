@@ -4,8 +4,9 @@ Replaces the three variational GP domain classifiers, NOT the conditional
 weighted-Sinkhorn transport. A historical representation predicts both a
 domain-overlap score and a future-trajectory compatibility score.
 
-The future-aware teacher is a time-penalized soft-DTW surrogate, *not* the
-original DILATE loss (which uses a separate temporal-distortion term).
+The teacher combines soft-DTW shape distortion with the expected temporal
+alignment penalty (DILATE-style) using a forward dynamic program. This is a
+lightweight teacher score, not the forecasting loss in the original DILATE.
 All teacher targets come solely from labeled Stage-I training batches.
 """
 import torch
@@ -53,10 +54,12 @@ class PredictiveOverlapWeighter(nn.Module):
             idx.append((trend - pivot).abs().argmin())
         return y[torch.stack(idx)]
 
-    def _soft_dtw(self, query, refs):
-        """Batched time-penalized soft-DTW, reduced to one value per query.
+    def _dilate_distance(self, query, refs):
+        """Soft-DTW shape cost plus expected time distortion, batched.
 
-        O(N*K*steps^2) time; keeps K<=3 and steps<=12 to bound overhead.
+        The time expectation is propagated along the same soft alignment
+        distribution as the Soft-DTW recurrence (not added to local costs).
+        Complexity: O(N*K*steps^2) with reduced teacher steps.
         """
         n, t = query.shape
         k = refs.shape[0]
@@ -64,20 +67,31 @@ class PredictiveOverlapWeighter(nn.Module):
         indices = torch.arange(t, device=query.device, dtype=query.dtype)
         temporal = ((indices[:, None] - indices[None, :]) /
                     max(1, t - 1)).square()
-        local = local + self.time_penalty * temporal[None, None]
         inf = torch.full((n, k), float("inf"), device=query.device,
                          dtype=query.dtype)
         zero = torch.zeros_like(inf)
         prev = [zero] + [inf] * t
+        # Expected temporal cost of an unreachable predecessor is ignored
+        # by its zero softmax probability.
+        prev_time = [zero] + [zero] * t
         gamma = max(self.gamma, 1e-4)
         for i in range(1, t + 1):
-            curr = [inf]
+            curr, curr_time = [inf], [zero]
             for j in range(1, t + 1):
                 paths = torch.stack((prev[j], curr[j - 1], prev[j - 1]), dim=-1)
+                log_weights = -paths / gamma
+                weights = torch.softmax(log_weights, dim=-1)
                 curr.append(local[:, :, i - 1, j - 1] -
-                            gamma * torch.logsumexp(-paths / gamma, dim=-1))
-            prev = curr
-        return prev[t] / t
+                            gamma * torch.logsumexp(log_weights, dim=-1))
+                former_time = torch.stack((prev_time[j], curr_time[j - 1],
+                                           prev_time[j - 1]), dim=-1)
+                curr_time.append((weights * former_time).sum(dim=-1) +
+                                 self.time_penalty * temporal[i - 1, j - 1])
+            prev, prev_time = curr, curr_time
+        # Shape term may be slightly negative due to soft-min entropy.
+        shape_cost = prev[t].clamp_min(0) / t
+        temporal_cost = prev_time[t] / t
+        return 0.75 * shape_cost + 0.25 * temporal_cost
 
     @torch.no_grad()
     def _teacher(self, source_future, target_future):
@@ -85,8 +99,8 @@ class PredictiveOverlapWeighter(nn.Module):
         target = self._shape(target_future.detach(), self.teacher_steps)
         target_refs = self._prototypes(target)
         source_refs = self._prototypes(source)
-        source_dist = self._soft_dtw(source, target_refs).min(dim=1).values
-        target_dist = self._soft_dtw(target, source_refs).min(dim=1).values
+        source_dist = self._dilate_distance(source, target_refs).min(dim=1).values
+        target_dist = self._dilate_distance(target, source_refs).min(dim=1).values
         source_score = torch.exp(-source_dist.clamp_min(0) /
                                  self.teacher_temperature).clamp(0.05, 1.0)
         target_score = torch.exp(-target_dist.clamp_min(0) /
