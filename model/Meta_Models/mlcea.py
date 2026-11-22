@@ -408,7 +408,7 @@ def log_diagnostics(save_dir, rows):
         "source_mass_entropy", "target_mass_entropy",
     ]
     with out.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="raise")
         if out.stat().st_size == 0:
             writer.writeheader()
         writer.writerows(rows)
