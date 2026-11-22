@@ -35,7 +35,10 @@ class MLCEA(nn.Module):
                  metric_temperature=1.0, response_mix=0.5,
                  event_gamma=0.2, score_beta=0.25, gain_temp=0.35,
                  support_gamma=0.35, response_floor=0.02,
-                 history_dim=6, horizon_dim=6):
+                 history_dim=6, horizon_dim=6,
+                 neighbor_uniform_mix=0.35, min_effective_k=8.0,
+                 adaptive_ridge=True, time_block_mode="diagnostic",
+                 temporal_exclusion_steps=324):
         super().__init__()
         if history_dim != 6 or horizon_dim != 6:
             raise ValueError("MLCEA v1 uses six history conditions and six future anchors")
@@ -53,11 +56,23 @@ class MLCEA(nn.Module):
         self.response_floor = float(response_floor)
         self.history_dim = int(history_dim)
         self.horizon_dim = int(horizon_dim)
+        self.neighbor_uniform_mix = float(neighbor_uniform_mix)
+        self.min_effective_k = float(min_effective_k)
+        self.adaptive_ridge = bool(adaptive_ridge)
+        if time_block_mode not in ("diagnostic", "strict"):
+            raise ValueError("time_block_mode must be diagnostic or strict")
+        self.time_block_mode = time_block_mode
+        self.temporal_exclusion_steps = int(temporal_exclusion_steps)
+        if not 0 <= self.neighbor_uniform_mix < 1:
+            raise ValueError("neighbor_uniform_mix must be in [0,1)")
+        if self.ridge <= 0:
+            raise ValueError("ridge must be positive")
+
 
     def metric_weights(self):
         return self.history_dim * torch.softmax(self.metric_logits, dim=0)
 
-    def make_snapshot(self, history, future_rev):
+    def make_snapshot(self, history, future_rev, window_indices=None, window_stride=12):
         """Output node-wise x:[B*N,7], r:[B*N,6], event:[B*N,6]."""
         h = torch.as_tensor(history, device=future_rev.device,
                             dtype=future_rev.dtype)
@@ -66,6 +81,18 @@ class MLCEA(nn.Module):
         if h.shape[:2] != future_rev.shape[:2] or h.shape[-1] < 192 or future_rev.shape[-1] < 36:
             raise ValueError("MLCEA expects aligned batch/node sizes, >=192 histories and >=36 futures")
         n_batch, n_nodes, _ = h.shape
+        if window_indices is None:
+            # Synthetic tests may lack true chronology metadata.
+            windows_abs = torch.full((n_batch,), -1, dtype=torch.long,
+                                     device=h.device)
+        else:
+            windows_abs = torch.as_tensor(window_indices, device=h.device,
+                                           dtype=torch.long).reshape(-1)
+            if windows_abs.numel() != n_batch:
+                raise ValueError("window_indices count differs from batch size")
+        stride = int(window_stride)
+        if stride < 1:
+            raise ValueError("window_stride must be positive")
         h = h[..., -288:]
         center = h.mean(dim=-1, keepdim=True).detach()
         stdev = h.var(dim=-1, keepdim=True, unbiased=False).add(1e-9).sqrt().detach()
@@ -82,8 +109,10 @@ class MLCEA(nn.Module):
         idx = torch.as_tensor([5, 11, 17, 23, 29, 35], device=z.device)
         # future_rev has already been normalized with the same RevIN
         # statistics inside the official PatchFSL.forward.
-        r = (future_rev.index_select(-1, idx) - z[..., -1:]).reshape(-1, 6)
-        r = r.clamp(-6, 6).detach()
+        unbounded_response = (
+            future_rev.index_select(-1, idx) - z[..., -1:]
+        ).reshape(-1, 6).detach()
+        r = unbounded_response.clamp(-6, 6)
         diff = torch.cat((r[:, :1], r[:, 1:] - r[:, :-1]), dim=-1)
         curvature = torch.cat((torch.zeros_like(diff[:, :1]),
                                diff[:, 1:] - diff[:, :-1]), dim=-1)
@@ -94,6 +123,12 @@ class MLCEA(nn.Module):
             x=x, r=r, event=event,
             node=torch.arange(n_nodes, device=z.device).repeat(n_batch),
             batch=torch.arange(n_batch, device=z.device).repeat_interleave(n_nodes),
+            time_index=windows_abs.repeat_interleave(n_nodes),
+            time_stride=torch.full((n_batch * n_nodes,), stride, device=z.device,
+                                   dtype=torch.long),
+            history_std=stdev.reshape(-1).detach(),
+            raw_response_abs_max=unbounded_response.abs().amax(dim=-1),
+            response_clipped_rate=(unbounded_response.abs() > 6).float().mean(-1),
         )
 
     def split_by_batch(self, snapshot, batch_sizes, node_count):
@@ -128,16 +163,17 @@ class MLCEA(nn.Module):
         return torch.linalg.solve(A + 0.5 * ridge + 1e-5 * eye, B.T).T.detach()
 
     def fit_local(self, snap, shared):
-        """Differentiable KNN weights and local ridge operators.
+        """Stable ridge and optional strict temporal block-out.
 
-        Neighbour candidates exclude every sample of the query's own road
-        node, even at different (possibly overlapping) time windows.
+        A complete query interval includes 288 history + 36 future steps.
+        The target has only 46 windows: strict disjoint time fitting often
+        has zero candidates and then must fall back exactly to W0.
         """
         x, r = snap["x"], snap["r"]
         n = x.size(0)
         anchors = min(self.anchors, n)
         if anchors < 3:
-            raise ValueError("Not enough nodes to estimate MLCEA operators")
+            raise ValueError("Not enough training samples for MLCEA")
         anchor_id = torch.randperm(n, device=x.device)[:anchors]
         ax, ar = x[anchor_id], r[anchor_id]
         metric = self.metric_weights()
@@ -148,30 +184,68 @@ class MLCEA(nn.Module):
             + za.square().sum(-1)[None, :]
             - 2 * (z @ za.T)
         ).clamp_min(0)
-        # Node-level exclusion also covers query's own overlapping windows.
-        invalid = snap["node"][:, None] == snap["node"][anchor_id][None, :]
-        dist = dist.masked_fill(invalid, float("inf"))
-        k = min(self.neighbors, anchors - 1)
-        ds, picks = torch.topk(dist, k, dim=-1, largest=False)
-        if not torch.isfinite(ds).all():
-            raise RuntimeError("No legal neighbours: insufficient distinct road nodes")
-        weights = torch.softmax(-ds / max(self.metric_temperature, 1e-4), dim=-1)
+
+        different_node = snap["node"][:, None] != snap["node"][anchor_id][None]
+        query_t = snap["time_index"][:, None]
+        anchor_t = snap["time_index"][anchor_id][None, :]
+        time_available = (query_t >= 0) & (anchor_t >= 0)
+        time_gap = (query_t - anchor_t).abs() * snap["time_stride"][:, None]
+        no_time_overlap = time_available & (
+            time_gap >= self.temporal_exclusion_steps
+        )
+        time_valid = different_node & no_time_overlap
+        temporal_eligible = time_valid.sum(-1)
+        if self.time_block_mode == "strict":
+            if not bool(time_available.all()):
+                raise ValueError("strict mode requires true window indices")
+            eligible = time_valid
+        else:
+            eligible = different_node
+
+        distances = dist.masked_fill(~eligible, float("inf"))
+        k = min(self.neighbors, anchors)
+        ds, picks = torch.topk(distances, k, dim=-1, largest=False)
+        finite = torch.isfinite(ds)
+        safe_ds = torch.where(finite, ds, torch.zeros_like(ds))
+        logits = (-safe_ds / max(self.metric_temperature, 1e-4)).masked_fill(
+            ~finite, -1e9
+        )
+        soft = torch.softmax(logits, dim=-1) * finite.float()
+        soft = soft / soft.sum(-1, keepdim=True).clamp_min(1e-9)
+        uniform = finite.float() / finite.float().sum(-1, keepdim=True).clamp_min(1)
+        mix = self.neighbor_uniform_mix
+        weights = (1.0 - mix) * soft + mix * uniform
+        effective_k = torch.where(
+            weights.sum(-1) > 0,
+            weights.square().sum(-1).clamp_min(1e-8).reciprocal(),
+            torch.zeros_like(weights.sum(-1))
+        )
+        weak = ((self.min_effective_k - effective_k)
+                / max(self.min_effective_k, 1e-6)).clamp_min(0)
+        local_lambda = self.ridge * (
+            1 + weak if self.adaptive_ridge else torch.ones_like(weak)
+        )
         X = ax[picks]
         R = ar[picks]
         gram = torch.einsum("nk,nkd,nke->nde", weights, X, X)
         cross = torch.einsum("nk,nkf,nkd->nfd", weights, R, X)
-        reg_eye = torch.eye(x.size(1), device=x.device, dtype=x.dtype)[None]
-        rhs = cross + self.ridge * shared[None]
-        lhs = gram + self.ridge * reg_eye
-        # torch.linalg.solve is differentiable through both inputs.
+        eye = torch.eye(x.size(1), device=x.device, dtype=x.dtype)[None]
+        lhs = gram + local_lambda[:, None, None] * eye
+        rhs = cross + local_lambda[:, None, None] * shared[None]
         W = torch.linalg.solve(lhs, rhs.transpose(-1, -2)).transpose(-1, -2)
-        radius = (weights * ds).sum(-1).detach().clamp_min(0.10)
+        radius = (weights * safe_ds).sum(-1).detach().clamp_min(0.10)
         fitted = torch.bmm(W, x.unsqueeze(-1)).squeeze(-1)
         fit_error = (fitted - r).square().mean(-1)
-        effective_k = (weights.square().sum(-1) + 1e-8).reciprocal()
-        return dict(W=W, radius=radius, fit_error=fit_error,
-                    effective_k=effective_k, pool_size=anchors,
-                    neighbor_count=k)
+        return dict(
+            W=W, radius=radius, fit_error=fit_error,
+            effective_k=effective_k, pool_size=anchors, neighbor_count=k,
+            time_eligible_count=temporal_eligible,
+            time_eligible_zero_rate=float((temporal_eligible == 0).float().mean().detach()),
+            time_eligible_mean=float(temporal_eligible.float().mean().detach()),
+            strict_fallback_rate=float((~finite.any(-1)).float().mean().detach()),
+            ridge_effective_mean=float(local_lambda.detach().mean()),
+            weight_mix=mix, time_block_mode=self.time_block_mode,
+        )
 
     def time_weights(self, snap):
         base = self.horizon_logits.repeat_interleave(2)[None, :]
@@ -320,6 +394,26 @@ class MLCEA(nn.Module):
                 "effective_neighbors_tgt": float(ot["effective_k"].detach().mean()),
                 "effective_neighbors_src_min": float(os["effective_k"].detach().min()),
                 "effective_neighbors_tgt_min": float(ot["effective_k"].detach().min()),
+                "time_eligible_src_mean": os["time_eligible_mean"],
+                "time_eligible_tgt_mean": ot["time_eligible_mean"],
+                "time_eligible_src_zero_rate": os["time_eligible_zero_rate"],
+                "time_eligible_tgt_zero_rate": ot["time_eligible_zero_rate"],
+                "strict_fallback_src_rate": os["strict_fallback_rate"],
+                "strict_fallback_tgt_rate": ot["strict_fallback_rate"],
+                "ridge_effective_src_mean": os["ridge_effective_mean"],
+                "ridge_effective_tgt_mean": ot["ridge_effective_mean"],
+                "neighbor_uniform_mix": os["weight_mix"],
+                "time_block_mode": os["time_block_mode"],
+                "history_std_src_min": float(source["history_std"].min()),
+                "history_std_tgt_min": float(target["history_std"].min()),
+                "history_std_src_p01": float(torch.quantile(source["history_std"], 0.01)),
+                "history_std_tgt_p01": float(torch.quantile(target["history_std"], 0.01)),
+                "history_std_src_lt_1e3": float((source["history_std"] < 0.001).float().mean()),
+                "history_std_tgt_lt_1e3": float((target["history_std"] < 0.001).float().mean()),
+                "raw_response_src_abs_max": float(source["raw_response_abs_max"].max()),
+                "raw_response_tgt_abs_max": float(target["raw_response_abs_max"].max()),
+                "response_src_clipped_rate": float(source["response_clipped_rate"].mean()),
+                "response_tgt_clipped_rate": float(target["response_clipped_rate"].mean()),
                 "local_support_radius_src_mean": float(os["radius"].detach().mean()),
                 "local_support_radius_tgt_mean": float(ot["radius"].detach().mean()),
                 "metric_weights": ",".join(f"{v:.5f}" for v in self.metric_weights().detach().cpu().tolist()),
@@ -385,7 +479,18 @@ def log_diagnostics(save_dir, rows):
         "operator_norm_src",
         "operator_norm_tgt", "effective_neighbors_src",
         "effective_neighbors_tgt", "effective_neighbors_src_min",
-        "effective_neighbors_tgt_min", "local_support_radius_src_mean",
+        "effective_neighbors_tgt_min",
+        "time_eligible_src_mean", "time_eligible_tgt_mean",
+        "time_eligible_src_zero_rate", "time_eligible_tgt_zero_rate",
+        "strict_fallback_src_rate", "strict_fallback_tgt_rate",
+        "ridge_effective_src_mean", "ridge_effective_tgt_mean",
+        "neighbor_uniform_mix", "time_block_mode",
+        "history_std_src_min", "history_std_tgt_min",
+        "history_std_src_p01", "history_std_tgt_p01",
+        "history_std_src_lt_1e3", "history_std_tgt_lt_1e3",
+        "raw_response_src_abs_max", "raw_response_tgt_abs_max",
+        "response_src_clipped_rate", "response_tgt_clipped_rate",
+        "local_support_radius_src_mean",
         "local_support_radius_tgt_mean",
         "metric_weights", "future_weights",
         "base_probe_min", "base_probe_mean", "base_probe_max",
