@@ -12,6 +12,8 @@ sys.path.append('./model')
 sys.path.append('./model/Meta_Models')
 
 from PMME import *
+from mlcea_experiment_logging import (write_run_manifest, log_stage1_epoch,
+                                       log_stage1_evaluation)
 from pathlib import Path
 import random
 
@@ -138,6 +140,8 @@ if __name__ == '__main__':
 
     yaml.dump([dict(vars(args)), config], open(os.path.join(args.save_dir, "config.yaml"), "w"))
     
+    write_run_manifest(args)
+
     for i in range(task_args['source']['train_epochs']):
         length = source_dataset.__len__()
         # length=40
@@ -176,7 +180,10 @@ if __name__ == '__main__':
             if i%25==0:
                 log_verbose(args,'Epochs {}/{}'.format(i,task_args['source']['train_epochs']))
                 log_verbose(args,'in meta-training   Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, MAPE: {:.5f}, reconstruction Loss : {:.5f}.'.format(mse_loss, rmse_loss, mae_loss,mape_loss,model_loss))
-            log_verbose(args,"This epoch cost {:.3}s.".format(time.time() - time_1))
+            elapsed = time.time() - time_1
+            log_verbose(args,"This epoch cost {:.3}s.".format(elapsed))
+            log_stage1_epoch(args, rep_model, i, model_loss, mse_loss,
+                             rmse_loss, mae_loss, mape_loss, elapsed)
             
             # if((i+1)%50==0):
             if((i+1)%100==0)or i==0:
@@ -193,7 +200,11 @@ if __name__ == '__main__':
                     indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35] 
                     current_validation_score = [validation_score[i] for i in indices]  
 
-                    current_testing_score = [testing_score[i] for i in indices]                
+                    current_testing_score = [testing_score[i] for i in indices]
+                    log_stage1_evaluation(
+                        args, i, validation_score, testing_score,
+                        sum(best_validation_score)
+                    )                
                     print('sum(current_validation_score),sum(best_validation_score)',sum(current_validation_score),sum(best_validation_score))
                     #print('sum(current_testing_score),sum(best_testing_score)',sum(current_testing_score),sum(best_testing_score))
                     if sum(current_testing_score)<sum(best_testing_score):
