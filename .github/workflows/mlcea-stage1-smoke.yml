@@ -7,6 +7,9 @@ on:
       - "model/Meta_Models/mlcea.py"
       - "model/Meta_Models/mlcea_experiment_logging.py"
       - "model/Meta_Models/PMME.py"
+      - "datasets.py"
+      - "scripts/diagnose_mlcea_operator.py"
+      - "tests/test_mlcea_temporal.py"
       - "train_DA_OT.py"
       - "tests/test_mlcea.py"
       - "tests/test_mlcea_diagnostics.py"
@@ -35,5 +38,8 @@ jobs:
           python -m py_compile train_DA_OT.py
           python -m py_compile tests/test_mlcea.py
           python -m py_compile tests/test_mlcea_diagnostics.py
+          python -m py_compile tests/test_mlcea_temporal.py
+          python -m py_compile scripts/diagnose_mlcea_operator.py
+          python -m py_compile datasets.py
       - name: MLCEA CPU tensor and gradient tests
-        run: python -m pytest -q tests/test_mlcea.py tests/test_mlcea_diagnostics.py
+        run: python -m pytest -q tests/test_mlcea.py tests/test_mlcea_diagnostics.py tests/test_mlcea_temporal.py
