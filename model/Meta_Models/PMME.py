@@ -18,6 +18,7 @@ from block import *
 
 from geomloss.samples_loss import SamplesLoss 
 from mlcea import MLCEA, log_diagnostics
+from mlcea_experiment_logging import log_ot_health
 from torch.utils.data import TensorDataset, DataLoader
 from gpytorch.mlls.variational_elbo import VariationalELBO
 from gpytorch.likelihoods import BernoulliLikelihood, LaplaceLikelihood
@@ -561,6 +562,35 @@ class STRep(nn.Module):
                                     if self.classifier_args > 1e-6 else 1.0,
                             ))
                     DA_losses.append(OT_loss)
+                    if epoch % 25 == 0:
+                        # Exactly the same OT numeric audit is enabled in
+                        # OFFICIAL and MLCEA runs. This distinguishes
+                        # pre-existing RevIN outliers from new alignment.
+                        health = log_ot_health(
+                            self.args, epoch, str(data[index + 1].data_name),
+                            str(data[0].data_name),
+                            x, y, data[index + 1], data[0],
+                            ratio1, ratio2, OT_loss_scale, OT_loss,
+                        )
+                        if (health["base_cost_probe_p99"] > 1000
+                                or health["source_y_revin_abs_max"] > 100
+                                or health["target_y_revin_abs_max"] > 100):
+                            log_verbose(
+                                self.args,
+                                "[OT OUTLIER] epoch={} city={} "
+                                "p99={:.3f} max_revin_src={:.3f} "
+                                "max_revin_tgt={:.3f} src=(node{},win{}) "
+                                "tgt=(node{},win{})".format(
+                                    epoch, health["source_city"],
+                                    health["base_cost_probe_p99"],
+                                    health["source_y_revin_abs_max"],
+                                    health["target_y_revin_abs_max"],
+                                    health["source_bad_node"],
+                                    health["source_bad_window"],
+                                    health["target_bad_node"],
+                                    health["target_bad_window"],
+                                )
+                            )
 
             elif self.DA == 'CMMD':
                 if (epoch>=self.DAepoch_args): 
