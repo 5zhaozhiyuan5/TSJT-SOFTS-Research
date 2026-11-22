@@ -60,7 +60,10 @@ if args.mlcea_enable and args.mlcea_neighbors >= args.mlcea_anchors:
     print("[MLCEA WARNING] neighbors >= anchors, using the number of legal anchors")
 
 
-args.curr_time = curr_time
+# Avoid mixed logs when the author's shell script launches seeds in parallel.
+args.curr_time = "{}_seed{}_mlcea{}_pid{}".format(
+    curr_time, args.seed, args.mlcea_enable, os.getpid()
+)
 print('args.test_dataset',args.test_dataset)
 save_dir = os.path.join(".", "logged_files", args.test_dataset, args.data_list , args.curr_time)
 if not os.path.exists(save_dir):
