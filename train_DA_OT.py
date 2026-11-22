@@ -147,6 +147,10 @@ if __name__ == '__main__':
         # length=40
         if i%25==0:
             log_verbose(args,'----------------------')
+        # Reset per-epoch peak; otherwise GPU peak memory is the run-wide
+        # high watermark and cannot diagnose single-epoch memory spikes.
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
         time_1 = time.time()
         
         data = []
