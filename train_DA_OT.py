@@ -41,7 +41,24 @@ parser.add_argument('--MemSize',default=10000,type=int)
 parser.add_argument('--projection',default=0,type=float)
 parser.add_argument('--model_name',default='SOFTS',type=str)
 parser.add_argument('--DA',default='OT',type=str)
+
+# Optional Stage-I MLCEA relation-cost extension. Set 0 for exact
+# official PMME Stage-I behavior, including GP DVGP and default OT cost.
+parser.add_argument('--mlcea_enable',default=1,type=int,choices=[0,1])
+parser.add_argument('--mlcea_rel_coef',default=0.5,type=float)
+parser.add_argument('--mlcea_aux_coef',default=0.02,type=float)
+parser.add_argument('--mlcea_lr',default=0.0002,type=float)
+parser.add_argument('--mlcea_anchors',default=128,type=int)
+parser.add_argument('--mlcea_neighbors',default=16,type=int)
+parser.add_argument('--mlcea_ridge',default=2.0,type=float)
+parser.add_argument('--mlcea_pair_chunk',default=96,type=int)
+parser.add_argument('--mlcea_log_every',default=1,type=int)
 args = parser.parse_args()
+if args.mlcea_enable and args.DA == 'OT' and args.DAepoch >= args.train_epochs:
+    print("[MLCEA WARNING] DAepoch >= train_epochs: MLCEA/OT will never activate")
+if args.mlcea_enable and args.mlcea_neighbors >= args.mlcea_anchors:
+    print("[MLCEA WARNING] neighbors >= anchors, using the number of legal anchors")
+
 
 args.curr_time = curr_time
 print('args.test_dataset',args.test_dataset)
