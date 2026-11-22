@@ -528,7 +528,10 @@ class STRep(nn.Module):
         else:
             DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
         
-        model_loss += (task_loss + DA_loss) 
+        model_loss += (task_loss + DA_loss)
+        if use_mlcea:
+            model_loss += self.mlcea_aux_coef * mlcea_auxiliary
+
 
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
             
@@ -561,10 +564,26 @@ class STRep(nn.Module):
         print('self.projection_args', self.projection_args)
 
 
+        if use_mlcea:
+            self.mlcea_optim.zero_grad()
+        mlcea_metric_grad = 0.0
+        mlcea_future_grad = 0.0
+
         if (self.projection_args == 0):
             self.main_optim.zero_grad()
             (model_loss).backward() #(task_loss + OT_loss).backward()
+            if use_mlcea:
+                mlcea_metric_grad = float(
+                    self.mlcea.metric_logits.grad.norm()
+                    if self.mlcea.metric_logits.grad is not None else 0.0
+                )
+                mlcea_future_grad = float(
+                    self.mlcea.horizon_logits.grad.norm()
+                    if self.mlcea.horizon_logits.grad is not None else 0.0
+                )
             self.main_optim.step()
+            if use_mlcea:
+                self.mlcea_optim.step()
         else:            
             
             self.main_optim.zero_grad()
@@ -583,10 +602,40 @@ class STRep(nn.Module):
             
             self.main_optim.step()
             self.main_optim.zero_grad()
-        
+            if use_mlcea:
+                # Separate optimizer survives the official one-sided
+                # gradient projection's main-optimizer zero_grad calls.
+                mlcea_metric_grad = float(
+                    self.mlcea.metric_logits.grad.norm()
+                    if self.mlcea.metric_logits.grad is not None else 0.0
+                )
+                mlcea_future_grad = float(
+                    self.mlcea.horizon_logits.grad.norm()
+                    if self.mlcea.horizon_logits.grad is not None else 0.0
+                )
+                self.mlcea_optim.step()
+
             self.current_epoch += 1
         
             
+        if use_mlcea and mlcea_rows:
+            for row in mlcea_rows:
+                row["metric_grad_norm"] = mlcea_metric_grad
+                row["future_grad_norm"] = mlcea_future_grad
+            log_diagnostics(self.args.save_dir, mlcea_rows)
+            if epoch % 25 == 0:
+                for row in mlcea_rows:
+                    log_verbose(self.args, "[MLCEA] ep={} src={} pairs={} "
+                        "Amean={:.4f} Astd={:.4f} Rstd={:.4f} "
+                        "Qmean={:.4f} scale={:.6g} grad_metric={:.4g} "
+                        "grad_future={:.4g} probe_P_L1={}".format(
+                            epoch, row["source_pair"], row.get("pair_count", 0),
+                            row.get("a_mean", 0.), row.get("a_std", 0.),
+                            row.get("r_interaction_std", 0.),
+                            row.get("q_mean", 0.), row.get("relation_scale", 0.),
+                            mlcea_metric_grad, mlcea_future_grad,
+                            row.get("probe_plan_l1", "NA")
+                        ))
         return model_loss.detach().cpu().numpy(),np.mean(total_mse), np.mean(total_rmse), np.mean(total_mae),np.mean(total_mape)
         
         
