@@ -195,12 +195,14 @@ OT_HEALTH_FIELDS = [
     "source_hist_std_p01", "target_hist_std_p01",
     "source_hist_std_lt_0p001", "target_hist_std_lt_0p001",
     "source_huge_y_rate", "target_huge_y_rate",
+    "target_window_offset", "target_window_count",
 ]
 
 
 def log_ot_health(args, epoch, source_city, target_city, source_joint,
                   target_joint, source_data, target_data, ratio1,
-                  ratio2, ot_loss_scale, ot_loss):
+                  ratio2, ot_loss_scale, ot_loss,
+                  target_window_offset=0, target_window_count=None):
     """Common official/MLCEA anomaly audit, without modifying OT.
 
     Joint feature vectors contain last 36 dimensions of RevIN future,
@@ -216,17 +218,24 @@ def log_ot_health(args, epoch, source_city, target_city, source_joint,
         source_bad = int(source_revin.abs().amax(-1).argmax())
         target_bad = int(target_revin.abs().amax(-1).argmax())
 
-        def location(data, flat_idx):
+        def location(data, flat_idx, window_offset=0):
             n = int(data.x.shape[1])
             row = int(flat_idx // n)
             col = int(flat_idx % n)
-            window = int(data.mlcea_window_index[row])
+            window = int(data.mlcea_window_index[row + window_offset])
             return col, window
 
         s_node, s_window = location(source_data, source_bad)
-        t_node, t_window = location(target_data, target_bad)
+        t_node, t_window = location(target_data, target_bad, target_window_offset)
         sh = torch.as_tensor(source_data.x[..., 0])
-        th = torch.as_tensor(target_data.x[..., 0])
+        if target_window_count is None:
+            target_window_count = int(target_data.x.shape[0]) - target_window_offset
+        th = torch.as_tensor(
+            target_data.x[
+                target_window_offset:target_window_offset + target_window_count,
+                ..., 0,
+            ]
+        )
         s_std = sh.var(-1, unbiased=False).add(1e-9).sqrt()
         t_std = th.var(-1, unbiased=False).add(1e-9).sqrt()
         ix = torch.linspace(0, len(source_joint)-1,
@@ -260,6 +269,8 @@ def log_ot_health(args, epoch, source_city, target_city, source_joint,
             target_y_revin_abs_p99=percentile(target_revin.abs().reshape(-1),0.99),
             source_bad_node=s_node, target_bad_node=t_node,
             source_bad_window=s_window, target_bad_window=t_window,
+            target_window_offset=int(target_window_offset),
+            target_window_count=int(target_window_count),
             source_hist_std_min=float(s_std.min()),
             target_hist_std_min=float(t_std.min()),
             source_hist_std_p01=percentile(s_std,0.01),
