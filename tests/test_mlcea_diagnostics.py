@@ -145,3 +145,16 @@ def test_ot_health_captures_official_numeric_outlier_without_mlcea(tmp_path):
     assert rows[0]["source_bad_window"] == "40"  # 4 // 3
     assert stats["source_y_revin_abs_max"] == 100.0
     assert stats["base_cost_probe_p99"] > 0
+
+    # PMME target batch is divided into 15/15/16 groups. For the second
+    # group, a local flat index starts at 0 but true absolute window IDs
+    # start at the group's offset, not at global target window zero.
+    grouped = log_ot_health(
+        args, 1525, "shenzhen", "pems-bay",
+        sj, tj[4:], src_data, tgt_data,
+        0.4, 0.2, 0.5, torch.tensor(4.0),
+        target_window_offset=1, target_window_count=1,
+    )
+    assert grouped["target_bad_window"] == 10
+    assert grouped["target_window_offset"] == 1
+    assert len(_read(tmp_path / "ot_numeric_health.csv")) == 2
