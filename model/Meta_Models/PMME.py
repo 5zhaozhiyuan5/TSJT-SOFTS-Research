@@ -407,9 +407,96 @@ class STRep(nn.Module):
                     y = torch.cat((x2,y2),dim=-1) # y: target  
                     
                     if (ratio1>0.00 and ratio2>0.00):
-                        OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args *OT_loss_scale
+                        if use_mlcea:
+                            relation, auxiliary, row = self.mlcea.alignment(
+                                mlcea_source[index], mlcea_target[index],
+                                mlcea_shared, alpha, beta,
+                                chunk=int(getattr(self.args, "mlcea_pair_chunk", 96))
+                            )
+                            mlcea_auxiliary = mlcea_auxiliary + auxiliary / len(rep_source)
+                            # Scale the additive relation by both base-cost
+                            # spread and the official p=1 Sinkhorn blur.
+                            with torch.no_grad():
+                                ns_probe = min(48, x.shape[0])
+                                nt_probe = min(48, y.shape[0])
+                                ix = torch.linspace(
+                                    0, x.shape[0]-1, steps=ns_probe,
+                                    device=x.device).long()
+                                iy = torch.linspace(
+                                    0, y.shape[0]-1, steps=nt_probe,
+                                    device=y.device).long()
+                                base_probe = torch.cdist(x[ix], y[iy], p=2)
+                                rel_probe = relation[ix][:, iy].detach()
+                                base_spread = base_probe.std(unbiased=False)
+                                rel_spread = rel_probe.std(unbiased=False)
+                                rel_coef = (
+                                    self.mlcea_rel_coef *
+                                    torch.minimum(base_spread, base_spread.new_tensor(self.mlcea_blur)) /
+                                    rel_spread.clamp_min(1e-6)
+                                ).clamp_max(10.0)
+                                if rel_spread < 1e-6:
+                                    rel_coef = rel_coef * 0
+                            # GeomLoss can pass [N,D] or [B,N,D]. This
+                            # matrix-multiplication form avoids [N,M,D]
+                            # intermediate tensors for the Euclidean cost.
+                            def mlcea_cost(sx, ty, correction=relation,
+                                           rel_scale=rel_coef):
+                                xx = sx.square().sum(-1, keepdim=True)
+                                yy = ty.square().sum(-1).unsqueeze(-2)
+                                xy = sx @ ty.transpose(-1, -2)
+                                euclid = (xx + yy - 2 * xy).clamp_min(1e-12).sqrt()
+                                if euclid.shape[-2:] != correction.shape:
+                                    raise ValueError(
+                                        "MLCEA pairwise cost mismatch: {} vs {}".format(
+                                            euclid.shape, correction.shape))
+                                return euclid - rel_scale * correction
+                            augmented_sinkhorn = SamplesLoss(
+                                loss="sinkhorn", p=1, backend="tensorized",
+                                debias=False, blur=self.mlcea_blur,
+                                cost=mlcea_cost
+                            )
+                            OT_loss = torch.sum(
+                                augmented_sinkhorn(alpha, x, beta, y)
+                            ) * self.DAcoef_args * OT_loss_scale
+                            if epoch % self.mlcea_log_every == 0:
+                                with torch.no_grad():
+                                    row.update(dict(
+                                        epoch=int(epoch), source_pair=int(index),
+                                        status="active", ot_blur=self.mlcea_blur,
+                                        base_probe_std=float(base_spread),
+                                        relation_scale=float(rel_coef),
+                                        relation_probe_std=float(rel_spread),
+                                        relation_vs_blur=float(
+                                            rel_coef*rel_spread/self.mlcea_blur
+                                        ),
+                                        ot_loss=float(OT_loss.detach()),
+                                        aux_loss=float(auxiliary.detach()),
+                                        source_mass_nonzero=int((alpha>0).sum()),
+                                        target_mass_nonzero=int((beta>0).sum()),
+                                        source_mass_entropy=float(
+                                            -(alpha * alpha.clamp_min(1e-30).log()).sum()
+                                        ),
+                                        target_mass_entropy=float(
+                                            -(beta * beta.clamp_min(1e-30).log()).sum()
+                                        ),
+                                    ))
+                                    if self.mlcea_rel_coef > 0 and epoch % 25 == 0:
+                                        row.update(self.mlcea.weighted_center_probe(
+                                            base_probe, rel_coef * rel_probe,
+                                            alpha[ix], beta[iy],
+                                            entropy=self.mlcea_blur,
+                                        ))
+                                mlcea_rows.append(row)
+                        else:
+                            OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args * OT_loss_scale
                     else:
                         OT_loss = 0
+                        if use_mlcea and epoch % self.mlcea_log_every == 0:
+                            mlcea_rows.append(dict(
+                                epoch=int(epoch), source_pair=int(index),
+                                status="skipped_empty_DVGP_masses",
+                                source_mass_nonzero=0, target_mass_nonzero=0
+                            ))
                     DA_losses.append(OT_loss)
 
             elif self.DA == 'CMMD':
