@@ -13,7 +13,7 @@ sys.path.append('./model/Meta_Models')
 
 from PMME import *
 from mlcea_experiment_logging import (write_run_manifest, log_stage1_epoch,
-                                       log_stage1_evaluation)
+                                       log_stage1_evaluation, log_stage2_evaluation)
 from pathlib import Path
 import random
 
@@ -203,7 +203,8 @@ if __name__ == '__main__':
                     current_testing_score = [testing_score[i] for i in indices]
                     log_stage1_evaluation(
                         args, i, validation_score, testing_score,
-                        sum(best_validation_score)
+                        sum(best_validation_score),
+                        details=getattr(rep_model, "last_evaluation_metrics", None)
                     )                
                     print('sum(current_validation_score),sum(best_validation_score)',sum(current_validation_score),sum(best_validation_score))
                     #print('sum(current_testing_score),sum(best_testing_score)',sum(current_testing_score),sum(best_testing_score))
@@ -281,6 +282,7 @@ if __name__ == '__main__':
         
     
         testing_score = rep_model.test_evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
+        log_stage2_evaluation(args, 'without_memory', testing_score)
         indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35] 
         current_testing_score = [testing_score[i] for i in indices] 
         print('current_testing_score', current_testing_score) 
@@ -319,6 +321,7 @@ if __name__ == '__main__':
         rep_model.model.load_state_dict(new_state)
     
         testing_score = rep_model.test_evaluation(finetune_dataset, test_dataset, task_args['source']['finetune_epochs'])
+        log_stage2_evaluation(args, 'with_memory', testing_score)
         indices = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35] 
         current_testing_score = [testing_score[i] for i in indices] 
         print('current_testing_score', current_testing_score) 
