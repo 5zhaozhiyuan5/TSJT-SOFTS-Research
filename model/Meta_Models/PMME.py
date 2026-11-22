@@ -156,6 +156,10 @@ class STRep(nn.Module):
                 anchors=getattr(args, "mlcea_anchors", 128),
                 neighbors=getattr(args, "mlcea_neighbors", 16),
                 ridge=getattr(args, "mlcea_ridge", 2.0),
+                neighbor_uniform_mix=getattr(args, "mlcea_neighbor_uniform_mix", 0.35),
+                min_effective_k=getattr(args, "mlcea_min_effective_k", 8.0),
+                adaptive_ridge=bool(getattr(args, "mlcea_adaptive_ridge", 1)),
+                time_block_mode=getattr(args, "mlcea_time_block_mode", "diagnostic"),
             ).to(self.device)
             self.mlcea_optim = torch.optim.Adam(
                 self.mlcea.parameters(), lr=float(getattr(args, "mlcea_lr", 2e-4))
@@ -226,7 +230,11 @@ class STRep(nn.Module):
                 raw_h = torch.as_tensor(
                     data[i].x[..., 0], dtype=y_unscale.dtype, device=y_unscale.device
                 )
-                snap = self.mlcea.make_snapshot(raw_h, y_unscale.detach())
+                snap = self.mlcea.make_snapshot(
+                    raw_h, y_unscale.detach(),
+                    window_indices=data[i].mlcea_window_index,
+                    window_stride=int(data[i].mlcea_window_stride),
+                )
             
             if epoch%25==0:
                 print(out.shape, rep.shape)
@@ -472,6 +480,22 @@ class STRep(nn.Module):
                                         base_probe_mean=float(base_probe.mean()),
                                         base_probe_max=float(base_probe.max()),
                                         base_probe_std=float(base_spread),
+                                        base_probe_p50=float(torch.quantile(base_probe, 0.50)),
+                                        base_probe_p95=float(torch.quantile(base_probe, 0.95)),
+                                        base_probe_p99=float(torch.quantile(base_probe, 0.99)),
+                                        source_revin_y_abs_max=float(y1.abs().max() / x_y_scale),
+                                        target_revin_y_abs_max=float(y2.abs().max() / x_y_scale),
+                                        source_revin_y_abs_p99=float(torch.quantile(y1.abs(), 0.99) / x_y_scale),
+                                        target_revin_y_abs_p99=float(torch.quantile(y2.abs(), 0.99) / x_y_scale),
+                                        # The offending road node and absolute
+                                        # training-window ID are logged so
+                                        # numerical outliers can be reproduced.
+                                        source_bad_flat_index=int(y1.abs().amax(-1).argmax()),
+                                        target_bad_flat_index=int(y2.abs().amax(-1).argmax()),
+                                        source_bad_node=int(mlcea_source[index]["node"][y1.abs().amax(-1).argmax()]),
+                                        target_bad_node=int(mlcea_target[index]["node"][y2.abs().amax(-1).argmax()]),
+                                        source_bad_window=int(mlcea_source[index]["time_index"][y1.abs().amax(-1).argmax()]),
+                                        target_bad_window=int(mlcea_target[index]["time_index"][y2.abs().amax(-1).argmax()]),
                                         relation_scale=float(rel_coef),
                                         relation_probe_std=float(rel_spread),
                                         relation_correction_mean=float(
