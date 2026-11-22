@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 
 import numpy as np
 import torch
@@ -41,8 +42,21 @@ def _append_csv(folder, filename, fields, rows):
 
 
 def write_run_manifest(args, upstream="serre20/PMME (PMME_and_Others)"):
+    try:
+        git_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True,
+            text=True, timeout=3, check=False,
+        ).stdout.strip() or "unavailable"
+        git_branch = subprocess.run(
+            ["git", "branch", "--show-current"], capture_output=True,
+            text=True, timeout=3, check=False,
+        ).stdout.strip() or "detached_or_unavailable"
+    except (OSError, subprocess.TimeoutExpired):
+        git_sha, git_branch = "unavailable", "unavailable"
     output = {
         "upstream": upstream,
+        "git_commit": git_sha,
+        "git_branch": git_branch,
         "branch_purpose": "Stage-I MLCEA vs author baseline",
         "stage2_source_changed": False,
         "seed": int(args.seed),
