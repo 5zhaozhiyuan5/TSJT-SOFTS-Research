@@ -53,6 +53,14 @@ parser.add_argument('--mlcea_lr',default=0.0002,type=float)
 parser.add_argument('--mlcea_anchors',default=128,type=int)
 parser.add_argument('--mlcea_neighbors',default=16,type=int)
 parser.add_argument('--mlcea_ridge',default=2.0,type=float)
+parser.add_argument('--mlcea_neighbor_uniform_mix', default=0.35, type=float,
+                    help='Blend learned local KNN weights with uniform: 0 restores previous behavior')
+parser.add_argument('--mlcea_min_effective_k', default=8.0, type=float)
+parser.add_argument('--mlcea_adaptive_ridge', default=1, type=int, choices=[0,1],
+                    help='Increase local ridge strength when effective K is small')
+parser.add_argument('--mlcea_time_block_mode', default='diagnostic',
+                    choices=['diagnostic', 'strict'],
+                    help='Strict enforces disjoint 288+36-step windows and falls back to W0 when unsupported')
 parser.add_argument('--mlcea_pair_chunk',default=96,type=int)
 parser.add_argument('--mlcea_log_every',default=1,type=int)
 args = parser.parse_args()
