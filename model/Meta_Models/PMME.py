@@ -209,6 +209,7 @@ class STRep(nn.Module):
         y_source = []
         y_target = []
         mlcea_source, mlcea_target = [], []
+        mlcea_source_names = []
         mlcea_rows = []
         mlcea_auxiliary = 0.0
         use_mlcea = (
@@ -248,6 +249,7 @@ class STRep(nn.Module):
                 y_source.append(y_unscale)
                 if use_mlcea:
                     mlcea_source.append(snap)
+                    mlcea_source_names.append(str(data[i].data_name))
                 
             
             if i>0:   
@@ -462,6 +464,9 @@ class STRep(nn.Module):
                                 with torch.no_grad():
                                     row.update(dict(
                                         epoch=int(epoch), source_pair=int(index),
+                                        source_city=mlcea_source_names[index],
+                                        target_city=str(data[0].data_name),
+                                        seed=int(self.args.seed),
                                         status="active", ot_blur=self.mlcea_blur,
                                         base_probe_std=float(base_spread),
                                         relation_scale=float(rel_coef),
@@ -494,6 +499,9 @@ class STRep(nn.Module):
                         if use_mlcea and epoch % self.mlcea_log_every == 0:
                             mlcea_rows.append(dict(
                                 epoch=int(epoch), source_pair=int(index),
+                                source_city=mlcea_source_names[index],
+                                target_city=str(data[0].data_name),
+                                seed=int(self.args.seed),
                                 status="skipped_empty_DVGP_masses",
                                 source_mass_nonzero=0, target_mass_nonzero=0
                             ))
