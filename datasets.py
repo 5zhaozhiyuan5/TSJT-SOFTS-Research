@@ -251,6 +251,14 @@ class traffic_dataset(Dataset):
         data_i = Data(node_num=node_num, x=x_data, y=y_data,means=self.means_list[select_dataset],stds = self.stds_list[select_dataset])
         data_i.edge_index = self.edge_index_list[select_dataset]
         data_i.data_name = select_dataset
+        # Read-only metadata for Stage-I MLCEA temporal cross-fitting.
+        # generate_dataset strides by 12 five-minute steps for 'source'
+        # and 'target_maml'. These indices identify each actual window
+        # even though source/target batches are sampled in random order.
+        # No model/Stage-II forward computation uses these attributes.
+        data_i.mlcea_window_index = torch.as_tensor(indices, dtype=torch.long).view(-1)
+        data_i.mlcea_window_stride = 12
+
         A_wave = self.A_list[select_dataset]
         
         # x_data is [batch, n, HisStep, D], y_data is [batch, n, HisStep]
