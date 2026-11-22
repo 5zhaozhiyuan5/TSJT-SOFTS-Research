@@ -9,6 +9,8 @@ on:
       - "model/Meta_Models/PMME.py"
       - "datasets.py"
       - "scripts/diagnose_mlcea_operator.py"
+      - "scripts/run_mlcea_ablation_batch8.sh"
+      - "configs/config_mlcea_batch8.yaml"
       - "tests/test_mlcea_temporal.py"
       - "train_DA_OT.py"
       - "tests/test_mlcea.py"
@@ -41,5 +43,6 @@ jobs:
           python -m py_compile tests/test_mlcea_temporal.py
           python -m py_compile scripts/diagnose_mlcea_operator.py
           python -m py_compile datasets.py
+          bash -n scripts/run_mlcea_ablation_batch8.sh
       - name: MLCEA CPU tensor and gradient tests
         run: python -m pytest -q tests/test_mlcea.py tests/test_mlcea_diagnostics.py tests/test_mlcea_temporal.py
