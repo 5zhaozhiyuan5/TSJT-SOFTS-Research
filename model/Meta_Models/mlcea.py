@@ -316,7 +316,7 @@ def log_diagnostics(save_dir, rows):
     out = Path(save_dir) / "mlcea_metrics.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     fields = [
-        "epoch", "source_pair", "status", "source_count", "target_count",
+        "epoch", "source_pair", "source_city", "target_city", "seed", "status", "source_count", "target_count",
         "pair_count", "a_mean", "a_std", "a_gt_half", "s_mean", "s_neg_rate",
         "q_mean", "q_low_rate", "r_interaction_std", "r_interaction_max_abs",
         "operator_fit_src", "operator_fit_tgt", "operator_norm_src",
