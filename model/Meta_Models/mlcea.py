@@ -26,7 +26,6 @@ from pathlib import Path
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 
 
 class MLCEA(nn.Module):
@@ -96,19 +95,6 @@ class MLCEA(nn.Module):
             node=torch.arange(n_nodes, device=z.device).repeat(n_batch),
             batch=torch.arange(n_batch, device=z.device).repeat_interleave(n_nodes),
         )
-
-    @staticmethod
-    def split_snapshot(snapshot, sizes):
-        return [
-            {key: val for key, val in zip(snapshot.keys(), chunks)}
-            for chunks in zip(*[
-                torch.split(v.reshape(-1, snapshot["x"].shape[-1])
-                            if False else v.reshape(-1, v.shape[-1]) if v.ndim > 2 else v,
-                            [s * (len(snapshot["node"]) // sum(sizes)) for s in sizes],
-                            dim=0)
-                for v in snapshot.values()
-            ])
-        ]
 
     def split_by_batch(self, snapshot, batch_sizes, node_count):
         """Split the flattened [B*N,...] snapshot along batch dimension."""
