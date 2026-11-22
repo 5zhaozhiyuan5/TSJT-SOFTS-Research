@@ -22,6 +22,8 @@ EPOCH_FIELDS = [
 EVAL_FIELDS = [
     "epoch", "seed", "horizon_step", "horizon_minutes", "mode",
     "target_fewshot_train_mae", "target_heldout_test_mae",
+    "target_fewshot_train_rmse", "target_heldout_test_rmse",
+    "target_fewshot_train_mape", "target_heldout_test_mape",
     "target_fewshot_train_mean_mae", "target_heldout_test_mean_mae",
     "train_score_used_for_checkpoint", "is_selected_by_train_mae",
 ]
@@ -108,8 +110,9 @@ def log_stage1_epoch(args, model, epoch, model_loss,
 
 
 def log_stage1_evaluation(args, epoch, train_scores, test_scores,
-                          previous_best_train_score):
+                          previous_best_train_score, details=None):
     """Official so-called validation_score is target few-shot TRAIN, not validation."""
+    details = details or {}
     train = np.asarray(train_scores, dtype=float).reshape(-1)
     test = np.asarray(test_scores, dtype=float).reshape(-1)
     if train.size != test.size or train.size == 0:
@@ -125,9 +128,41 @@ def log_stage1_evaluation(args, epoch, train_scores, test_scores,
         "mode": "mlcea" if getattr(args, "mlcea_enable", 0) else "official",
         "target_fewshot_train_mae": float(t),
         "target_heldout_test_mae": float(s),
+        "target_fewshot_train_rmse": float(details["target_train_rmse"][k])
+            if "target_train_rmse" in details else "",
+        "target_heldout_test_rmse": float(details["target_test_rmse"][k])
+            if "target_test_rmse" in details else "",
+        "target_fewshot_train_mape": float(details["target_train_mape"][k])
+            if "target_train_mape" in details else "",
+        "target_heldout_test_mape": float(details["target_test_mape"][k])
+            if "target_test_mape" in details else "",
         "target_fewshot_train_mean_mae": float(train.mean()),
         "target_heldout_test_mean_mae": float(test.mean()),
         "train_score_used_for_checkpoint": train_selected_score,
         "is_selected_by_train_mae": int(is_best),
     } for k, (t, s) in enumerate(zip(train, test))]
     _append_csv(args.save_dir, "stage1_eval_metrics.csv", EVAL_FIELDS, values)
+
+
+STAGE2_EVAL_FIELDS = [
+    "seed", "phase", "horizon_step", "horizon_minutes",
+    "test_mae", "test_mean_mae", "mode",
+]
+
+
+def log_stage2_evaluation(args, phase, test_scores):
+    """Observe outputs of original Stage-II evaluator without modifying it."""
+    values = np.asarray(test_scores, dtype=float).reshape(-1)
+    if values.size == 0:
+        raise ValueError("Empty Stage-II test MAE scores")
+    rows = [{
+        "seed": int(args.seed),
+        "phase": str(phase),
+        "horizon_step": int(k + 1),
+        "horizon_minutes": int(5 * (k + 1)),
+        "test_mae": float(v),
+        "test_mean_mae": float(values.mean()),
+        "mode": "mlcea" if getattr(args, "mlcea_enable", 0) else "official",
+    } for k, v in enumerate(values)]
+    _append_csv(args.save_dir, "stage2_eval_metrics.csv",
+                STAGE2_EVAL_FIELDS, rows)
