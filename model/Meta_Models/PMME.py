@@ -468,13 +468,38 @@ class STRep(nn.Module):
                                         target_city=str(data[0].data_name),
                                         seed=int(self.args.seed),
                                         status="active", ot_blur=self.mlcea_blur,
+                                        base_probe_min=float(base_probe.min()),
+                                        base_probe_mean=float(base_probe.mean()),
+                                        base_probe_max=float(base_probe.max()),
                                         base_probe_std=float(base_spread),
                                         relation_scale=float(rel_coef),
                                         relation_probe_std=float(rel_spread),
+                                        relation_correction_mean=float(
+                                            (rel_coef * rel_probe).mean()
+                                        ),
+                                        relation_correction_std=float(rel_coef * rel_spread),
+                                        relation_correction_max_abs=float(
+                                            (rel_coef * rel_probe).abs().max()
+                                        ),
+                                        relation_vs_base_spread=float(
+                                            rel_coef * rel_spread / base_spread.clamp_min(1e-12)
+                                        ),
+                                        dvGP_source_keep_ratio=float(ratio1),
+                                        dvGP_target_keep_ratio=float(ratio2),
+                                        dvGP_prob_source_mean=float(prob1.detach().mean())
+                                            if self.classifier_args > 1e-6 else 1.0,
+                                        dvGP_prob_target_mean=float(prob2.detach().mean())
+                                            if self.classifier_args > 1e-6 else 1.0,
+                                        ot_loss_scale=float(OT_loss_scale),
                                         relation_vs_blur=float(
                                             rel_coef*rel_spread/self.mlcea_blur
                                         ),
                                         ot_loss=float(OT_loss.detach()),
+                                        ot_unscaled_loss=float(
+                                            OT_loss.detach() / (
+                                                self.DAcoef_args * OT_loss_scale + 1e-12
+                                            )
+                                        ),
                                         aux_loss=float(auxiliary.detach()),
                                         source_mass_nonzero=int((alpha>0).sum()),
                                         target_mass_nonzero=int((beta>0).sum()),
@@ -503,7 +528,13 @@ class STRep(nn.Module):
                                 target_city=str(data[0].data_name),
                                 seed=int(self.args.seed),
                                 status="skipped_empty_DVGP_masses",
-                                source_mass_nonzero=0, target_mass_nonzero=0
+                                source_mass_nonzero=0, target_mass_nonzero=0,
+                                dvGP_source_keep_ratio=float(ratio1),
+                                dvGP_target_keep_ratio=float(ratio2),
+                                dvGP_prob_source_mean=float(prob1.detach().mean())
+                                    if self.classifier_args > 1e-6 else 1.0,
+                                dvGP_prob_target_mean=float(prob2.detach().mean())
+                                    if self.classifier_args > 1e-6 else 1.0,
                             ))
                     DA_losses.append(OT_loss)
 
@@ -574,13 +605,18 @@ class STRep(nn.Module):
 
         if use_mlcea:
             self.mlcea_optim.zero_grad()
+            metric_before = self.mlcea.metric_logits.detach().clone()
+            future_before = self.mlcea.horizon_logits.detach().clone()
         mlcea_metric_grad = 0.0
         mlcea_future_grad = 0.0
+        metric_missing, future_missing = False, False
 
         if (self.projection_args == 0):
             self.main_optim.zero_grad()
             (model_loss).backward() #(task_loss + OT_loss).backward()
             if use_mlcea:
+                metric_missing = self.mlcea.metric_logits.grad is None
+                future_missing = self.mlcea.horizon_logits.grad is None
                 mlcea_metric_grad = float(
                     self.mlcea.metric_logits.grad.norm()
                     if self.mlcea.metric_logits.grad is not None else 0.0
@@ -611,6 +647,8 @@ class STRep(nn.Module):
             self.main_optim.step()
             self.main_optim.zero_grad()
             if use_mlcea:
+                metric_missing = self.mlcea.metric_logits.grad is None
+                future_missing = self.mlcea.horizon_logits.grad is None
                 # Separate optimizer survives the official one-sided
                 # gradient projection's main-optimizer zero_grad calls.
                 mlcea_metric_grad = float(
@@ -626,10 +664,57 @@ class STRep(nn.Module):
             self.current_epoch += 1
         
             
+        # Lightweight structured Stage-I epoch data for baseline comparisons.
+        self.last_mlcea_epoch = {
+            "epoch": int(epoch),
+            "mlcea_enabled": int(self.mlcea_enabled),
+            "mlcea_active": int(use_mlcea),
+            "ot_active": int(self.DA == "OT" and epoch >= self.DAepoch_args),
+            "source_task_loss": float(task_loss.detach()),
+            "target_task_loss": float(target_task_loss.detach()),
+            "da_loss": float(DA_loss.detach()) if torch.is_tensor(DA_loss)
+                       else float(DA_loss),
+            "mlcea_aux_loss": float(mlcea_auxiliary.detach())
+                       if torch.is_tensor(mlcea_auxiliary) else 0.0,
+            "mlcea_aux_weighted_loss": (
+                float((self.mlcea_aux_coef * mlcea_auxiliary).detach())
+                if use_mlcea and torch.is_tensor(mlcea_auxiliary) else 0.0
+            ),
+            "total_loss": float(model_loss.detach()),
+            "source_mae": float(np.mean(total_mae)),
+            "source_rmse": float(np.mean(total_rmse)),
+            "active_source_pairs": sum(
+                row.get("status") == "active" for row in mlcea_rows
+            ),
+            "skipped_source_pairs": sum(
+                row.get("status", "").startswith("skipped") for row in mlcea_rows
+            ),
+        }
         if use_mlcea and mlcea_rows:
+            metric_step = float((self.mlcea.metric_logits.detach() - metric_before).norm())
+            future_step = float((self.mlcea.horizon_logits.detach() - future_before).norm())
+            self.last_mlcea_epoch.update({
+                "metric_grad_norm": mlcea_metric_grad,
+                "future_grad_norm": mlcea_future_grad,
+                "metric_parameter_step_norm": metric_step,
+                "future_parameter_step_norm": future_step,
+            })
             for row in mlcea_rows:
                 row["metric_grad_norm"] = mlcea_metric_grad
                 row["future_grad_norm"] = mlcea_future_grad
+                row["metric_parameter_step_norm"] = metric_step
+                row["future_parameter_step_norm"] = future_step
+                row["grad_metric_missing"] = int(metric_missing)
+                row["grad_future_missing"] = int(future_missing)
+                row["epoch_task_loss"] = float(task_loss.detach())
+                row["epoch_target_task_loss"] = float(target_task_loss.detach())
+                row["epoch_da_loss"] = self.last_mlcea_epoch["da_loss"]
+                row["epoch_aux_weighted_loss"] = self.last_mlcea_epoch["mlcea_aux_weighted_loss"]
+                row["epoch_total_loss"] = self.last_mlcea_epoch["total_loss"]
+                row["epoch_source_mae"] = self.last_mlcea_epoch["source_mae"]
+                row["epoch_source_rmse"] = self.last_mlcea_epoch["source_rmse"]
+                row["ot_is_active"] = 1
+                row["mlcea_is_active"] = 1
             log_diagnostics(self.args.save_dir, mlcea_rows)
             if epoch % 25 == 0:
                 for row in mlcea_rows:
