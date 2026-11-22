@@ -778,6 +778,7 @@ class STRep(nn.Module):
         total_mse_horizon,total_rmse_horizon, total_mae_horizon, total_mape_horizon, total_loss = self.test_batch(0, 1, finetune_dataset, "test") 
     
         validation_score = []
+        validation_rmse, validation_mape = [], []
         
         for i in range(self.task_args['source']['pred_num']):
             total_len = 0
@@ -799,6 +800,8 @@ class STRep(nn.Module):
             total_mape = sum(total_mape)/total_len
             
             validation_score.append(total_mae)
+            validation_rmse.append(total_rmse)
+            validation_mape.append(total_mape)
 
             print('Horizon {} : Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, MAPE: {:.5f}'.format(i, total_mse, total_rmse, total_mae, total_mape))
             
@@ -810,6 +813,7 @@ class STRep(nn.Module):
         total_mse_horizon,total_rmse_horizon, total_mae_horizon, total_mape_horizon, total_loss = self.test_batch(0,length+1, test_dataset,"test")   
         
         testing_score = []
+        testing_rmse, testing_mape = [], []
         
         for i in range(self.task_args['source']['pred_num']):
             total_len = 0
@@ -832,8 +836,17 @@ class STRep(nn.Module):
             total_mape = sum(total_mape)/total_len
             
             testing_score.append(total_mae)
+            testing_rmse.append(total_rmse)
+            testing_mape.append(total_mape)
             print('Horizon {} : Unnormed MSE : {:.5f}, RMSE : {:.5f}, MAE : {:.5f}, MAPE: {:.5f}'.format(i, total_mse, total_rmse, total_mae, total_mape))
             
+        # Diagnostics only, with no change to return values or model weights.
+        self.last_evaluation_metrics = {
+            "target_train_rmse": validation_rmse,
+            "target_train_mape": validation_mape,
+            "target_test_rmse": testing_rmse,
+            "target_test_mape": testing_mape,
+        }
         return validation_score, testing_score
 
 
