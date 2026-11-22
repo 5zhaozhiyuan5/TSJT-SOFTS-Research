@@ -17,6 +17,7 @@ import datetime
 from block import *
 
 from geomloss.samples_loss import SamplesLoss 
+from mlcea import MLCEA, log_diagnostics
 from torch.utils.data import TensorDataset, DataLoader
 from gpytorch.mlls.variational_elbo import VariationalELBO
 from gpytorch.likelihoods import BernoulliLikelihood, LaplaceLikelihood
@@ -142,7 +143,25 @@ class STRep(nn.Module):
 
         self.main_optim = optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=1e-2)
         
-        self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
+        self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4)
+
+        # Stage-I ONLY: official SOFTS, three GP DVGP heads, Stage-II stay intact.
+        self.mlcea_enabled = bool(getattr(args, "mlcea_enable", 0))
+        self.mlcea_aux_coef = float(getattr(args, "mlcea_aux_coef", 0.02))
+        self.mlcea_rel_coef = float(getattr(args, "mlcea_rel_coef", 0.5))
+        self.mlcea_blur = 0.001  # matches official p=1, blur=0.001
+        self.mlcea_log_every = max(int(getattr(args, "mlcea_log_every", 1)), 1)
+        if self.mlcea_enabled:
+            self.mlcea = MLCEA(
+                anchors=getattr(args, "mlcea_anchors", 128),
+                neighbors=getattr(args, "mlcea_neighbors", 16),
+                ridge=getattr(args, "mlcea_ridge", 2.0),
+            ).to(self.device)
+            self.mlcea_optim = torch.optim.Adam(
+                self.mlcea.parameters(), lr=float(getattr(args, "mlcea_lr", 2e-4))
+            )
+            log_verbose(args, "INFO MLCEA enabled; official GP DVGP untouched")
+
         
         input_dim = 36
         
@@ -189,13 +208,24 @@ class STRep(nn.Module):
         rep_target = []
         y_source = []
         y_target = []
+        mlcea_source, mlcea_target = [], []
+        mlcea_rows = []
+        mlcea_auxiliary = 0.0
+        use_mlcea = (
+            self.mlcea_enabled and self.DA == 'OT' and epoch >= self.DAepoch_args
+        )
 
         target_task_loss = 0
         for i in range(len(data)):  
             task_loss = 0
             batch_size, node_num, seq_len, _ = data[i].x.shape
             
-            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train') 
+            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train')
+            if use_mlcea:
+                raw_h = torch.as_tensor(
+                    data[i].x[..., 0], dtype=y_unscale.dtype, device=y_unscale.device
+                )
+                snap = self.mlcea.make_snapshot(raw_h, y_unscale.detach())
             
             if epoch%25==0:
                 print(out.shape, rep.shape)
@@ -208,10 +238,16 @@ class STRep(nn.Module):
                 
                 rep_target.extend(rep_split)
                 y_target.extend(y_unscale_split)
-                
+                if use_mlcea:
+                    mlcea_target.extend(
+                        self.mlcea.split_by_batch(snap, split_indices, rep.shape[1])
+                    )
+
             else:
                 rep_source.append(rep)
                 y_source.append(y_unscale)
+                if use_mlcea:
+                    mlcea_source.append(snap)
                 
             
             if i>0:   
@@ -237,9 +273,13 @@ class STRep(nn.Module):
                 target_task_loss = loss
             
             
-        model_loss = 0 
+        model_loss = 0
 
         DA_loss = 0
+        if use_mlcea:
+            # Learned local operators are regularized toward a source-only
+            # reference. No test future is ever used.
+            mlcea_shared = self.mlcea.fit_reference(mlcea_source)
 
         shape0_list = [207, 524, 627, 325]
         print(rep_target[0].shape[1]) # 325
