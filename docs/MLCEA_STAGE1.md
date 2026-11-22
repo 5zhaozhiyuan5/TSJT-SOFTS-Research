@@ -94,46 +94,88 @@ CLI controls:
   --mlcea_pair_chunk 96  source rows per relation computation chunk
   --mlcea_log_every 1    metrics CSV frequency (epochs)
 
-## Diagnostics
+## Diagnostics (schema v2)
 
-The official training script creates a unique folder per run:
+All run outputs are isolated by target, sources, timestamp, seed,
+MLCEA flag and process ID. Directory example:
 
-  logged_files/<target>/<sources>/<timestamp>/
+  logged_files/<target>/<sources>/<timestamp>_seed1_mlcea1_pid1234/
     log.txt
     config.yaml
+    mlcea_run_manifest.json
+    stage1_epoch_metrics.csv
+    stage1_eval_metrics.csv
     mlcea_metrics.csv
+    stage2_eval_metrics.csv          (only when Stage-II evaluation runs)
 
-CSV: one row per source city / target city pair per recorded epoch.
+1. mlcea_run_manifest.json:
+   Full command line and options, Python/Torch/CUDA environment, seed,
+   stage and source repo provenance.
 
-Identifiers:
-  epoch, seed, source_pair, source_city, target_city, status
+2. stage1_epoch_metrics.csv:
+   One row for EVERY Stage-I epoch, including epochs before the OT
+   activation threshold and runs with --mlcea_enable 0.
+   Fields: original source task loss, target task loss (diagnostic only),
+   domain alignment loss, MLCEA auxiliary loss, weighted auxiliary loss,
+   total loss, source MAE/RMSE/MSE/MAPE, Adam learning rates,
+   training wall time, peak allocated GPU memory, MLCEA gradient norms,
+   actual parameter step norms, number of active/skipped source pairs,
+   and explicit waiting_for_DAepoch / active / official_OT_active status.
 
-Compatibility:
-  a_mean, a_std, a_gt_half, s_mean, s_neg_rate, q_mean, q_low_rate
+3. mlcea_metrics.csv:
+   One row per active SOURCE CITY vs target-city pair, per requested
+   logging epoch. This file is absent before DAepoch, when disabled,
+   or when MLCEA never enters the OT path.
+   - Identity: epoch, seed, source_pair, source_city, target_city, status
+   - Directional: err_src_to_tgt, err_tgt_to_src,
+     err_shared_to_tgt, err_shared_to_src, gain_src_to_tgt,
+     gain_tgt_to_src, gain_positive_src_to_tgt,
+     gain_positive_tgt_to_src, gain_direction_disagree,
+     gain_direction_abs_gap, src_better_than_shared_rate,
+     tgt_better_than_shared_rate
+   - Relation: a_mean/std/min/max, rates above/below 0.5,
+     s_mean, s_neg_rate, q_mean/std/min/low_rate,
+     r_uncentered_std, r_interaction_std/max_abs,
+     interaction_suppression_ratio (before/after centering)
+   - Local operators: source/target fit mean, p90, max;
+     operator norms; effective neighbor average/min; support radii
+   - DVGP: kept sample count, keep ratios, probability means,
+     margin entropy and actual scaled OT loss
+   - OT correction: probe base min/mean/max/std, correction mean/std/
+     max abs, relation_vs_blur, relation_vs_base_spread,
+     relation_scale and unscaled OT loss
+   - Learning: six learned metric weights, three future phase weights,
+     gradient norms, grad-is-missing flags, optimizer actual step norms,
+     epoch decomposed losses.
+   - Every 25 epochs: 48x48 subsample plan L1 shift, entropy before/after,
+     and largest sampled mass-shift cell.
 
-Cost and alignment:
-  r_interaction_std, r_interaction_max_abs, base_probe_std,
-  relation_scale, relation_probe_std, relation_vs_blur, ot_loss
+   The 48x48 plan is a detached approximate probe, NOT the exact full
+   weighted GeomLoss transport plan. Never claim full P changed by
+   exactly this much. In addition, a subsample of the already-centered
+   full relation can have different submatrix marginal centering.
 
-Local ridge:
-  operator_fit_src, operator_fit_tgt, operator_norm_src,
-  operator_norm_tgt, effective_neighbors_src, effective_neighbors_tgt
+4. stage1_eval_metrics.csv:
+   36 rows for EACH Stage-I evaluation epoch (every 100 original epochs
+   and at epoch 0). Each row logs physical horizon minutes, target
+   few-shot TRAIN MAE/RMSE/MAPE and target HELD-OUT TEST MAE/RMSE/MAPE.
+   The code historically called the former validation_score, but it is
+   NOT a separate target validation split. Checkpoint-selection status
+   is marked according to the actual source-code criterion.
 
-Optimization:
-  metric_weights, future_weights, metric_grad_norm,
-  future_grad_norm, aux_loss
+5. stage2_eval_metrics.csv:
+   If Stage-II is executed, append its original test MAE at all 36
+   horizons for both WITHOUT_MEMORY and WITH_MEMORY checks.
+   The Stage-II model implementation is not changed.
 
-DVGP:
-  source_mass_nonzero, target_mass_nonzero,
-  source_mass_entropy, target_mass_entropy
+Run the CPU tests:
 
-Every 25 epochs, additionally:
-  probe_plan_l1, probe_entropy_base, probe_entropy_new,
-  probe_mass_shift_abs
+  python -m pytest -q tests/test_mlcea.py tests/test_mlcea_diagnostics.py
 
-The probe uses ONLY 48 x 48 selected rows, with re-normalized
-subset marginals. It is NOT the exact full GeomLoss transport plan.
-Never use it to claim the full-plan transport mass changed.
+These tests verify tensor dimensions, gradients, alpha/beta interaction
+centering, example transport-plan changes, CSV schema, run manifests,
+and evaluation horizons. Full PMME GPU training with actual traffic
+datasets is still required before interpreting real model performance.
 
 ## How to diagnose failures
 
