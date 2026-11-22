@@ -571,6 +571,8 @@ class STRep(nn.Module):
                             str(data[0].data_name),
                             x, y, data[index + 1], data[0],
                             ratio1, ratio2, OT_loss_scale, OT_loss,
+                            target_window_offset=sum(split_indices[:index]),
+                            target_window_count=split_indices[index],
                         )
                         if (health["base_cost_probe_p99"] > 1000
                                 or health["source_y_revin_abs_max"] > 100
