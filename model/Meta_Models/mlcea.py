@@ -223,21 +223,40 @@ class MLCEA(nn.Module):
             -self.support_gamma * (dist / typical - 1.0).clamp_min(0)
         )
         A = 0.5 + reliability * (torch.sigmoid(score / self.gain_temp) - 0.5)
-        return A, score, reliability
+        # Keep only aggregated block diagnostics, not four additional
+        # [source,target] matrices. Detached to avoid holding the OT graph.
+        with torch.no_grad():
+            diagnostic = torch.stack([
+                e_s_to_t.detach().mean(),
+                e_t_to_s.detach().mean(),
+                e0_t.detach().mean(),
+                e0_s.detach().mean(),
+                s_st.detach().mean(),
+                s_ts.detach().mean(),
+                (s_st.detach() > 0).float().mean(),
+                (s_ts.detach() > 0).float().mean(),
+                (s_st.detach() * s_ts.detach() < 0).float().mean(),
+                (s_st.detach() - s_ts.detach()).abs().mean(),
+                (e_s_to_t.detach() < e0_t.detach()[None, :]).float().mean(),
+                (e_t_to_s.detach() < e0_s.detach()[:, None]).float().mean(),
+            ])
+        return A, score, reliability, diagnostic
 
     def alignment(self, source, target, shared, alpha, beta, chunk=96):
         """Construct differentiable A, then alpha/beta-interaction-centered R."""
         os = self.fit_local(source, shared)
         ot = self.fit_local(target, shared)
         ws, wt = self.time_weights(source), self.time_weights(target)
-        As, Ss, Qs = [], [], []
+        As, Ss, Qs, diagnostics = [], [], [], []
         for start in range(0, source["x"].size(0), chunk):
             stop = min(start + chunk, source["x"].size(0))
-            a, s, q = self._pair_block(source, target, os, ot, shared,
-                                      ws, wt, start, stop)
+            a, s, q, diagnostic = self._pair_block(
+                source, target, os, ot, shared, ws, wt, start, stop
+            )
             As.append(a)
             Ss.append(s.detach())
             Qs.append(q.detach())
+            diagnostics.append(diagnostic * a.numel())
         A = torch.cat(As, dim=0)
         # Correct only interaction information matters under fixed marginals.
         R = A - 0.5
@@ -255,7 +274,31 @@ class MLCEA(nn.Module):
         with torch.no_grad():
             ss = torch.cat(Ss, dim=0)
             qq = torch.cat(Qs, dim=0)
+            diag = torch.stack(diagnostics, 0).sum(0) / float(A.numel())
             stats = {
+                # Bidirectional explanation, measured independently.
+                "err_src_to_tgt": float(diag[0]),
+                "err_tgt_to_src": float(diag[1]),
+                "err_shared_to_tgt": float(diag[2]),
+                "err_shared_to_src": float(diag[3]),
+                "gain_src_to_tgt": float(diag[4]),
+                "gain_tgt_to_src": float(diag[5]),
+                "gain_positive_src_to_tgt": float(diag[6]),
+                "gain_positive_tgt_to_src": float(diag[7]),
+                "gain_direction_disagree": float(diag[8]),
+                "gain_direction_abs_gap": float(diag[9]),
+                "src_better_than_shared_rate": float(diag[10]),
+                "tgt_better_than_shared_rate": float(diag[11]),
+                "a_min": float(A.detach().min()),
+                "a_max": float(A.detach().max()),
+                "a_lt_half": float((A.detach() < 0.5).float().mean()),
+                "q_min": float(qq.min()),
+                "q_std": float(qq.std(unbiased=False)),
+                "r_uncentered_std": float(R.detach().std(unbiased=False)),
+                "interaction_suppression_ratio": float(
+                    interaction.detach().std(unbiased=False)
+                    / R.detach().std(unbiased=False).clamp_min(1e-12)
+                ),
                 "a_mean": float(A.detach().mean()),
                 "a_std": float(A.detach().std(unbiased=False)),
                 "a_gt_half": float((A.detach() > 0.5).float().mean()),
@@ -267,10 +310,18 @@ class MLCEA(nn.Module):
                 "r_interaction_max_abs": float(interaction.detach().abs().max()),
                 "operator_fit_src": float(os["fit_error"].detach().mean()),
                 "operator_fit_tgt": float(ot["fit_error"].detach().mean()),
+                "operator_fit_src_p90": float(torch.quantile(os["fit_error"].detach(), .90)),
+                "operator_fit_tgt_p90": float(torch.quantile(ot["fit_error"].detach(), .90)),
+                "operator_fit_src_max": float(os["fit_error"].detach().max()),
+                "operator_fit_tgt_max": float(ot["fit_error"].detach().max()),
                 "operator_norm_src": float(os["W"].detach().norm(dim=(-2, -1)).mean()),
                 "operator_norm_tgt": float(ot["W"].detach().norm(dim=(-2, -1)).mean()),
                 "effective_neighbors_src": float(os["effective_k"].detach().mean()),
                 "effective_neighbors_tgt": float(ot["effective_k"].detach().mean()),
+                "effective_neighbors_src_min": float(os["effective_k"].detach().min()),
+                "effective_neighbors_tgt_min": float(ot["effective_k"].detach().min()),
+                "local_support_radius_src_mean": float(os["radius"].detach().mean()),
+                "local_support_radius_tgt_mean": float(ot["radius"].detach().mean()),
                 "metric_weights": ",".join(f"{v:.5f}" for v in self.metric_weights().detach().cpu().tolist()),
                 "future_weights": ",".join(f"{v:.5f}" for v in torch.softmax(self.horizon_logits.detach(), -1).cpu().tolist()),
                 "source_count": int(A.shape[0]),
@@ -317,15 +368,42 @@ def log_diagnostics(save_dir, rows):
     out.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "epoch", "source_pair", "source_city", "target_city", "seed", "status", "source_count", "target_count",
-        "pair_count", "a_mean", "a_std", "a_gt_half", "s_mean", "s_neg_rate",
-        "q_mean", "q_low_rate", "r_interaction_std", "r_interaction_max_abs",
-        "operator_fit_src", "operator_fit_tgt", "operator_norm_src",
+        "pair_count", "a_mean", "a_std", "a_gt_half", "a_lt_half", "a_min", "a_max",
+        "s_mean", "s_neg_rate",
+        "q_mean", "q_std", "q_min", "q_low_rate",
+        "err_src_to_tgt", "err_tgt_to_src",
+        "err_shared_to_tgt", "err_shared_to_src",
+        "gain_src_to_tgt", "gain_tgt_to_src",
+        "gain_positive_src_to_tgt", "gain_positive_tgt_to_src",
+        "gain_direction_disagree", "gain_direction_abs_gap",
+        "src_better_than_shared_rate", "tgt_better_than_shared_rate",
+        "r_uncentered_std", "r_interaction_std", "r_interaction_max_abs",
+        "interaction_suppression_ratio",
+        "operator_fit_src", "operator_fit_tgt",
+        "operator_fit_src_p90", "operator_fit_tgt_p90",
+        "operator_fit_src_max", "operator_fit_tgt_max",
+        "operator_norm_src",
         "operator_norm_tgt", "effective_neighbors_src",
-        "effective_neighbors_tgt", "metric_weights", "future_weights",
+        "effective_neighbors_tgt", "effective_neighbors_src_min",
+        "effective_neighbors_tgt_min", "local_support_radius_src_mean",
+        "local_support_radius_tgt_mean",
+        "metric_weights", "future_weights",
+        "base_probe_min", "base_probe_mean", "base_probe_max",
         "base_probe_std", "relation_scale", "relation_probe_std",
+        "relation_correction_mean", "relation_correction_std",
+        "relation_correction_max_abs", "relation_vs_base_spread",
+        "dvGP_source_keep_ratio", "dvGP_target_keep_ratio",
+        "dvGP_prob_source_mean", "dvGP_prob_target_mean",
+        "ot_loss_scale", "ot_unscaled_loss",
         "ot_blur", "relation_vs_blur", "ot_loss", "aux_loss",
         "probe_plan_l1", "probe_entropy_base", "probe_entropy_new",
         "probe_mass_shift_abs", "metric_grad_norm", "future_grad_norm",
+        "metric_parameter_step_norm", "future_parameter_step_norm",
+        "grad_metric_missing", "grad_future_missing",
+        "epoch_task_loss", "epoch_target_task_loss", "epoch_da_loss",
+        "epoch_aux_weighted_loss", "epoch_total_loss",
+        "epoch_source_mae", "epoch_source_rmse",
+        "ot_is_active", "mlcea_is_active",
         "source_mass_nonzero", "target_mass_nonzero",
         "source_mass_entropy", "target_mass_entropy",
     ]
