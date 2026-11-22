@@ -1,6 +1,7 @@
 """Regression tests for structured MLCEA diagnostics, independent of traffic data."""
 import csv
 import json
+from types import SimpleNamespace
 import sys
 from argparse import Namespace
 from pathlib import Path
@@ -12,7 +13,7 @@ import torch
 from mlcea import MLCEA, log_diagnostics
 from mlcea_experiment_logging import (
     write_run_manifest, log_stage1_epoch, log_stage1_evaluation,
-    log_stage2_evaluation,
+    log_stage2_evaluation, log_ot_health,
 )
 
 
@@ -115,3 +116,32 @@ def test_epoch_evaluation_and_manifest_logs(tmp_path):
     assert len(rows) == 72
     assert rows[0]["phase"] == "without_memory"
     assert rows[-1]["phase"] == "with_memory"
+
+
+def test_ot_health_captures_official_numeric_outlier_without_mlcea(tmp_path):
+    args = Namespace(
+        save_dir=tmp_path, seed=1, mlcea_enable=0, xySquaredRatio=100
+    )
+    src_data = SimpleNamespace(
+        x=torch.randn(2, 3, 288, 2),
+        mlcea_window_index=torch.tensor([5, 40]),
+    )
+    tgt_data = SimpleNamespace(
+        x=torch.randn(2, 4, 288, 2),
+        mlcea_window_index=torch.tensor([0, 10]),
+    )
+    sj = torch.randn(6, 164)
+    tj = torch.randn(8, 164)
+    sj[4, -1] = 1000  # 1000/10 = 100 in original RevIN units
+    stats = log_ot_health(
+        args, 1500, "metr-la", "pems-bay",
+        sj, tj, src_data, tgt_data,
+        0.3, 0.1, 0.5, torch.tensor(7.0),
+    )
+    rows = _read(tmp_path / "ot_numeric_health.csv")
+    assert len(rows) == 1
+    assert rows[0]["mode"] == "official"
+    assert rows[0]["source_bad_node"] == "1"  # 4 % 3
+    assert rows[0]["source_bad_window"] == "40"  # 4 // 3
+    assert stats["source_y_revin_abs_max"] == 100.0
+    assert stats["base_cost_probe_p99"] > 0
