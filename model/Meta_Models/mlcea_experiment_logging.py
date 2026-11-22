@@ -180,3 +180,94 @@ def log_stage2_evaluation(args, phase, test_scores):
     } for k, v in enumerate(values)]
     _append_csv(args.save_dir, "stage2_eval_metrics.csv",
                 STAGE2_EVAL_FIELDS, rows)
+
+
+OT_HEALTH_FIELDS = [
+    "epoch", "seed", "source_city", "target_city", "mode", "status",
+    "source_mass_keep", "target_mass_keep", "ot_loss_scale", "ot_loss",
+    "base_cost_probe_min", "base_cost_probe_p50", "base_cost_probe_p95",
+    "base_cost_probe_p99", "base_cost_probe_max",
+    "source_y_revin_abs_max", "target_y_revin_abs_max",
+    "source_y_revin_abs_p99", "target_y_revin_abs_p99",
+    "source_bad_node", "target_bad_node",
+    "source_bad_window", "target_bad_window",
+    "source_hist_std_min", "target_hist_std_min",
+    "source_hist_std_p01", "target_hist_std_p01",
+    "source_hist_std_lt_0p001", "target_hist_std_lt_0p001",
+    "source_huge_y_rate", "target_huge_y_rate",
+]
+
+
+def log_ot_health(args, epoch, source_city, target_city, source_joint,
+                  target_joint, source_data, target_data, ratio1,
+                  ratio2, ot_loss_scale, ot_loss):
+    """Common official/MLCEA anomaly audit, without modifying OT.
+
+    Joint feature vectors contain last 36 dimensions of RevIN future,
+    multiplied by sqrt(xySquaredRatio) in official code.
+    Only call every 25 epochs; all reductions are detached.
+    """
+    with torch.no_grad():
+        scale = float(args.xySquaredRatio) ** 0.5
+        if not scale:
+            raise ValueError("xySquaredRatio must be positive")
+        source_revin = source_joint[:, -36:] / scale
+        target_revin = target_joint[:, -36:] / scale
+        source_bad = int(source_revin.abs().amax(-1).argmax())
+        target_bad = int(target_revin.abs().amax(-1).argmax())
+
+        def location(data, flat_idx):
+            n = int(data.x.shape[1])
+            row = int(flat_idx // n)
+            col = int(flat_idx % n)
+            window = int(data.mlcea_window_index[row])
+            return col, window
+
+        s_node, s_window = location(source_data, source_bad)
+        t_node, t_window = location(target_data, target_bad)
+        sh = torch.as_tensor(source_data.x[..., 0])
+        th = torch.as_tensor(target_data.x[..., 0])
+        s_std = sh.var(-1, unbiased=False).add(1e-9).sqrt()
+        t_std = th.var(-1, unbiased=False).add(1e-9).sqrt()
+        ix = torch.linspace(0, len(source_joint)-1,
+                            steps=min(48,len(source_joint)),
+                            device=source_joint.device).long()
+        iy = torch.linspace(0, len(target_joint)-1,
+                            steps=min(48,len(target_joint)),
+                            device=target_joint.device).long()
+        probe = torch.cdist(source_joint[ix], target_joint[iy], p=2)
+        valid = torch.isfinite(probe)
+        vals = probe[valid]
+        finite = vals.numel() > 0
+        def percentile(data, q):
+            return float(torch.quantile(data, q)) if data.numel() else float("nan")
+        out = dict(
+            epoch=int(epoch), seed=int(args.seed),
+            source_city=str(source_city), target_city=str(target_city),
+            mode="mlcea" if getattr(args,"mlcea_enable",0) else "official",
+            status="active" if ratio1 > 0 and ratio2 > 0 else "DVGP_skipped",
+            source_mass_keep=float(ratio1), target_mass_keep=float(ratio2),
+            ot_loss_scale=float(ot_loss_scale),
+            ot_loss=float(ot_loss.detach()) if torch.is_tensor(ot_loss) else float(ot_loss),
+            base_cost_probe_min=float(vals.min()) if finite else float("nan"),
+            base_cost_probe_p50=percentile(vals,0.50),
+            base_cost_probe_p95=percentile(vals,0.95),
+            base_cost_probe_p99=percentile(vals,0.99),
+            base_cost_probe_max=float(vals.max()) if finite else float("nan"),
+            source_y_revin_abs_max=float(source_revin.abs().max()),
+            target_y_revin_abs_max=float(target_revin.abs().max()),
+            source_y_revin_abs_p99=percentile(source_revin.abs().reshape(-1),0.99),
+            target_y_revin_abs_p99=percentile(target_revin.abs().reshape(-1),0.99),
+            source_bad_node=s_node, target_bad_node=t_node,
+            source_bad_window=s_window, target_bad_window=t_window,
+            source_hist_std_min=float(s_std.min()),
+            target_hist_std_min=float(t_std.min()),
+            source_hist_std_p01=percentile(s_std,0.01),
+            target_hist_std_p01=percentile(t_std,0.01),
+            source_hist_std_lt_0p001=float((s_std < 0.001).float().mean()),
+            target_hist_std_lt_0p001=float((t_std < 0.001).float().mean()),
+            source_huge_y_rate=float((source_revin.abs()>100).float().mean()),
+            target_huge_y_rate=float((target_revin.abs()>100).float().mean()),
+        )
+    _append_csv(args.save_dir,"ot_numeric_health.csv",OT_HEALTH_FIELDS,[out])
+    return out
