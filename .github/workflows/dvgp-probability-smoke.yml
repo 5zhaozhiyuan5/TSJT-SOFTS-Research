@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - experiment/dvgp-neural-probability-20261123
+      - experiment/dvgp-ot-weight-repair-20261123
   workflow_dispatch:
 jobs:
   cpu-smoke:
@@ -19,5 +20,7 @@ jobs:
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
       - name: Run probability shape, gradient, and checkpoint smoke tests
         run: python -m unittest discover -s tests -p 'test_domain_probability.py' -v
+      - name: Test controlled OT weight strategies
+        run: python -m unittest discover -s tests -p 'test_ot_weight_strategies.py' -v
       - name: Compile modified entry points
-        run: python -m py_compile model/Meta_Models/probability_estimators.py model/Meta_Models/PMME.py run_stage1_experiment.py train_DA_OT.py
+        run: python -m py_compile model/Meta_Models/ot_weight_strategies.py model/Meta_Models/probability_estimators.py model/Meta_Models/PMME.py run_stage1_experiment.py train_DA_OT.py
