@@ -25,6 +25,7 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
+from probability_estimators import DomainProbabilityNet
 
 def log_verbose(args, msg):
     print(msg)
@@ -144,39 +145,54 @@ class STRep(nn.Module):
         
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
         
-        input_dim = 36
+        self.probability_estimator = getattr(args, "probability_estimator", "dvgp")
+        self.probability_variant = getattr(args, "probability_variant", "mlp")
+        self.probability_lr = float(getattr(args, "probability_lr", 1e-3))
+        if self.probability_estimator not in ("dvgp", "neural"):
+            raise ValueError("probability_estimator must be dvgp or neural")
+        if self.probability_estimator == "dvgp":
+            input_dim = 36
+            
+            num_inducing = 256
+            inducing_points1 = torch.randn(num_inducing, input_dim).to(self.device) 
+            inducing_points2 = torch.randn(num_inducing, input_dim).to(self.device) 
+            inducing_points3 = torch.randn(num_inducing, input_dim).to(self.device) 
+            
         
-        num_inducing = 256
-        inducing_points1 = torch.randn(num_inducing, input_dim).to(self.device) 
-        inducing_points2 = torch.randn(num_inducing, input_dim).to(self.device) 
-        inducing_points3 = torch.randn(num_inducing, input_dim).to(self.device) 
-        
-    
-        self.gp1 = GPClassificationModel(input_dim, inducing_points1).to(self.device)
-        self.gp2 = GPClassificationModel(input_dim, inducing_points2).to(self.device)
-        self.gp3 = GPClassificationModel(input_dim, inducing_points3).to(self.device)
-        
-        self.likelihood1 = BernoulliLikelihood().to(self.device)
-        self.likelihood2 = BernoulliLikelihood().to(self.device)
-        self.likelihood3 = BernoulliLikelihood().to(self.device)
-        
-        self.optimizer1 = torch.optim.Adam([
-            {'params': self.gp1.parameters()},
-            {'params': self.likelihood1.parameters()},
-        ], lr=0.01)
-        
-        self.optimizer2 = torch.optim.Adam([
-            {'params': self.gp2.parameters()},
-            {'params': self.likelihood2.parameters()},
-        ], lr=0.01)
-        
-        self.optimizer3 = torch.optim.Adam([
-            {'params': self.gp3.parameters()},
-            {'params': self.likelihood3.parameters()},
-        ], lr=0.01)
-        
-    
-    
+            self.gp1 = GPClassificationModel(input_dim, inducing_points1).to(self.device)
+            self.gp2 = GPClassificationModel(input_dim, inducing_points2).to(self.device)
+            self.gp3 = GPClassificationModel(input_dim, inducing_points3).to(self.device)
+            
+            self.likelihood1 = BernoulliLikelihood().to(self.device)
+            self.likelihood2 = BernoulliLikelihood().to(self.device)
+            self.likelihood3 = BernoulliLikelihood().to(self.device)
+            
+            self.optimizer1 = torch.optim.Adam([
+                {'params': self.gp1.parameters()},
+                {'params': self.likelihood1.parameters()},
+            ], lr=0.01)
+            
+            self.optimizer2 = torch.optim.Adam([
+                {'params': self.gp2.parameters()},
+                {'params': self.likelihood2.parameters()},
+            ], lr=0.01)
+            
+            self.optimizer3 = torch.optim.Adam([
+                {'params': self.gp3.parameters()},
+                {'params': self.likelihood3.parameters()},
+            ], lr=0.01)
+        else:
+            # Exactly three independently trained domain classifiers, one per source.
+            # Registered modules are checkpointed with the STRep state_dict.
+            self.neural_classifiers = nn.ModuleList([
+                DomainProbabilityNet(horizon=36, hidden=32, variant=self.probability_variant)
+                for _ in range(3)
+            ]).to(self.device)
+            self.neural_optimizers = [
+                optim.AdamW(net.parameters(), lr=self.probability_lr, weight_decay=1e-3)
+                for net in self.neural_classifiers
+            ]
+
     def meta_train_revise(self, data, matrix, epoch): 
         
         total_mae = []
@@ -283,36 +299,53 @@ class STRep(nn.Module):
                 if epoch%25==0:
                     print('optimizing now')
 
-                if shape0 == shape0_list[0]:
-                    self.elbo1 = VariationalELBO(self.likelihood1, self.gp1, num_data=y.shape[0])
-                    self.optimizer1.zero_grad()
-                    outputs = self.gp1(y)
-                    probs = self.likelihood1(outputs).probs
-                    loss = -self.elbo1(outputs, labels.long())
-                    loss.backward()
-                    self.optimizer1.step()
-                    
-                elif shape0 == shape0_list[1]:
-                    self.elbo2 = VariationalELBO(self.likelihood2, self.gp2, num_data=y.shape[0])
-                    self.optimizer2.zero_grad()
-                    outputs = self.gp2(y)
-                    probs = self.likelihood2(outputs).probs
-                    loss = -self.elbo2(outputs, labels.long())
-                    loss.backward()
-                    self.optimizer2.step()
-                    
-                elif shape0 == shape0_list[2]:
-                    self.elbo3 = VariationalELBO(self.likelihood3, self.gp3, num_data=y.shape[0])
-                    self.optimizer3.zero_grad()
-                    outputs = self.gp3(y)
-                    probs = self.likelihood3(outputs).probs
-                    loss = -self.elbo3(outputs, labels.long())
-                    loss.backward()
-                    self.optimizer3.step()
-               
-                l1 = x1.shape[0]
-                prob1, prob2 = probs[:l1], 1-probs[l1:] 
-                
+                if self.probability_estimator == "dvgp":
+                    if shape0 == shape0_list[0]:
+                        self.elbo1 = VariationalELBO(self.likelihood1, self.gp1, num_data=y.shape[0])
+                        self.optimizer1.zero_grad()
+                        outputs = self.gp1(y)
+                        probs = self.likelihood1(outputs).probs
+                        loss = -self.elbo1(outputs, labels.long())
+                        loss.backward()
+                        self.optimizer1.step()
+                        
+                    elif shape0 == shape0_list[1]:
+                        self.elbo2 = VariationalELBO(self.likelihood2, self.gp2, num_data=y.shape[0])
+                        self.optimizer2.zero_grad()
+                        outputs = self.gp2(y)
+                        probs = self.likelihood2(outputs).probs
+                        loss = -self.elbo2(outputs, labels.long())
+                        loss.backward()
+                        self.optimizer2.step()
+                        
+                    elif shape0 == shape0_list[2]:
+                        self.elbo3 = VariationalELBO(self.likelihood3, self.gp3, num_data=y.shape[0])
+                        self.optimizer3.zero_grad()
+                        outputs = self.gp3(y)
+                        probs = self.likelihood3(outputs).probs
+                        loss = -self.elbo3(outputs, labels.long())
+                        loss.backward()
+                        self.optimizer3.step()
+                   
+                    l1 = x1.shape[0]
+                    prob1, prob2 = probs[:l1], 1-probs[l1:]
+                else:
+                    # Same domain event and weight orientation as the original GP.
+                    source_idx = shape0_list.index(shape0)
+                    classifier = self.neural_classifiers[source_idx]
+                    optimizer = self.neural_optimizers[source_idx]
+                    logits = classifier(y)
+                    clf_loss = F.binary_cross_entropy_with_logits(logits, labels)
+                    probs = torch.sigmoid(logits.detach())
+                    optimizer.zero_grad(set_to_none=True)
+                    clf_loss.backward()
+                    torch.nn.utils.clip_grad_norm_(classifier.parameters(), 5.0)
+                    optimizer.step()
+                    l1 = x1.shape[0]
+                    prob1, prob2 = probs[:l1], 1 - probs[l1:]
+                    if epoch % 25 == 0:
+                        print("neural_domain_bce", float(clf_loss.detach()), "variant", self.probability_variant)
+
                 prob1_true = 1-prob1 
                 prob2_true = 1-prob2 
                 
