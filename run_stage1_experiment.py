@@ -305,7 +305,7 @@ def main():
                 if epoch % 25 == 0:
                     with open(save_dir / "ot_weight_diagnostics.jsonl", "a", encoding="utf-8") as diagnostics_file:
                         for diag in getattr(model, "last_ot_diagnostics", []):
-                            diagnostics_file.write(json.dumps(json_safe(diag), ensure_ascii=False) + "\\n")
+                            diagnostics_file.write(json.dumps(json_safe(diag), ensure_ascii=False) + "\n")
             else:
                 model.train()
                 train_record = model.train_step(data, epoch)
