@@ -26,6 +26,8 @@ from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
 from probability_estimators import DomainProbabilityNet
+from ot_weight_strategies import build_ot_weights
+import json
 
 def log_verbose(args, msg):
     print(msg)
@@ -148,6 +150,10 @@ class STRep(nn.Module):
         self.probability_estimator = getattr(args, "probability_estimator", "dvgp")
         self.probability_variant = getattr(args, "probability_variant", "mlp")
         self.probability_lr = float(getattr(args, "probability_lr", 1e-3))
+        self.ot_weight_strategy = getattr(args, "ot_weight_strategy", "legacy")
+        self.ot_scale_strategy = getattr(args, "ot_scale_strategy", "legacy")
+        self.ot_weight_floor = float(getattr(args, "ot_weight_floor", 0.05))
+        self.ot_weight_power = float(getattr(args, "ot_weight_power", 1.0))
         if self.probability_estimator not in ("dvgp", "neural"):
             raise ValueError("probability_estimator must be dvgp or neural")
         if self.probability_estimator == "dvgp":
@@ -271,7 +277,8 @@ class STRep(nn.Module):
         
         B = 16
         OT_loss = 0.0
-        OT_loss_ratio = 1.0  
+        OT_loss_ratio = 1.0
+        ot_epoch_diagnostics = []
         criterion = SamplesLoss(loss="sinkhorn", p=1, backend="tensorized", debias=False, blur=0.001) # p=1
 
         for index in range(len(rep_source)):      
@@ -361,34 +368,28 @@ class STRep(nn.Module):
                     print(f'Classifier_Accuracy_update: {acc:.4f}',len(prob1),len(prob2))
                     print('error_prob_mean', prob1.mean(), prob2.mean()) 
                     
-                thresh = self.classifier_args 
-                mask1 = prob1 > thresh
-                mask2 = prob2 > thresh
-                count1 = torch.sum(mask1).detach().cpu().numpy()
-                count2 = torch.sum(mask2).detach().cpu().numpy()
-                ratio1 = count1/len(mask1)
-                ratio2 = count2/len(mask2)
-                
-                if ratio1>0.00 and ratio2>0.00:
-                    if epoch%25==0:
-                        print('ratio1, ratio2', ratio1, ratio2)
-                    def threshold(x):   
-                        return torch.where(x > thresh, x, torch.tensor(0.0, device=x.device))
-                    
-                    prob1, prob2 = threshold(prob1).detach(), threshold(prob2).detach() 
-                    alpha = (prob1/torch.sum(prob1)).detach()
-                    beta = (prob2/torch.sum(prob2)).detach()
-                    
-                   
-                    OT_loss_scale = torch.sqrt(((prob1.mean())*(prob2.mean())).detach())
-                    
-                    if epoch%25==0:
-                        print('OT_loss_scale', OT_loss_scale)
-            
+                alpha, beta, OT_loss_scale, ot_active, ot_diag = build_ot_weights(
+                    prob1, prob2,
+                    strategy=self.ot_weight_strategy,
+                    scale_strategy=self.ot_scale_strategy,
+                    threshold=self.classifier_args,
+                    floor=self.ot_weight_floor,
+                    power=self.ot_weight_power,
+                )
+                ratio1 = ot_diag["selected_source_fraction"]
+                ratio2 = ot_diag["selected_target_fraction"]
+                ot_diag["source_nodes"] = int(shape0)
+                ot_diag["epoch"] = int(epoch)
+                ot_epoch_diagnostics.append(ot_diag)
+                if epoch % 25 == 0:
+                    print("OT_WEIGHT_DIAG " + json.dumps(ot_diag, sort_keys=True))
             else:
-                alpha = torch.ones(size1, device='cuda')/size1  
-                beta = torch.ones(size2, device='cuda')/size2  
-                OT_loss_scale = 1
+                # Preserve the official no-classifier uniform baseline.
+                alpha = torch.ones(size1, device=x1.device) / size1
+                beta = torch.ones(size2, device=x2.device) / size2
+                OT_loss_scale = x1.new_tensor(1.0)
+                ratio1, ratio2 = 1.0, 1.0
+                ot_active = True
 
             if self.DA == 'OT':
                 if (epoch>=self.DAepoch_args): 
@@ -399,11 +400,13 @@ class STRep(nn.Module):
                     x = torch.cat((x1,y1),dim=-1) 
                     y = torch.cat((x2,y2),dim=-1) # y: target  
                     
-                    if (ratio1>0.00 and ratio2>0.00):
-                        OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args *OT_loss_scale
+                    if ot_active:
+                        OT_loss = torch.sum(criterion(alpha, x, beta, y)) * self.DAcoef_args * OT_loss_scale
                     else:
-                        OT_loss = 0
+                        OT_loss = x1.new_zeros(())
                     DA_losses.append(OT_loss)
+                    if self.classifier_args > 1e-6 and ot_epoch_diagnostics:
+                        ot_epoch_diagnostics[-1]["ot_loss"] = float(OT_loss.detach().cpu())
 
             elif self.DA == 'CMMD':
                 if (epoch>=self.DAepoch_args): 
@@ -428,6 +431,7 @@ class STRep(nn.Module):
                     DA_losses.append(coral(x1, x2)*self.DAcoef_args)
             
                     
+        self.last_ot_diagnostics = ot_epoch_diagnostics
         task_loss = task_losses[0] + task_losses[1] + task_losses[2]
         if len(DA_losses) == 0:
             DA_loss = 0
