@@ -1,0 +1,23 @@
+name: DVGP neural probability smoke
+on:
+  push:
+    branches:
+      - experiment/dvgp-neural-probability-20261123
+  workflow_dispatch:
+jobs:
+  cpu-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU PyTorch
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Run probability shape, gradient, and checkpoint smoke tests
+        run: python -m unittest discover -s tests -p 'test_domain_probability.py' -v
+      - name: Compile modified entry points
+        run: python -m py_compile model/Meta_Models/probability_estimators.py model/Meta_Models/PMME.py run_stage1_experiment.py train_DA_OT.py
