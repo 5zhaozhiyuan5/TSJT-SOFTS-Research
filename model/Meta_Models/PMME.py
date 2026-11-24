@@ -26,7 +26,7 @@ from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
-from probability_estimators import DomainProbabilityNet
+from transfer_utility import VARIANTS, compute_weights
 
 def log_verbose(args, msg):
     print(msg)
@@ -146,23 +146,23 @@ class STRep(nn.Module):
         
         self.loss_criterion = nn.SmoothL1Loss(reduction='mean', beta=5e-4) 
         
-        # The ONLY experimental change: replace the three DVGP classifiers.
-        # Official train_DA_OT.py, sampling, OT, backbone, and Stage-II stay untouched.
-        self.probability_variant = os.environ.get("PMME_PROBABILITY_VARIANT", "mlp").strip().lower()
-        if self.probability_variant not in DomainProbabilityNet.VALID_VARIANTS:
-            raise ValueError(
-                "PMME_PROBABILITY_VARIANT must be mlp, multiscale, dynamics, or horizon"
-            )
-        self.neural_classifiers = nn.ModuleList([
-            DomainProbabilityNet(horizon=36, hidden=32, variant=self.probability_variant)
-            for _ in range(3)
-        ]).to(self.device)
-        self.neural_optimizers = [
-            optim.AdamW(network.parameters(), lr=1e-3, weight_decay=1e-3)
-            for network in self.neural_classifiers
-        ]
-        print("PMME_STAGE1_NEURAL_VARIANT", self.probability_variant)
+        # F1-F4 replace DVGP with forecasting-task gradient utilities.
+        # The backbone, Sinkhorn operator, Stage-II and training runner are not changed.
+        self.transfer_variant = os.environ.get(
+            "PMME_TRANSFER_VARIANT", "uniform"
+        ).strip().lower()
+        if self.transfer_variant not in VARIANTS:
+            raise ValueError("PMME_TRANSFER_VARIANT must be one of " + str(VARIANTS))
+        self._capture_transfer = False
+        self._transfer_records = []
 
+        def _record_projection2(_module, inputs, output):
+            if self._capture_transfer:
+                self._transfer_records.append((inputs[0], output))
+        self._transfer_hook = self.model.forecasting_model.projection2.register_forward_hook(
+            _record_projection2
+        )
+        print("PMME_STAGE1_TRANSFER_VARIANT", self.transfer_variant)
 
     def meta_train_revise(self, data, matrix, epoch): 
         
@@ -177,6 +177,13 @@ class STRep(nn.Module):
         y_source = []
         y_target = []
 
+        # Only capture the final forecast head when OT is actually active.
+        need_transfer = (
+            self.DA == 'OT' and epoch >= self.DAepoch_args
+            and self.transfer_variant != 'uniform'
+        )
+        self._transfer_records = []
+        self._capture_transfer = need_transfer
         target_task_loss = 0
         for i in range(len(data)):  
             task_loss = 0
@@ -224,6 +231,25 @@ class STRep(nn.Module):
                 target_task_loss = loss
             
             
+        self._capture_transfer = False
+        if need_transfer:
+            if len(self._transfer_records) != len(data):
+                raise RuntimeError(
+                    "Expected one shared-head forward per city, got %d" %
+                    len(self._transfer_records)
+                )
+            target_features, target_head_output = self._transfer_records[0]
+            target_deltas = torch.autograd.grad(
+                target_task_loss, target_head_output, retain_graph=True
+            )[0].detach()
+            target_split = [15, 15, target_features.shape[0] - 30]
+            target_feature_groups = torch.split(
+                target_features.detach(), target_split, dim=0
+            )
+            target_delta_groups = torch.split(
+                target_deltas, target_split, dim=0
+            )
+
         model_loss = 0 
 
         DA_loss = 0
@@ -249,8 +275,6 @@ class STRep(nn.Module):
 
             size1, size2 = rep_source[index].shape[0]*rep_source[index].shape[1], rep_target[index].shape[0]*rep_target[index].shape[1]
             # print(size1, size2)
-            labels1, labels2 = torch.zeros(size1, device=self.device), torch.ones(size2, device=self.device) 
-            labels = torch.cat((labels1, labels2), dim=0)
 
             x1,y1 = rep_source[index], y_source[index] 
             x2,y2 = rep_target[index], y_target[index]
@@ -265,72 +289,28 @@ class STRep(nn.Module):
             y2 = y2.view(-1, y2.size(-1))
             
 
-            if self.classifier_args>1e-6:
-                y = torch.cat((y1, y2), dim=0).detach()
-                if epoch%25==0:
-                    print('optimizing now')
-
-                # Domain labels are unchanged: source=0, target=1.
-                # The returned weights keep the original DVGP orientation.
-                source_idx = shape0_list.index(shape0)
-                classifier = self.neural_classifiers[source_idx]
-                optimizer = self.neural_optimizers[source_idx]
-                logits = classifier(y)
-                classifier_loss = F.binary_cross_entropy_with_logits(logits, labels)
-                probs = torch.sigmoid(logits.detach())
-                optimizer.zero_grad(set_to_none=True)
-                classifier_loss.backward()
-                torch.nn.utils.clip_grad_norm_(classifier.parameters(), 5.0)
-                optimizer.step()
+            # F1: uniform source/target OT marginals.
+            # F2-F4: task-conditioned source marginals; target stays uniform.
+            # No domain classifier, BCE, pseudo-domain labels or DVGP.
+            alpha = torch.full((size1,), 1.0 / size1, device=x1.device)
+            beta = torch.full((size2,), 1.0 / size2, device=x2.device)
+            OT_loss_scale = 1.0
+            ratio1, ratio2 = 1.0, 1.0
+            if need_transfer:
+                source_features, source_head_output = self._transfer_records[index + 1]
+                source_deltas = torch.autograd.grad(
+                    task_losses[index], source_head_output, retain_graph=True
+                )[0].detach()
+                alpha, beta, utility_stats = compute_weights(
+                    source_features.detach(), source_deltas,
+                    target_feature_groups[index], target_delta_groups[index],
+                    self.transfer_variant
+                )
                 if epoch % 25 == 0:
-                    print("neural_domain_bce", float(classifier_loss.detach()), "variant", self.probability_variant)
-
-                l1 = x1.shape[0]
-                prob1, prob2 = probs[:l1], 1-probs[l1:] 
-                
-                prob1_true = 1-prob1 
-                prob2_true = 1-prob2 
-                
-                mask1 = prob1_true > 0.5
-                
-                count1 = torch.sum(mask1)
-                
-                mask2 = prob2_true > 0.5
-                count2 = torch.sum(mask2)
-                
-                acc = (count1+count2)/(len(prob1)+len(prob2))
-                if epoch%25==0:
-                    print(f'Classifier_Accuracy_update: {acc:.4f}',len(prob1),len(prob2))
-                    print('error_prob_mean', prob1.mean(), prob2.mean()) 
-                    
-                thresh = self.classifier_args 
-                mask1 = prob1 > thresh
-                mask2 = prob2 > thresh
-                count1 = torch.sum(mask1).detach().cpu().numpy()
-                count2 = torch.sum(mask2).detach().cpu().numpy()
-                ratio1 = count1/len(mask1)
-                ratio2 = count2/len(mask2)
-                
-                if ratio1>0.00 and ratio2>0.00:
-                    if epoch%25==0:
-                        print('ratio1, ratio2', ratio1, ratio2)
-                    def threshold(x):   
-                        return torch.where(x > thresh, x, torch.tensor(0.0, device=x.device))
-                    
-                    prob1, prob2 = threshold(prob1).detach(), threshold(prob2).detach() 
-                    alpha = (prob1/torch.sum(prob1)).detach()
-                    beta = (prob2/torch.sum(prob2)).detach()
-                    
-                   
-                    OT_loss_scale = torch.sqrt(((prob1.mean())*(prob2.mean())).detach())
-                    
-                    if epoch%25==0:
-                        print('OT_loss_scale', OT_loss_scale)
-            
-            else:
-                alpha = torch.ones(size1, device='cuda')/size1  
-                beta = torch.ones(size2, device='cuda')/size2  
-                OT_loss_scale = 1
+                    print("task_utility", self.transfer_variant, index, utility_stats)
+            elif epoch % 25 == 0:
+                print("task_utility", self.transfer_variant, index,
+                      "uniform or OT not active")
 
             if self.DA == 'OT':
                 if (epoch>=self.DAepoch_args): 
@@ -435,6 +415,7 @@ class STRep(nn.Module):
             self.current_epoch += 1
         
             
+        self._transfer_records = []
         return model_loss.detach().cpu().numpy(),np.mean(total_mse), np.mean(total_rmse), np.mean(total_mae),np.mean(total_mape)
         
         
