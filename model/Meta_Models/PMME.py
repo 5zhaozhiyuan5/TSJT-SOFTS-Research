@@ -264,6 +264,7 @@ class STRep(nn.Module):
         target_probe_prediction = None
         target_probe_groundtruth = None
         target_probe_scale = None
+        target_fit_loss = None
         target_task_loss = 0
         for i in range(len(data)):  
             task_loss = 0
@@ -310,6 +311,15 @@ class STRep(nn.Module):
 
                 target_task_loss = loss
                 if need_feedback:
+                    # Internal decision-only split: probe labels must not
+                    # enter the local proxy's target alignment weights or
+                    # one-sided projection direction.
+                    fit_window_mask = (
+                        torch.arange(out.shape[0], device=out.device) % 5 != 0
+                    )
+                    target_fit_loss = self.loss_criterion(
+                        out[fit_window_mask], y[fit_window_mask]
+                    )
                     # ReVIN + data unnormalization is an affine scale after
                     # projection2. Record it before the next city's forward.
                     global_std = torch.as_tensor(
@@ -355,7 +365,7 @@ class STRep(nn.Module):
                 sum(task_losses), shared_head, retain_graph=True
             )[0].detach()
             target_head_gradient = torch.autograd.grad(
-                target_task_loss, shared_head, retain_graph=True
+                target_fit_loss, shared_head, retain_graph=True
             )[0].detach()
             head2_weights = (
                 self.model.forecasting_model.projection2.weight.detach()
@@ -462,6 +472,19 @@ class STRep(nn.Module):
                     subset_y = target_group_y[allowed]
                     subset_pre = target_group_pre[allowed]
                     source_pre = self._feedback_inputs[index + 1]
+                    # The main F2 training weights intentionally use the
+                    # official full support batch (G0 unchanged). The
+                    # diagnostic/decision candidates are recomputed from
+                    # only the non-probe target windows to avoid direct
+                    # probe-label contamination of their similarity scores.
+                    probe_f2_alpha, _, probe_weight_stats = compute_weights(
+                        source_features.detach(), source_deltas,
+                        target_feature_groups[index][allowed],
+                        target_delta_groups[index][allowed],
+                        "gradient",
+                        temperature=self.transfer_temperature,
+                        min_ess_fraction=self.transfer_min_ess
+                    )
                     results = evaluate_feedback_candidates(
                         source_rep=x1.detach(),
                         target_rep=subset_r.reshape(-1, subset_r.shape[-1]),
@@ -473,7 +496,7 @@ class STRep(nn.Module):
                         target_pre=subset_pre.reshape(
                             -1, subset_pre.shape[-1]
                         ),
-                        f2_alpha=alpha.detach(),
+                        f2_alpha=probe_f2_alpha.detach(),
                         target_probe_pre=probe_pre,
                         target_probe_output=probe_pred,
                         target_probe_y=probe_true,
@@ -501,7 +524,9 @@ class STRep(nn.Module):
                         selected = 1.0  # G1 diagnostics only, same training as G0.
                     print("transfer_feedback", self.feedback_mode,
                           "epoch", epoch, "source_nodes", int(shape0),
-                          "selected", selected, "results", results)
+                          "selected", selected,
+                          "probe_weight", probe_weight_stats,
+                          "results", results)
 
                 if self.feedback_mode in ("g2", "g3"):
                     selected = self.feedback_choices.get(int(shape0), 1.0)
