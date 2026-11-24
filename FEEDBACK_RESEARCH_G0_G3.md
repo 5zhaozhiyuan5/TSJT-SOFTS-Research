@@ -96,7 +96,10 @@ For each of 3 source cities, on the first OT-enabled epoch and then every
    costly encoder frozen: `gW = grad_rep_source.T @ pre_source +
    grad_rep_target.T @ pre_target`. NO full-backbone per-item backward.
 4. Compute approximate marginal change in PMME's one-sided projected task
-   gradient after adding this candidate OT gradient. Apply a bounded virtual
+   gradient after adding this candidate OT gradient. For candidate scoring,
+   calculate F2 source weights and the target projection direction using
+   ONLY the non-probe target windows (the actual G0/F2 training weights
+   still follow the original full-support route). Apply a bounded virtual
    change **only to projection1.weight**, not to actual model weights. The
    effect on `projection2` and the final *unnormalized physical predictions*
    is linear and exactly evaluated with cached encoder activations.
@@ -126,8 +129,14 @@ For each of 3 source cities, on the first OT-enabled epoch and then every
   and Stage-II outcomes in a same-seed run.
 - The original model already uses all 45 target support windows for
   supervised target projection. The G1/G2 local probe is separated from
-  **candidate OT estimation**, NOT from all model training. Holdout
-  temporal leakage remains a limitation that requires careful future work.
+  **candidate OT estimation, candidate F2 weighting, and proxy target
+  projection gradient**, but NOT from all model training. Windows may
+  have overlapping forecast intervals even when distinct in this fixed
+  index split, and support labels were seen by earlier model updates.
+  This is NOT a truly held-out chronological validation set.
+- Source-city feedback is keyed by the distinct source sensor counts,
+  **not the per-epoch random source-city order**. A policy persists for
+  the intended city across randomly ordered source mini-batches.
 - Selecting from three candidate actions plus no-OT is a discrete,
   interval-level procedure; G2 is NOT a differentiable full bilevel solver.
 - The candidate OT sample and virtual readout are approximations; the best
