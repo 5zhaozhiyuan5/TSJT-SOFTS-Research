@@ -45,8 +45,9 @@ full proofs. Related ideas are **not new**:
    Partial Domain Adaptation via Partial Optimal Transport*,
    https://proceedings.mlr.press/v267/naram25a.html:
    selective/partial mass transfer as a principled related direction.
-6. **Grangier et al. (TMLR 2024)**, bilevel data weighting for distribution
-   adaptation (author PDF:
+6. **Grangier et al. (TMLR 2024)**, *Adaptive Training Distributions
+   with Scalable Online Bilevel Optimization*, an online bilevel data
+   reweighting method (author PDF:
    https://david.grangier.info/papers/2024/grangier_ablin_hannun_bilevel_data_weighting_tmlr_2024.pdf):
    predicts which training gradients help target distribution; close to
    G1/G2 and important when evaluating novelty.
