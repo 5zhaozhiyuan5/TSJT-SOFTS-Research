@@ -124,9 +124,10 @@ def _smooth_l1_bands(pred, truth, beta):
     return float(total), [float(v) for v in bands]
 
 
-def _readout_delta(probe_input, delta_weight, projection2_weight,
-                   physical_scale):
-    hidden = F.linear(probe_input.float(), delta_weight.float())
+def _readout_delta(probe_input, delta_weight, delta_bias,
+                   projection2_weight, physical_scale):
+    hidden = F.linear(probe_input.float(), delta_weight.float(),
+                      delta_bias.float())
     delta = F.linear(hidden, projection2_weight.float())
     return delta * physical_scale.float()
 
@@ -199,15 +200,19 @@ def audit_h1_shadow_update(*, model, optimizer, source_task_loss,
             # gradient delta against the UNUPDATED prediction as G2 did).
             name = "forecasting_model.projection1.weight"
             p1 = dict(named)[name].detach()
+            bias_name = "forecasting_model.projection1.bias"
+            p1_bias = dict(named)[bias_name].detach()
             p2 = dict(named)["forecasting_model.projection2.weight"].detach()
             pre = probe_input.detach()
             original_prediction = probe_prediction.detach().float()
             scale = probe_scale.detach()
             proxy_no_ot = original_prediction + _readout_delta(
-                pre, no_ot[name] - p1, p2, scale
+                pre, no_ot[name] - p1,
+                no_ot[bias_name] - p1_bias, p2, scale
             )
             proxy_f2_ot = original_prediction + _readout_delta(
-                pre, f2_ot[name] - p1, p2, scale
+                pre, f2_ot[name] - p1,
+                f2_ot[bias_name] - p1_bias, p2, scale
             )
             local_base, local_base_bands = _smooth_l1_bands(
                 proxy_no_ot, probe_target.float(), beta
