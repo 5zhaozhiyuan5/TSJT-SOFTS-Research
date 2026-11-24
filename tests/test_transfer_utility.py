@@ -54,5 +54,32 @@ class TransferUtilityTests(unittest.TestCase):
             self.assertTrue(torch.isfinite(source_zero).all().item())
 
 
+    def test_head_gradient_cosine_matches_explicit_outer_products(self):
+        from model.Meta_Models.transfer_utility import _head_gradient_cosine
+        torch.manual_seed(17)
+        fs = torch.randn(2, 3, 128)
+        ds = torch.randn(2, 3, 36)
+        ft = torch.randn(2, 4, 128)
+        dt = torch.randn(2, 4, 36)
+        for start, end in ((0, 36), (0, 12), (12, 24), (24, 36)):
+            optimized = _head_gradient_cosine(
+                fs, ds, ft, dt, start, end
+            ).reshape(-1)
+            target_grad = torch.einsum(
+                "bnh,bnd->hd", dt[..., start:end], ft
+            )
+            direct = []
+            for features, delta in zip(fs.reshape(-1, 128),
+                                       ds[..., start:end].reshape(-1, end-start)):
+                src_grad = torch.outer(delta, features)
+                dot = (src_grad * target_grad).sum()
+                denom = src_grad.norm() * target_grad.norm() + 1e-12
+                direct.append(dot / denom)
+            direct = torch.stack(direct)
+            self.assertTrue(torch.allclose(
+                optimized, direct, atol=5e-6, rtol=1e-5
+            ))
+
+
 if __name__ == "__main__":
     unittest.main()
