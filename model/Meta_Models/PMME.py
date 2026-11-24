@@ -25,6 +25,9 @@ from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
 from transfer_utility import VARIANTS, compute_weights
+from feedback_utility import (
+    blend_source_weights, evaluate_feedback_candidates, select_feedback_policy
+)
 
 def log_verbose(args, msg):
     print(msg)
@@ -177,7 +180,56 @@ class STRep(nn.Module):
         ))
         if not 0 < self.transfer_min_ess <= 1:
             raise ValueError("PMME_TRANSFER_MIN_ESS must be in (0, 1]")
+        # G0: exact F2 route. G1: probe only. G2/G3: feedback-controlled
+        # F2/Uniform blending with optional no-OT fallback, per source city.
+        self.feedback_mode = os.environ.get(
+            "PMME_FEEDBACK_MODE", "g0"
+        ).strip().lower()
+        if self.feedback_mode not in ("g0", "g1", "g2", "g3"):
+            raise ValueError("PMME_FEEDBACK_MODE must be g0, g1, g2, or g3")
+        if self.transfer_variant != "gradient":
+            raise ValueError("G0-G3 require PMME_TRANSFER_VARIANT=gradient")
+        self.feedback_interval = int(os.environ.get(
+            "PMME_FEEDBACK_INTERVAL", "200"
+        ))
+        self.feedback_source_n = int(os.environ.get(
+            "PMME_FEEDBACK_SOURCE_N", "256"
+        ))
+        self.feedback_target_n = int(os.environ.get(
+            "PMME_FEEDBACK_TARGET_N", "128"
+        ))
+        self.feedback_step = float(os.environ.get(
+            "PMME_FEEDBACK_STEP", "0.05"
+        ))
+        self.feedback_max_norm = float(os.environ.get(
+            "PMME_FEEDBACK_MAX_NORM", "0.02"
+        ))
+        self.feedback_risk = float(os.environ.get(
+            "PMME_FEEDBACK_RISK", "1.0"
+        ))
+        if (self.feedback_interval < 1 or self.feedback_source_n < 1 or
+                self.feedback_target_n < 1 or
+                not all(math.isfinite(v) and v > 0 for v in
+                        (self.feedback_step, self.feedback_max_norm)) or
+                not math.isfinite(self.feedback_risk) or self.feedback_risk < 0):
+            raise ValueError("Invalid PMME_FEEDBACK_* configuration")
+        self.feedback_choices = {}
+        self._feedback_inputs = []
+        self._capture_feedback = False
+
+        def _record_projection1(_module, inputs, _output):
+            if self._capture_feedback:
+                # Pre-projection1 inputs provide the EXACT linear Jacobian.
+                self._feedback_inputs.append(inputs[0].detach())
+        self._feedback_hook = (
+            self.model.forecasting_model.projection1.register_forward_hook(
+                _record_projection1
+            )
+        )
         print("PMME_STAGE1_TRANSFER_VARIANT", self.transfer_variant)
+        print("PMME_STAGE1_FEEDBACK", self.feedback_mode,
+              "interval", self.feedback_interval,
+              "subset", self.feedback_source_n, self.feedback_target_n)
         print("PMME_STAGE1_TRANSFER_CONFIG", "ot_scale", self.transfer_ot_scale,
               "temperature", self.transfer_temperature,
               "min_ess", self.transfer_min_ess)
@@ -202,6 +254,16 @@ class STRep(nn.Module):
         )
         self._transfer_records = []
         self._capture_transfer = need_transfer
+        # Do not capture another full set of encoder inputs at every step.
+        need_feedback = (
+            need_transfer and self.feedback_mode != "g0" and
+            (epoch - self.DAepoch_args) % self.feedback_interval == 0
+        )
+        self._feedback_inputs = []
+        self._capture_feedback = need_feedback
+        target_probe_prediction = None
+        target_probe_groundtruth = None
+        target_probe_scale = None
         target_task_loss = 0
         for i in range(len(data)):  
             task_loss = 0
@@ -245,11 +307,60 @@ class STRep(nn.Module):
 
             if i ==0 :
                 loss = self.loss_criterion(out, y)
-    
+
                 target_task_loss = loss
+                if need_feedback:
+                    # ReVIN + data unnormalization is an affine scale after
+                    # projection2. Record it before the next city's forward.
+                    global_std = torch.as_tensor(
+                        data[i].stds, device=out.device, dtype=out.dtype
+                    ).reshape(-1)[0]
+                    target_probe_scale = (
+                        self.model.RevIn_std.detach() * global_std
+                    )
+                    target_probe_prediction = out.detach()
+                    target_probe_groundtruth = y.detach()
             
             
         self._capture_transfer = False
+        self._capture_feedback = False
+        if need_feedback and len(self._feedback_inputs) != len(data):
+            raise RuntimeError(
+                "Expected one pre-projection1 record per city, got %d" %
+                len(self._feedback_inputs)
+            )
+        if need_feedback:
+            # Fixed support split for all candidate policies.
+            # With original 15-window per-city target grouping, every fifth
+            # window is a candidate evaluation probe. The proxy OT never
+            # contains those windows. Main PMME training remains unchanged.
+            target_windows = self._feedback_inputs[0].shape[0]
+            probe_idx = torch.arange(
+                0, target_windows, 5, device=self.device
+            )
+            probe_pre = self._feedback_inputs[0].index_select(
+                0, probe_idx
+            )
+            probe_pred = target_probe_prediction.index_select(
+                0, probe_idx
+            )
+            probe_true = target_probe_groundtruth.index_select(
+                0, probe_idx
+            )
+            probe_scale = target_probe_scale.index_select(
+                0, probe_idx
+            )
+            shared_head = self.model.forecasting_model.projection1.weight
+            task_head_gradient = torch.autograd.grad(
+                sum(task_losses), shared_head, retain_graph=True
+            )[0].detach()
+            target_head_gradient = torch.autograd.grad(
+                target_task_loss, shared_head, retain_graph=True
+            )[0].detach()
+            head2_weights = (
+                self.model.forecasting_model.projection2.weight.detach()
+            )
+
         if need_transfer:
             if len(self._transfer_records) != len(data):
                 raise RuntimeError(
@@ -328,6 +439,76 @@ class STRep(nn.Module):
                 )
                 if epoch % 25 == 0:
                     print("task_utility", self.transfer_variant, index, utility_stats)
+
+                if need_feedback:
+                    # Proxy OT and held-out within-batch probe use disjoint
+                    # target WINDOWS. Existing official full OT remains intact.
+                    target_group_rep = rep_target[index].detach()
+                    target_group_y = y_target[index].detach()
+                    target_group_pre = torch.split(
+                        self._feedback_inputs[0],
+                        [15, 15, self._feedback_inputs[0].shape[0] - 30],
+                        dim=0
+                    )[index]
+                    allowed = (
+                        torch.arange(
+                            target_group_rep.shape[0],
+                            device=target_group_rep.device
+                        ) % 5 != 0
+                    )
+                    # All target observations used here still come from
+                    # target's first three days; no later test labels.
+                    subset_r = target_group_rep[allowed]
+                    subset_y = target_group_y[allowed]
+                    subset_pre = target_group_pre[allowed]
+                    source_pre = self._feedback_inputs[index + 1]
+                    results = evaluate_feedback_candidates(
+                        source_rep=x1.detach(),
+                        target_rep=subset_r.reshape(-1, subset_r.shape[-1]),
+                        source_y=y1.detach(),
+                        target_y=subset_y.reshape(-1, subset_y.shape[-1]),
+                        source_pre=source_pre.reshape(
+                            -1, source_pre.shape[-1]
+                        ),
+                        target_pre=subset_pre.reshape(
+                            -1, subset_pre.shape[-1]
+                        ),
+                        f2_alpha=alpha.detach(),
+                        target_probe_pre=probe_pre,
+                        target_probe_output=probe_pred,
+                        target_probe_y=probe_true,
+                        target_probe_scale=probe_scale,
+                        projection2_weight=head2_weights,
+                        task_head_grad=task_head_gradient,
+                        target_head_grad=target_head_gradient,
+                        criterion=criterion,
+                        ot_coefficient=(
+                            self.DAcoef_args * self.transfer_ot_scale
+                        ),
+                        xy_scale=math.sqrt(self.xySquaredRatio_args),
+                        n_source=self.feedback_source_n,
+                        n_target=self.feedback_target_n,
+                        step_size=self.feedback_step,
+                        max_step_norm=self.feedback_max_norm,
+                        risk_penalty=self.feedback_risk,
+                    )
+                    if self.feedback_mode in ("g2", "g3"):
+                        selected = select_feedback_policy(
+                            results, self.feedback_mode
+                        )
+                        self.feedback_choices[index] = selected
+                    else:
+                        selected = 1.0  # G1 diagnostics only, same training as G0.
+                    print("transfer_feedback", self.feedback_mode,
+                          "epoch", epoch, "source", index,
+                          "selected", selected, "results", results)
+
+                if self.feedback_mode in ("g2", "g3"):
+                    selected = self.feedback_choices.get(index, 1.0)
+                    if selected == "off":
+                        OT_loss_scale = 0.0
+                    else:
+                        alpha = blend_source_weights(alpha, float(selected))
             elif epoch % 25 == 0:
                 print("task_utility", self.transfer_variant, index,
                       "uniform or OT not active")
@@ -467,6 +648,7 @@ class STRep(nn.Module):
         
             
         self._transfer_records = []
+        self._feedback_inputs = []
         return model_loss.detach().cpu().numpy(),np.mean(total_mse), np.mean(total_rmse), np.mean(total_mae),np.mean(total_mape)
         
         
