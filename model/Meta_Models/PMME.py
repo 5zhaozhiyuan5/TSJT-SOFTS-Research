@@ -160,7 +160,27 @@ class STRep(nn.Module):
         self._transfer_hook = self.model.forecasting_model.projection2.register_forward_hook(
             _record_projection2
         )
+        # Separate sample selection from OT optimization strength.
+        # All F1-F4 comparisons must use the same fixed scale.
+        self.transfer_ot_scale = float(os.environ.get(
+            "PMME_TRANSFER_OT_SCALE", "0.01"
+        ))
+        if not math.isfinite(self.transfer_ot_scale) or self.transfer_ot_scale <= 0:
+            raise ValueError("PMME_TRANSFER_OT_SCALE must be finite and positive")
+        self.transfer_temperature = float(os.environ.get(
+            "PMME_TRANSFER_TEMPERATURE", "8.0"
+        ))
+        if not math.isfinite(self.transfer_temperature) or self.transfer_temperature <= 0:
+            raise ValueError("PMME_TRANSFER_TEMPERATURE must be finite and positive")
+        self.transfer_min_ess = float(os.environ.get(
+            "PMME_TRANSFER_MIN_ESS", "0.5"
+        ))
+        if not 0 < self.transfer_min_ess <= 1:
+            raise ValueError("PMME_TRANSFER_MIN_ESS must be in (0, 1]")
         print("PMME_STAGE1_TRANSFER_VARIANT", self.transfer_variant)
+        print("PMME_STAGE1_TRANSFER_CONFIG", "ot_scale", self.transfer_ot_scale,
+              "temperature", self.transfer_temperature,
+              "min_ess", self.transfer_min_ess)
 
     def meta_train_revise(self, data, matrix, epoch): 
         
@@ -292,7 +312,7 @@ class STRep(nn.Module):
             # No domain classifier, BCE, pseudo-domain labels or DVGP.
             alpha = torch.full((size1,), 1.0 / size1, device=x1.device)
             beta = torch.full((size2,), 1.0 / size2, device=x2.device)
-            OT_loss_scale = 1.0
+            OT_loss_scale = self.transfer_ot_scale
             ratio1, ratio2 = 1.0, 1.0
             if need_transfer:
                 source_features, source_head_output = self._transfer_records[index + 1]
@@ -302,7 +322,9 @@ class STRep(nn.Module):
                 alpha, beta, utility_stats = compute_weights(
                     source_features.detach(), source_deltas,
                     target_feature_groups[index], target_delta_groups[index],
-                    self.transfer_variant
+                    self.transfer_variant,
+                    temperature=self.transfer_temperature,
+                    min_ess_fraction=self.transfer_min_ess
                 )
                 if epoch % 25 == 0:
                     print("task_utility", self.transfer_variant, index, utility_stats)
@@ -354,7 +376,38 @@ class STRep(nn.Module):
         else:
             DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
         
-        model_loss += (task_loss + DA_loss) 
+        model_loss += (task_loss + DA_loss)
+
+        # Diagnostic ONLY: OT acts on the shared representation upstream of
+        # projection2; its gradient on projection2.weight is necessarily zero.
+        # Inspect projection1.weight where BOTH OT and prediction can act.
+        # This does not modify the model gradients or its optimizer step.
+        if self.DA == 'OT' and epoch >= self.DAepoch_args and epoch % 25 == 0:
+            shared_parameter = self.model.forecasting_model.projection1.weight
+            if isinstance(DA_loss, torch.Tensor) and DA_loss.requires_grad:
+                ot_grad = torch.autograd.grad(
+                    DA_loss, shared_parameter,
+                    retain_graph=True, allow_unused=True
+                )[0]
+                target_grad = torch.autograd.grad(
+                    target_task_loss, shared_parameter,
+                    retain_graph=True, allow_unused=True
+                )[0]
+                if ot_grad is not None and target_grad is not None:
+                    g_ot = ot_grad.detach().float().reshape(-1)
+                    g_target = target_grad.detach().float().reshape(-1)
+                    norm_ot, norm_target = g_ot.norm(), g_target.norm()
+                    norm_ratio = (norm_ot / (norm_target + 1e-12)).item()
+                    cosine = (
+                        (g_ot @ g_target) /
+                        (norm_ot * norm_target + 1e-12)
+                    ).item()
+                    print("task_utility_gradient_diagnostic",
+                          "ot_to_target_norm_ratio", norm_ratio,
+                          "ot_vs_target_cosine", cosine,
+                          "ot_scale", self.transfer_ot_scale)
+                else:
+                    print("task_utility_gradient_diagnostic missing_gradient")
 
         def pcgrad_one_sided(grad_a, grad_b, eps=1e-8):
             
