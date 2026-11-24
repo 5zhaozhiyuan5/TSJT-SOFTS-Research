@@ -19,8 +19,6 @@ from block import *
 
 from geomloss.samples_loss import SamplesLoss 
 from torch.utils.data import TensorDataset, DataLoader
-from gpytorch.mlls.variational_elbo import VariationalELBO
-from gpytorch.likelihoods import BernoulliLikelihood, LaplaceLikelihood
 
 from SOFTS.SOFTS_new import Model as softs
 from iTransformer.iTransformer_new import Model as iTransformer
