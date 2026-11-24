@@ -496,15 +496,15 @@ class STRep(nn.Module):
                         selected = select_feedback_policy(
                             results, self.feedback_mode
                         )
-                        self.feedback_choices[index] = selected
+                        self.feedback_choices[int(shape0)] = selected
                     else:
                         selected = 1.0  # G1 diagnostics only, same training as G0.
                     print("transfer_feedback", self.feedback_mode,
-                          "epoch", epoch, "source", index,
+                          "epoch", epoch, "source_nodes", int(shape0),
                           "selected", selected, "results", results)
 
                 if self.feedback_mode in ("g2", "g3"):
-                    selected = self.feedback_choices.get(index, 1.0)
+                    selected = self.feedback_choices.get(int(shape0), 1.0)
                     if selected == "off":
                         OT_loss_scale = 0.0
                     else:
