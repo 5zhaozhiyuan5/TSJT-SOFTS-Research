@@ -87,6 +87,24 @@ class H1AuditTests(unittest.TestCase):
             self.assertFalse(torch.equal(old, p))
         self.assertEqual(len(base), len(params))
 
+    def test_paired_linear_readout_delta_includes_bias(self):
+        from model.Meta_Models.h1_shadow_audit import _readout_delta
+        torch.manual_seed(93)
+        x = torch.randn(3, 4, 8)
+        w1 = torch.randn(128, 8)
+        b1 = torch.randn(128)
+        w2 = torch.randn(36, 128)
+        b2 = torch.randn(36)
+        dw = torch.randn(128, 8) * 0.03
+        db = torch.randn(128) * 0.03
+        scale = torch.randn(3, 4, 1).abs() + 0.2
+        old = F.linear(F.linear(x, w1, b1), w2, b2)
+        new = F.linear(F.linear(x, w1 + dw, b1 + db), w2, b2)
+        computed = _readout_delta(x, dw, db, w2, scale)
+        self.assertTrue(torch.allclose(
+            (new - old) * scale, computed, atol=1e-4, rtol=1e-5
+        ))
+
     def test_h1_counterfactual_preserves_parameters_and_rng(self):
         torch.manual_seed(77)
         model = MiniTrafficModel()
