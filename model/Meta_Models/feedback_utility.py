@@ -155,11 +155,12 @@ def evaluate_feedback_candidates(
         yt = target_y.detach().index_select(0, tgt_indices).float() * xy_scale
         in_s = source_pre.detach().index_select(0, src_indices).float()
         in_t = target_pre.detach().index_select(0, tgt_indices).float()
-        x = torch.cat([rs, ys], dim=-1)
-        y = torch.cat([rt, yt], dim=-1)
         beta = torch.full((len(rt),), 1.0 / len(rt), device=rt.device)
         results = []
         for rho in RHO_CHOICES:
+            # Rebuild the pairwise OT graph for each candidate.
+            x = torch.cat([rs, ys], dim=-1)
+            y = torch.cat([rt, yt], dim=-1)
             alpha_full = blend_source_weights(f2_alpha.detach(), rho)
             alpha = alpha_full.index_select(0, src_indices)
             alpha = alpha / alpha.sum().clamp_min(1e-12)
