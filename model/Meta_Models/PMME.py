@@ -547,7 +547,10 @@ class STRep(nn.Module):
                     x = torch.cat((x1,y1),dim=-1) 
                     y = torch.cat((x2,y2),dim=-1) # y: target  
                     
-                    if (ratio1>0.00 and ratio2>0.00):
+                    if OT_loss_scale == 0.0:
+                        # G2/G3 "off": skip the expensive full OT calculation.
+                        OT_loss = x1.new_zeros(())
+                    elif (ratio1>0.00 and ratio2>0.00):
                         OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args *OT_loss_scale
                     else:
                         OT_loss = 0
