@@ -28,6 +28,7 @@ from transfer_utility import VARIANTS, compute_weights
 from feedback_utility import (
     blend_source_weights, evaluate_feedback_candidates, select_feedback_policy
 )
+from h1_shadow_audit import audit_h1_shadow_update
 
 def log_verbose(args, msg):
     print(msg)
@@ -185,8 +186,8 @@ class STRep(nn.Module):
         self.feedback_mode = os.environ.get(
             "PMME_FEEDBACK_MODE", "g0"
         ).strip().lower()
-        if self.feedback_mode not in ("g0", "g1", "g2", "g3"):
-            raise ValueError("PMME_FEEDBACK_MODE must be g0, g1, g2, or g3")
+        if self.feedback_mode not in ("g0", "g1", "g2", "g3", "h1"):
+            raise ValueError("PMME_FEEDBACK_MODE must be g0/g1/g2/g3/h1")
         if self.transfer_variant != "gradient":
             raise ValueError("G0-G3 require PMME_TRANSFER_VARIANT=gradient")
         self.feedback_interval = int(os.environ.get(
@@ -360,16 +361,17 @@ class STRep(nn.Module):
             probe_scale = target_probe_scale.index_select(
                 0, probe_idx
             )
-            shared_head = self.model.forecasting_model.projection1.weight
-            task_head_gradient = torch.autograd.grad(
-                sum(task_losses), shared_head, retain_graph=True
-            )[0].detach()
-            target_head_gradient = torch.autograd.grad(
-                target_fit_loss, shared_head, retain_graph=True
-            )[0].detach()
-            head2_weights = (
-                self.model.forecasting_model.projection2.weight.detach()
-            )
+            if self.feedback_mode != "h1":
+                shared_head = self.model.forecasting_model.projection1.weight
+                task_head_gradient = torch.autograd.grad(
+                    sum(task_losses), shared_head, retain_graph=True
+                )[0].detach()
+                target_head_gradient = torch.autograd.grad(
+                    target_fit_loss, shared_head, retain_graph=True
+                )[0].detach()
+                head2_weights = (
+                    self.model.forecasting_model.projection2.weight.detach()
+                )
 
         if need_transfer:
             if len(self._transfer_records) != len(data):
@@ -450,7 +452,7 @@ class STRep(nn.Module):
                 if epoch % 25 == 0:
                     print("task_utility", self.transfer_variant, index, utility_stats)
 
-                if need_feedback:
+                if need_feedback and self.feedback_mode != "h1":
                     # Proxy OT and held-out within-batch probe use disjoint
                     # target WINDOWS. Existing official full OT remains intact.
                     target_group_rep = rep_target[index].detach()
@@ -586,6 +588,28 @@ class STRep(nn.Module):
             DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
         
         model_loss += (task_loss + DA_loss)
+
+        # H1 audits the ORIGINAL F2 OT update, without changing optimizer
+        # state, model weights, or which OT marginal is used for training.
+        # Shadow A = source task only; shadow B = source task plus full F2 OT.
+        # All-parameter PCGrad and the current AdamW state are replayed.
+        if need_feedback and self.feedback_mode == "h1":
+            audit_record = audit_h1_shadow_update(
+                model=self.model,
+                optimizer=self.main_optim,
+                source_task_loss=task_loss,
+                da_loss=DA_loss,
+                target_task_loss=target_task_loss,
+                target_data=data[0],
+                probe_input=probe_pre,
+                probe_prediction=probe_pred,
+                probe_target=probe_true,
+                probe_scale=probe_scale,
+                probe_indices=probe_idx,
+                epoch=epoch,
+                beta=self.loss_criterion.beta
+            )
+            print("h1_shadow_audit", audit_record, flush=True)
 
         # Diagnostic ONLY: OT acts on the shared representation upstream of
         # projection2; its gradient on projection2.weight is necessarily zero.
