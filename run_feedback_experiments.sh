@@ -29,9 +29,20 @@ for seed in "${SEEDS[@]}"; do
     for d in data configs model; do
       [[ -e "$WORK/$d" ]] || ln -s "$ROOT/$d" "$WORK/$d"
     done
+    CURRENT_COMMIT="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
     if [[ -f "$WORK/COMPLETED" ]]; then
+      if [[ ! -f "$WORK/run_config.txt" ]] || ! grep -Fxq "git_commit=$CURRENT_COMMIT" "$WORK/run_config.txt"; then
+        echo "[ERROR] Existing completed log used a different code commit: $WORK" >&2
+        echo "Move or explicitly archive that run before executing new code." >&2
+        exit 3
+      fi
       echo "[SKIP] $mode seed=$seed scale=$SCALE"
       continue
+    fi
+    if [[ -f "$WORK/run_config.txt" ]] &&
+       ! grep -Fxq "git_commit=$CURRENT_COMMIT" "$WORK/run_config.txt"; then
+      echo "[ERROR] Existing interrupted log uses a different code commit: $WORK" >&2
+      exit 3
     fi
     printf 'mode=%s\nvariant=gradient\nseed=%s\not_scale=%s\ninterval=%s\ngit_commit=%s\n' \
       "$mode" "$seed" "$SCALE" "$INTERVAL" \
