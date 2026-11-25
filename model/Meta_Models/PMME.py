@@ -437,6 +437,29 @@ class STRep(nn.Module):
                 target_deltas, target_split, dim=0
             )
 
+        # P4: balanced, task-aware source-city to target-window assignment.
+        p4_target_assignment = list(range(len(rep_source)))
+        p4_source_deltas = []
+        if need_transfer and self.pair_variant == "p4":
+            p4_source_features = [
+                record[0] for record in self._transfer_records[1:]
+            ]
+            for k, (_, head_out) in enumerate(self._transfer_records[1:]):
+                p4_source_deltas.append(torch.autograd.grad(
+                    task_losses[k], head_out, retain_graph=True
+                )[0].detach())
+            p4_target_assignment, p4_stats = assign_city_target_groups(
+                p4_source_features, p4_source_deltas,
+                target_feature_groups, target_delta_groups,
+                [str(data[k + 1].data_name) for k in range(len(rep_source))],
+                ema=self.p4_assignment_ema,
+                counts=self.p4_assignment_counts,
+                momentum=self.p4_momentum,
+                repeat_penalty=self.p4_repeat_penalty
+            )
+            if epoch % 25 == 0:
+                print("pair_ot_assignment", "epoch", epoch, p4_stats)
+
         model_loss = 0 
 
         DA_loss = 0
@@ -459,12 +482,13 @@ class STRep(nn.Module):
         criterion = SamplesLoss(loss="sinkhorn", p=1, backend="tensorized", debias=False, blur=0.001) # p=1
 
         for index in range(len(rep_source)):      
+            target_group = p4_target_assignment[index]
 
-            size1, size2 = rep_source[index].shape[0]*rep_source[index].shape[1], rep_target[index].shape[0]*rep_target[index].shape[1]
+            size1, size2 = rep_source[index].shape[0]*rep_source[index].shape[1], rep_target[target_group].shape[0]*rep_target[target_group].shape[1]
             # print(size1, size2)
 
             x1,y1 = rep_source[index], y_source[index] 
-            x2,y2 = rep_target[index], y_target[index]
+            x2,y2 = rep_target[target_group], y_target[target_group]
             shape0 = x1.shape[1]
                     
             y_norm_sources.append(y1)
@@ -485,12 +509,18 @@ class STRep(nn.Module):
             ratio1, ratio2 = 1.0, 1.0
             if need_transfer:
                 source_features, source_head_output = self._transfer_records[index + 1]
-                source_deltas = torch.autograd.grad(
-                    task_losses[index], source_head_output, retain_graph=True
-                )[0].detach()
+                source_deltas = (
+                    p4_source_deltas[index]
+                    if self.pair_variant == "p4" else
+                    torch.autograd.grad(
+                        task_losses[index], source_head_output,
+                        retain_graph=True
+                    )[0].detach()
+                )
                 alpha, beta, utility_stats = compute_weights(
                     source_features.detach(), source_deltas,
-                    target_feature_groups[index], target_delta_groups[index],
+                    target_feature_groups[target_group],
+                    target_delta_groups[target_group],
                     self.transfer_variant,
                     temperature=self.transfer_temperature,
                     min_ess_fraction=self.transfer_min_ess
