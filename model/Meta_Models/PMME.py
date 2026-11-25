@@ -29,6 +29,9 @@ from feedback_utility import (
     blend_source_weights, evaluate_feedback_candidates, select_feedback_policy
 )
 from h1_shadow_audit import audit_h1_shadow_update
+from h2_candidate_audit import (
+    detached_model_gradients, evaluate_h2_candidate_audit
+)
 
 def log_verbose(args, msg):
     print(msg)
@@ -186,8 +189,17 @@ class STRep(nn.Module):
         self.feedback_mode = os.environ.get(
             "PMME_FEEDBACK_MODE", "g0"
         ).strip().lower()
-        if self.feedback_mode not in ("g0", "g1", "g2", "g3", "h1"):
-            raise ValueError("PMME_FEEDBACK_MODE must be g0/g1/g2/g3/h1")
+        if self.feedback_mode not in ("g0", "g1", "g2", "g3", "h1", "h2a"):
+            raise ValueError("PMME_FEEDBACK_MODE must be g0/g1/g2/g3/h1/h2a")
+        # H2: full-batch candidate diagnostics, without adjusting F2 OT.
+        self.h2_citywise = os.environ.get(
+            "PMME_H2_CITYWISE", "1"
+        ).strip() not in ("0", "false", "False")
+        self.h2_gain_tol = float(os.environ.get(
+            "PMME_H2_GAIN_TOL", "1e-6"
+        ))
+        if not math.isfinite(self.h2_gain_tol) or self.h2_gain_tol < 0:
+            raise ValueError("PMME_H2_GAIN_TOL must be finite and >=0")
         if self.transfer_variant != "gradient":
             raise ValueError("G0-G3 require PMME_TRANSFER_VARIANT=gradient")
         self.feedback_interval = int(os.environ.get(
@@ -261,7 +273,11 @@ class STRep(nn.Module):
             (epoch - self.DAepoch_args) % self.feedback_interval == 0
         )
         self._feedback_inputs = []
-        self._capture_feedback = need_feedback
+        # H2 needs none of the old G/H1 local-head hooks. Candidate OT
+        # gradients are read from the actual full-sized Sinkhorn graph.
+        h2_active = need_feedback and self.feedback_mode == "h2a"
+        h2_city_gradients = []
+        self._capture_feedback = need_feedback and not h2_active
         target_probe_prediction = None
         target_probe_groundtruth = None
         target_probe_scale = None
@@ -311,7 +327,7 @@ class STRep(nn.Module):
                 loss = self.loss_criterion(out, y)
 
                 target_task_loss = loss
-                if need_feedback:
+                if need_feedback and not h2_active:
                     # Internal decision-only split: probe labels must not
                     # enter the local proxy's target alignment weights or
                     # one-sided projection direction.
@@ -335,12 +351,12 @@ class STRep(nn.Module):
             
         self._capture_transfer = False
         self._capture_feedback = False
-        if need_feedback and len(self._feedback_inputs) != len(data):
+        if need_feedback and not h2_active and len(self._feedback_inputs) != len(data):
             raise RuntimeError(
                 "Expected one pre-projection1 record per city, got %d" %
                 len(self._feedback_inputs)
             )
-        if need_feedback:
+        if need_feedback and not h2_active:
             # Fixed support split for all candidate policies.
             # With original 15-window per-city target grouping, every fifth
             # window is a candidate evaluation probe. The proxy OT never
@@ -361,7 +377,7 @@ class STRep(nn.Module):
             probe_scale = target_probe_scale.index_select(
                 0, probe_idx
             )
-            if self.feedback_mode != "h1":
+            if self.feedback_mode in ("g1", "g2", "g3"):
                 shared_head = self.model.forecasting_model.projection1.weight
                 task_head_gradient = torch.autograd.grad(
                     sum(task_losses), shared_head, retain_graph=True
@@ -452,7 +468,7 @@ class STRep(nn.Module):
                 if epoch % 25 == 0:
                     print("task_utility", self.transfer_variant, index, utility_stats)
 
-                if need_feedback and self.feedback_mode != "h1":
+                if need_feedback and self.feedback_mode in ("g1", "g2", "g3"):
                     # Proxy OT and held-out within-batch probe use disjoint
                     # target WINDOWS. Existing official full OT remains intact.
                     target_group_rep = rep_target[index].detach()
@@ -558,6 +574,34 @@ class STRep(nn.Module):
                         OT_loss = 0
                     DA_losses.append(OT_loss)
 
+                    if h2_active:
+                        # H2-A1: original full-sized, same y and same OT
+                        # strength; ONLY sample marginals differ. Record
+                        # detached all-parameter OT gradient tuples.
+                        coefficient = self.DAcoef_args * self.transfer_ot_scale
+                        uniform_alpha = torch.full_like(
+                            alpha, 1.0 / alpha.numel()
+                        )
+                        half_alpha = blend_source_weights(alpha, 0.5)
+                        ot_uniform = torch.sum(
+                            criterion(uniform_alpha, x, beta, y)
+                        ) * coefficient
+                        ot_mixed = torch.sum(
+                            criterion(half_alpha, x, beta, y)
+                        ) * coefficient
+                        h2_city_gradients.append({
+                            "city": str(data[index + 1].data_name),
+                            "f2": detached_model_gradients(
+                                OT_loss, self.model
+                            ),
+                            "uniform": detached_model_gradients(
+                                ot_uniform, self.model
+                            ),
+                            "mixed": detached_model_gradients(
+                                ot_mixed, self.model
+                            ),
+                        })
+
             elif self.DA == 'CMMD':
                 if (epoch>=self.DAepoch_args): 
                     sigma_x = compute_initial_bandwidth_full(x1, x2)
@@ -588,6 +632,23 @@ class STRep(nn.Module):
             DA_loss = DA_losses[0] + DA_losses[1] + DA_losses[2]         
         
         model_loss += (task_loss + DA_loss)
+
+        # H2-A1 global, H2-A2 city-wise and H2-A3 temporal fold checks.
+        # Shadow PCGrad/AdamW only; actual F2 optimization stays unchanged.
+        if h2_active:
+            report = evaluate_h2_candidate_audit(
+                model=self.model,
+                optimizer=self.main_optim,
+                source_task_loss=task_loss,
+                target_task_loss=target_task_loss,
+                city_gradients=h2_city_gradients,
+                target_data=data[0],
+                epoch=epoch,
+                beta=self.loss_criterion.beta,
+                citywise=self.h2_citywise,
+                confidence_tolerance=self.h2_gain_tol,
+            )
+            print("h2_candidate_audit", report, flush=True)
 
         # H1 audits the ORIGINAL F2 OT update, without changing optimizer
         # state, model weights, or which OT marginal is used for training.
