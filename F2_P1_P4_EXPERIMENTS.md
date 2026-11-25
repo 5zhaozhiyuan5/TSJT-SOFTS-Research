@@ -83,7 +83,25 @@ PMME_PAIR_VARIANTS="p2 p4" PMME_PAIR_SEEDS="1" bash run_f2_pair_ot_experiments.s
 PMME_PAIR_VARIANTS="p1 p3" PMME_PAIR_SEEDS="1" bash run_f2_pair_ot_experiments.sh
 ```
 
-Default: Stage-I 3000 epochs, original Stage-II 6000 epochs (per variant). For initial integration diagnosis only:
+Default: Stage-I 3000 epochs (OT begins at 1500), original Stage-II 6000 epochs (per variant).
+
+For a **short real-forward/backward smoke test** that reaches the OT branch immediately, use separate output roots (never reuse them for full experiments):
+
+```bash
+PMME_PAIR_RUN_ROOT=./experiments/pair-smoke-round1 \
+PMME_PAIR_STAGE1_EPOCHS=2 PMME_PAIR_DAEPOCH=1 \
+PMME_PAIR_STAGE2_EPOCHS=0 PMME_PAIR_VARIANTS="p2 p4" \
+bash run_f2_pair_ot_experiments.sh
+
+PMME_PAIR_RUN_ROOT=./experiments/pair-smoke-round2 \
+PMME_PAIR_STAGE1_EPOCHS=2 PMME_PAIR_DAEPOCH=1 \
+PMME_PAIR_STAGE2_EPOCHS=0 PMME_PAIR_VARIANTS="p1 p3" \
+bash run_f2_pair_ot_experiments.sh
+```
+
+The smoke test performs **one active OT iteration**, so it can catch graph/GeomLoss failures. It is not evidence of forecast improvement.
+
+For an intermediate, Stage-I-only 3000-epoch check:
 
 ```bash
 PMME_PAIR_STAGE2_EPOCHS=0 PMME_PAIR_VARIANTS="p2 p4" bash run_f2_pair_ot_experiments.sh
