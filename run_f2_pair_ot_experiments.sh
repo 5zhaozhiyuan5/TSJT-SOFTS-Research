@@ -13,6 +13,8 @@ THREADS="${PMME_THREADS:-4}"
 SCALE="${PMME_PAIR_OT_SCALE:-0.01}"
 STRENGTH="${PMME_PAIR_STRENGTH:-0.02}"
 STAGE2="${PMME_PAIR_STAGE2_EPOCHS:-6000}"
+STAGE1="${PMME_PAIR_STAGE1_EPOCHS:-3000}"
+DAEPOCH="${PMME_PAIR_DAEPOCH:-1500}"
 ANCHORS="${PMME_PAIR_ANCHORS:-8}"
 BLOCK_SIZE="${PMME_PAIR_BLOCK_SIZE:-256}"
 P4_MOMENTUM="${PMME_P4_MOMENTUM:-0.8}"
@@ -20,14 +22,16 @@ P4_REPEAT="${PMME_P4_REPEAT_PENALTY:-0.08}"
 CURRENT_COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
 
 [[ -d "$ROOT/data" ]] || { echo "[ERROR] Missing $ROOT/data" >&2; exit 2; }
-python - "$SCALE" "$STRENGTH" "$STAGE2" "$ANCHORS" "$BLOCK_SIZE" "$P4_MOMENTUM" "$P4_REPEAT" <<'PY'
+python - "$SCALE" "$STRENGTH" "$STAGE2" "$ANCHORS" "$BLOCK_SIZE" "$P4_MOMENTUM" "$P4_REPEAT" "$STAGE1" "$DAEPOCH" <<'PY'
 import math, sys
 scale, strength = map(float, sys.argv[1:3])
 stage2, anchors, block = map(int, sys.argv[3:6])
 momentum, repeat = map(float, sys.argv[6:8])
+stage1, daepoch = map(int, sys.argv[8:10])
 assert 0 < scale and math.isfinite(scale)
 assert 0 <= strength <= 1 and math.isfinite(strength)
 assert stage2 >= 0 and anchors > 0 and block > 0
+assert stage1 > 0 and 0 <= daepoch < stage1
 assert 0 <= momentum < 1 and repeat >= 0 and math.isfinite(repeat)
 PY
 EFFECT_ON="$(python -c 'import sys; print(int(float(sys.argv[1]) > 0))' "$STRENGTH")"
@@ -45,6 +49,8 @@ for variant in "${VARIANTS[@]}"; do
       if ! grep -Fxq "git_commit=$CURRENT_COMMIT" "$WORK/run_config.txt" ||
          ! grep -Fxq "pair_strength=$STRENGTH" "$WORK/run_config.txt" ||
          ! grep -Fxq "stage2_epochs=$STAGE2" "$WORK/run_config.txt" ||
+         ! grep -Fxq "stage1_epochs=$STAGE1" "$WORK/run_config.txt" ||
+         ! grep -Fxq "daepoch=$DAEPOCH" "$WORK/run_config.txt" ||
          ! grep -Fxq "ot_scale=$SCALE" "$WORK/run_config.txt" ||
          ! grep -Fxq "anchors=$ANCHORS" "$WORK/run_config.txt" ||
          ! grep -Fxq "block_size=$BLOCK_SIZE" "$WORK/run_config.txt" ||
@@ -58,9 +64,9 @@ for variant in "${VARIANTS[@]}"; do
       echo "[SKIP] Already complete: $WORK"
       continue
     fi
-    printf 'branch=%s\ngit_commit=%s\nseed=%s\npair_variant=%s\npair_strength=%s\not_scale=%s\nstage2_epochs=%s\nanchors=%s\nblock_size=%s\np4_momentum=%s\np4_repeat=%s\n' \
+    printf 'branch=%s\ngit_commit=%s\nseed=%s\npair_variant=%s\npair_strength=%s\not_scale=%s\nstage2_epochs=%s\nstage1_epochs=%s\ndaepoch=%s\nanchors=%s\nblock_size=%s\np4_momentum=%s\np4_repeat=%s\n' \
       "$(git -C "$ROOT" branch --show-current)" "$CURRENT_COMMIT" "$seed" "$variant" \
-      "$STRENGTH" "$SCALE" "$STAGE2" "$ANCHORS" "$BLOCK_SIZE" \
+      "$STRENGTH" "$SCALE" "$STAGE2" "$STAGE1" "$DAEPOCH" "$ANCHORS" "$BLOCK_SIZE" \
       "$P4_MOMENTUM" "$P4_REPEAT" > "$WORK/run_config.txt"
     rm -f "$WORK/FAILED"
     echo "[START] F2+$variant seed=$seed, stage2=$STAGE2"
@@ -78,7 +84,7 @@ for variant in "${VARIANTS[@]}"; do
       export CUDA_VISIBLE_DEVICES="$GPU"
       export OMP_NUM_THREADS="$THREADS"
       python -u "$ROOT/train_DA_OT.py" \
-        --train_epochs 3000 \
+        --train_epochs "$STAGE1" \
         --finetune_epochs "$STAGE2" \
         --data_list chengdu_shenzhen_metr \
         --test_dataset pems-bay \
@@ -88,7 +94,7 @@ for variant in "${VARIANTS[@]}"; do
         --classifier 0.5 \
         --xySquaredRatio 100 \
         --DAcoef 1 \
-        --DAepoch 1500 \
+        --DAepoch "$DAEPOCH" \
         --MemSize 10000 \
         --projection 1 \
         --DA OT \
