@@ -46,8 +46,11 @@ def sum_gradient_vectors(vectors):
     if any(len(v) != size for v in vectors):
         raise ValueError("Inconsistent gradient lengths")
     with torch.no_grad():
-        return [torch.stack([vec[i] for vec in vectors], dim=0).sum(dim=0)
-                for i in range(size)]
+        result = [v.detach().clone() for v in vectors[0]]
+        for vec in vectors[1:]:
+            for i, grad in enumerate(vec):
+                result[i].add_(grad)
+        return result
 
 
 def global_and_city_candidate_gradients(city_gradients, include_city=True):
@@ -181,17 +184,6 @@ def evaluate_h2_candidate_audit(*, model, optimizer, source_task_loss,
     baseline, _ = projected_directions(
         source_grads, target_grads, zeros
     )
-    candidate_steps = {
-        "off": simulate_adamw_step(named, optimizer, baseline)
-    }
-    for label, ot_grad in candidates.items():
-        _, projected = projected_directions(
-            source_grads, target_grads, ot_grad
-        )
-        candidate_steps[label] = simulate_adamw_step(
-            named, optimizer, projected
-        )
-
     dev = params[0].device
     cuda_devices = (
         [dev.index if dev.index is not None else torch.cuda.current_device()]
@@ -216,7 +208,18 @@ def evaluate_h2_candidate_audit(*, model, optimizer, source_task_loss,
     predictions = {}
     try:
         with torch.no_grad(), torch.random.fork_rng(devices=cuda_devices):
-            for name, candidate_parameters in candidate_steps.items():
+            for name in ("off", *candidates.keys()):
+                # Materialize ONE shadow parameter set at a time. Holding
+                # all seven full model copies would waste GPU memory.
+                if name == "off":
+                    direction = baseline
+                else:
+                    _, direction = projected_directions(
+                        source_grads, target_grads, candidates[name]
+                    )
+                candidate_parameters = simulate_adamw_step(
+                    named, optimizer, direction
+                )
                 # Match all candidates' STAR random-pooling draws.
                 torch.manual_seed(820123 + int(epoch))
                 buffers = {
@@ -228,6 +231,7 @@ def evaluate_h2_candidate_audit(*, model, optimizer, source_task_loss,
                     (target_data,), {"stage": "train"}
                 )
                 predictions[name] = pred.detach()
+                del candidate_parameters, buffers
             measured = score_shadow_predictions(
                 predictions, truth, beta=beta,
                 confidence_tolerance=confidence_tolerance
@@ -245,6 +249,6 @@ def evaluate_h2_candidate_audit(*, model, optimizer, source_task_loss,
     measured["epoch"] = int(epoch)
     measured["cities"] = [entry["city"] for entry in city_gradients]
     measured["n_windows"] = int(truth.shape[0])
-    measured["n_shadow_candidates"] = len(candidate_steps)
+    measured["n_shadow_candidates"] = len(predictions)
     measured["h2_mode"] = "all" if citywise else "global"
     return measured
