@@ -85,7 +85,11 @@ def _anchor_descriptors(s_rep, t_rep, s_delta, t_delta, alpha, anchor_count):
     with torch.no_grad():
         denom = torch.cat([rs.detach(), rt.detach()], dim=0).median(dim=0).values
         denom = denom.clamp_min(1e-3)
-    return torch.log1p(rs / denom), torch.log1p(rt / denom), len(matches)
+    sample_indices = [
+        (int(s_ids[i].item()), int(t_ids[j].item())) for i, j in matches
+    ]
+    return (torch.log1p(rs / denom),
+            torch.log1p(rt / denom), len(matches), sample_indices)
 
 
 def _response(history, future):
@@ -161,10 +165,11 @@ def build_pairwise_cost(variant, x, y, source_rep, target_rep,
              "reference_ground_cost": float(ref_cost.item())}
 
     if variant == "p1":
-        rs, rt, count = _anchor_descriptors(
+        rs, rt, count, anchor_indices = _anchor_descriptors(
             source_rep, target_rep, source_delta, target_delta,
             source_alpha, anchor_count)
         stats["anchors"] = count
+        stats["anchor_indices_source_target"] = anchor_indices
 
         def penalty_rows(a, b):
             return torch.cdist(rs[a:b].unsqueeze(0),
@@ -221,6 +226,16 @@ def build_pairwise_cost(variant, x, y, source_rep, target_rep,
                     (-logits / 0.15) + confidence.log().view(3, 1, 1),
                     dim=0)
                 return F.relu(-worst)
+
+    # These are diagnostics of the *candidate cost*, not an explicit
+    # Sinkhorn transport matrix. They are evaluated on fixed small points.
+    with torch.no_grad():
+        sampled = penalty_rows(0, min(32, x.shape[0]))
+        sampled = sampled[:, :min(32, y.shape[0])]
+        stats["penalty_sample_mean"] = float(sampled.mean().item())
+        stats["penalty_sample_std"] = float(
+            sampled.std(unbiased=False).item()
+        )
 
     def cost(xx, yy):
         # GeomLoss tensorized backend invokes with [batch,N,D]/[batch,M,D].
