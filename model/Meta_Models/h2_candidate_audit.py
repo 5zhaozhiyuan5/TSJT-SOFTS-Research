@@ -20,9 +20,14 @@ import math
 import torch
 import torch.nn.functional as F
 
-from h1_shadow_audit import (
-    _grads, projected_directions, simulate_adamw_step, _smooth_l1_bands
-)
+try:  # Imported as model.Meta_Models.h2_candidate_audit in CPU tests.
+    from .h1_shadow_audit import (
+        _grads, projected_directions, simulate_adamw_step, _smooth_l1_bands
+    )
+except ImportError:  # Imported as a top-level module by official train_DA_OT.py.
+    from h1_shadow_audit import (
+        _grads, projected_directions, simulate_adamw_step, _smooth_l1_bands
+    )
 
 
 GLOBAL_CHOICES = ("off", "uniform", "mixed", "f2")
