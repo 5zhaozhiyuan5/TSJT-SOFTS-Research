@@ -32,6 +32,10 @@ from h1_shadow_audit import audit_h1_shadow_update
 from h2_candidate_audit import (
     detached_model_gradients, evaluate_h2_candidate_audit
 )
+from gradient_pair_ot import (
+    VARIANTS as PAIR_VARIANTS, build_pairwise_cost,
+    assign_city_target_groups
+)
 
 def log_verbose(args, msg):
     print(msg)
@@ -239,6 +243,32 @@ class STRep(nn.Module):
                 _record_projection1
             )
         )
+        # Four independent F2 Stage-I training variants; no feedback controller.
+        self.pair_variant = os.environ.get("PMME_PAIR_VARIANT", "f2").strip().lower()
+        if self.pair_variant not in PAIR_VARIANTS:
+            raise ValueError("PMME_PAIR_VARIANT must be one of " + str(PAIR_VARIANTS))
+        if self.pair_variant != "f2" and (
+            self.transfer_variant != "gradient" or self.feedback_mode != "g0"
+        ):
+            raise ValueError("P1-P4 require F2 and PMME_FEEDBACK_MODE=g0")
+        self.pair_strength = float(os.environ.get("PMME_PAIR_STRENGTH", "0.02"))
+        self.pair_anchor_count = int(os.environ.get("PMME_PAIR_ANCHORS", "8"))
+        self.pair_block_size = int(os.environ.get("PMME_PAIR_BLOCK_SIZE", "256"))
+        self.p4_momentum = float(os.environ.get("PMME_P4_MOMENTUM", "0.8"))
+        self.p4_repeat_penalty = float(os.environ.get("PMME_P4_REPEAT_PENALTY", "0.08"))
+        if (not math.isfinite(self.pair_strength) or
+                not 0 <= self.pair_strength <= 1 or
+                self.pair_anchor_count < 1 or self.pair_block_size < 1 or
+                not 0 <= self.p4_momentum < 1 or
+                not math.isfinite(self.p4_repeat_penalty) or
+                self.p4_repeat_penalty < 0):
+            raise ValueError("Invalid PMME_PAIR_* or PMME_P4_* setting")
+        self.p4_assignment_ema = {}
+        self.p4_assignment_counts = {}
+        print("PMME_PAIR_VARIANT", self.pair_variant,
+              "strength", self.pair_strength,
+              "anchors", self.pair_anchor_count,
+              "block", self.pair_block_size)
         print("PMME_STAGE1_TRANSFER_VARIANT", self.transfer_variant)
         print("PMME_STAGE1_FEEDBACK", self.feedback_mode,
               "interval", self.feedback_interval,
