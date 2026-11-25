@@ -602,6 +602,9 @@ class STRep(nn.Module):
                         del ot_mixed
                         h2_city_gradients.append({
                             "city": str(data[index + 1].data_name),
+                            # OT target 15-window block follows randomized
+                            # source mini-batch ordering each epoch.
+                            "target_group": int(index),
                             "f2": f2_grad,
                             "uniform": uniform_grad,
                             "mixed": mixed_grad,
