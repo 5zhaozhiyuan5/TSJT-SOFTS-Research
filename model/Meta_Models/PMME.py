@@ -511,7 +511,7 @@ class STRep(nn.Module):
                 source_features, source_head_output = self._transfer_records[index + 1]
                 source_deltas = (
                     p4_source_deltas[index]
-                    if self.pair_variant == "p4" else
+                    if (self.pair_variant == "p4" and self.pair_strength > 0) else
                     torch.autograd.grad(
                         task_losses[index], source_head_output,
                         retain_graph=True
