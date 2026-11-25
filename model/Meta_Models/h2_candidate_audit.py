@@ -248,6 +248,10 @@ def evaluate_h2_candidate_audit(*, model, optimizer, source_task_loss,
 
     measured["epoch"] = int(epoch)
     measured["cities"] = [entry["city"] for entry in city_gradients]
+    measured["city_target_groups"] = {
+        entry["city"]: int(entry.get("target_group", -1))
+        for entry in city_gradients
+    }
     measured["n_windows"] = int(truth.shape[0])
     measured["n_shadow_candidates"] = len(predictions)
     measured["h2_mode"] = "all" if citywise else "global"
