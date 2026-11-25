@@ -30,6 +30,7 @@ assert 0 <= strength <= 1 and math.isfinite(strength)
 assert stage2 >= 0 and anchors > 0 and block > 0
 assert 0 <= momentum < 1 and repeat >= 0 and math.isfinite(repeat)
 PY
+EFFECT_ON="$(python -c 'import sys; print(int(float(sys.argv[1]) > 0))' "$STRENGTH")"
 mkdir -p "$RUN_ROOT"
 for variant in "${VARIANTS[@]}"; do
   case "$variant" in f2|p1|p2|p3|p4) ;; *)
@@ -44,7 +45,11 @@ for variant in "${VARIANTS[@]}"; do
       if ! grep -Fxq "git_commit=$CURRENT_COMMIT" "$WORK/run_config.txt" ||
          ! grep -Fxq "pair_strength=$STRENGTH" "$WORK/run_config.txt" ||
          ! grep -Fxq "stage2_epochs=$STAGE2" "$WORK/run_config.txt" ||
-         ! grep -Fxq "ot_scale=$SCALE" "$WORK/run_config.txt"; then
+         ! grep -Fxq "ot_scale=$SCALE" "$WORK/run_config.txt" ||
+         ! grep -Fxq "anchors=$ANCHORS" "$WORK/run_config.txt" ||
+         ! grep -Fxq "block_size=$BLOCK_SIZE" "$WORK/run_config.txt" ||
+         ! grep -Fxq "p4_momentum=$P4_MOMENTUM" "$WORK/run_config.txt" ||
+         ! grep -Fxq "p4_repeat=$P4_REPEAT" "$WORK/run_config.txt"; then
         echo "[ERROR] This output path was created with different settings: $WORK" >&2
         exit 3
       fi
@@ -98,12 +103,13 @@ for variant in "${VARIANTS[@]}"; do
         echo "[ERROR] Stage-II completion marker missing: $WORK" >&2
         touch "$WORK/FAILED"; exit 1
       fi
-      if [[ "$variant" == "p4" && "$STRENGTH" != "0" ]] &&
+      if [[ "$variant" == "p4" && "$EFFECT_ON" == "1" ]] &&
          ! grep -q 'pair_ot_assignment' "$WORK/train.out"; then
         echo "[ERROR] P4 assignment marker missing: $WORK" >&2
         touch "$WORK/FAILED"; exit 1
       fi
-      if [[ "$variant" == "p1" || "$variant" == "p2" || "$variant" == "p3" ]] &&
+      if [[ "$EFFECT_ON" == "1" ]] &&
+         [[ "$variant" == "p1" || "$variant" == "p2" || "$variant" == "p3" ]] &&
          ! grep -q 'pair_ot_cost' "$WORK/train.out"; then
         echo "[ERROR] Pairwise-cost marker missing: $WORK" >&2
         touch "$WORK/FAILED"; exit 1
