@@ -54,6 +54,7 @@ def summarize(records, out_dir):
     winners, fold_agreements = [], []
     margins = []
     city_scores = defaultdict(list)
+    city_group_scores = defaultdict(list)
     for r in records:
         epoch = r["epoch"]
         winner = r["total"]["best_global"]
@@ -78,8 +79,11 @@ def summarize(records, out_dir):
                 city = name.split(":",1)[1]
                 score = float(row["gain_vs_f2"])
                 city_scores[city].append(score)
+                group = r.get("city_target_groups",{}).get(city,-1)
+                city_group_scores[(city,group)].append(score)
                 city_rows.append({
                     "epoch":epoch, "city":city,
+                    "target_group":r.get("city_target_groups",{}).get(city,-1),
                     "gain_uniform_city_vs_f2":score,
                     "gain_short":row["band_gains_vs_f2"][0],
                     "gain_mid":row["band_gains_vs_f2"][1],
@@ -101,7 +105,7 @@ def summarize(records, out_dir):
         ["epoch","candidate","loss","gain_vs_off",
          "gain_short","gain_mid","gain_long","best_global"],global_rows)
     write_table(out_dir/"h2_a2_citywise.csv",
-        ["epoch","city","gain_uniform_city_vs_f2","gain_short",
+        ["epoch","city","target_group","gain_uniform_city_vs_f2","gain_short",
          "gain_mid","gain_long","improved_over_f2"],city_rows)
     write_table(out_dir/"h2_a3_folds.csv",
         ["epoch","fold","candidate","gain_vs_off",
@@ -120,6 +124,11 @@ def summarize(records, out_dir):
             f"city_{city}_uniform_over_f2_mean_gain={statistics.mean(scores):.9g}",
             f"city_{city}_uniform_over_f2_positive_frac={statistics.mean(x>0 for x in scores):.6f}",
         ]
+    for (city,group), scores in sorted(city_group_scores.items()):
+        lines.append(
+            f"city_{city}_targetgroup{group}_uniform_over_f2_mean_gain="
+            f"{statistics.mean(scores):.9g}"
+        )
     for candidate in ("uniform","mixed","f2"):
         scores = [
             r["total"]["scores"][candidate]["gain_vs_off"]
