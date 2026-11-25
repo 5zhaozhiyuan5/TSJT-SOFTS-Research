@@ -183,6 +183,17 @@ class STRep(nn.Module):
         ))
         if not math.isfinite(self.transfer_temperature) or self.transfer_temperature <= 0:
             raise ValueError("PMME_TRANSFER_TEMPERATURE must be finite and positive")
+        # Internal F2 refinement only; original gradient baseline unchanged.
+        self.f2_coupled_blend = float(os.environ.get(
+            "PMME_F2_COUPLED_BLEND", "0.2"
+        ))
+        self.f2_coupled_steps = int(os.environ.get(
+            "PMME_F2_COUPLED_STEPS", "2"
+        ))
+        if (not math.isfinite(self.f2_coupled_blend) or
+                not 0.0 <= self.f2_coupled_blend <= 1.0 or
+                self.f2_coupled_steps < 0):
+            raise ValueError("Invalid PMME_F2_COUPLED_* settings")
         self.transfer_min_ess = float(os.environ.get(
             "PMME_TRANSFER_MIN_ESS", "0.5"
         ))
@@ -204,8 +215,13 @@ class STRep(nn.Module):
         ))
         if not math.isfinite(self.h2_gain_tol) or self.h2_gain_tol < 0:
             raise ValueError("PMME_H2_GAIN_TOL must be finite and >=0")
-        if self.transfer_variant != "gradient":
-            raise ValueError("G0-G3 require PMME_TRANSFER_VARIANT=gradient")
+        if self.transfer_variant != "gradient" and not (
+            self.transfer_variant == "gradient_coupled"
+            and self.feedback_mode == "g0"
+        ):
+            raise ValueError(
+                "Feedback variants require gradient; gradient_coupled only supports g0"
+            )
         self.feedback_interval = int(os.environ.get(
             "PMME_FEEDBACK_INTERVAL", "200"
         ))
@@ -523,7 +539,9 @@ class STRep(nn.Module):
                     target_delta_groups[target_group],
                     self.transfer_variant,
                     temperature=self.transfer_temperature,
-                    min_ess_fraction=self.transfer_min_ess
+                    min_ess_fraction=self.transfer_min_ess,
+                    coupled_blend=self.f2_coupled_blend,
+                    coupled_steps=self.f2_coupled_steps
                 )
                 if epoch % 25 == 0:
                     print("task_utility", self.transfer_variant, index, utility_stats)
