@@ -440,7 +440,7 @@ class STRep(nn.Module):
         # P4: balanced, task-aware source-city to target-window assignment.
         p4_target_assignment = list(range(len(rep_source)))
         p4_source_deltas = []
-        if need_transfer and self.pair_variant == "p4":
+        if need_transfer and self.pair_variant == "p4" and self.pair_strength > 0:
             p4_source_features = [
                 record[0] for record in self._transfer_records[1:]
             ]
