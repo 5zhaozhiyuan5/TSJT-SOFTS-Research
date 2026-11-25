@@ -629,7 +629,69 @@ class STRep(nn.Module):
                         # G2/G3 "off": skip the expensive full OT calculation.
                         OT_loss = x1.new_zeros(())
                     elif (ratio1>0.00 and ratio2>0.00):
-                        OT_loss = torch.sum(criterion(alpha, x, beta, y))*self.DAcoef_args *OT_loss_scale
+                        ot_operator = criterion
+                        if (self.pair_variant in ("p1", "p2", "p3") and
+                                self.pair_strength > 0):
+                            pair_args = {}
+                            if self.pair_variant == "p2":
+                                # Dataset history is city-standardized speed;
+                                # convert physical future to the SAME units.
+                                def standardized_future(city_data):
+                                    truth = torch.as_tensor(
+                                        city_data.y, device=x.device, dtype=x.dtype)
+                                    mean = torch.as_tensor(
+                                        city_data.means, device=x.device,
+                                        dtype=x.dtype).reshape(1, 1, 1)
+                                    std = torch.as_tensor(
+                                        city_data.stds, device=x.device,
+                                        dtype=x.dtype).reshape(1, 1, 1)
+                                    return (truth - mean) / std.clamp_min(1e-6)
+
+                                target_hist = torch.as_tensor(
+                                    data[0].x, device=x.device,
+                                    dtype=x.dtype)[..., 0]
+                                target_hist_groups = torch.split(
+                                    target_hist, target_split, dim=0)
+                                target_future_groups = torch.split(
+                                    standardized_future(data[0]),
+                                    target_split, dim=0)
+                                source_hist = torch.as_tensor(
+                                    data[index + 1].x, device=x.device,
+                                    dtype=x.dtype)[..., 0]
+                                target_h = target_hist_groups[target_group]
+                                pair_args = {
+                                    "source_history": source_hist.reshape(
+                                        -1, source_hist.shape[-1]),
+                                    "source_future": standardized_future(
+                                        data[index + 1]).reshape(-1, 36),
+                                    "target_history": target_h.reshape(
+                                        -1, target_h.shape[-1]),
+                                    "target_future": target_future_groups[
+                                        target_group].reshape(-1, 36),
+                                }
+                            pair_cost, pair_stats = build_pairwise_cost(
+                                variant=self.pair_variant, x=x, y=y,
+                                source_rep=x1, target_rep=x2,
+                                source_delta=source_deltas.reshape(-1, 36),
+                                target_delta=target_delta_groups[
+                                    target_group].reshape(-1, 36),
+                                source_alpha=alpha,
+                                strength=self.pair_strength,
+                                anchor_count=self.pair_anchor_count,
+                                block_size=self.pair_block_size,
+                                **pair_args
+                            )
+                            ot_operator = SamplesLoss(
+                                loss="sinkhorn", p=1, backend="tensorized",
+                                debias=False, blur=0.001, cost=pair_cost
+                            )
+                            if epoch % 25 == 0:
+                                print("pair_ot_cost", "epoch", epoch,
+                                      "city", str(data[index + 1].data_name),
+                                      "target_group", target_group,
+                                      pair_stats, flush=True)
+                        OT_loss = (torch.sum(ot_operator(alpha, x, beta, y)) *
+                                   self.DAcoef_args * OT_loss_scale)
                     else:
                         OT_loss = 0
                     DA_losses.append(OT_loss)
