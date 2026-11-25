@@ -583,23 +583,28 @@ class STRep(nn.Module):
                             alpha, 1.0 / alpha.numel()
                         )
                         half_alpha = blend_source_weights(alpha, 0.5)
+                        f2_grad = detached_model_gradients(
+                            OT_loss, self.model
+                        )
                         ot_uniform = torch.sum(
                             criterion(uniform_alpha, x, beta, y)
                         ) * coefficient
+                        uniform_grad = detached_model_gradients(
+                            ot_uniform, self.model
+                        )
+                        del ot_uniform
                         ot_mixed = torch.sum(
                             criterion(half_alpha, x, beta, y)
                         ) * coefficient
+                        mixed_grad = detached_model_gradients(
+                            ot_mixed, self.model
+                        )
+                        del ot_mixed
                         h2_city_gradients.append({
                             "city": str(data[index + 1].data_name),
-                            "f2": detached_model_gradients(
-                                OT_loss, self.model
-                            ),
-                            "uniform": detached_model_gradients(
-                                ot_uniform, self.model
-                            ),
-                            "mixed": detached_model_gradients(
-                                ot_mixed, self.model
-                            ),
+                            "f2": f2_grad,
+                            "uniform": uniform_grad,
+                            "mixed": mixed_grad,
                         })
 
             elif self.DA == 'CMMD':
