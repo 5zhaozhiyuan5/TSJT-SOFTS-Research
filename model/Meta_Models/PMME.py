@@ -291,6 +291,10 @@ class STRep(nn.Module):
         if (self.f2_audit_interval < 1 or self.f2_audit_source_budget < 8 or
                 self.f2_audit_target_budget < 2):
             raise ValueError("Invalid F2 diagnostic interval/subset budgets")
+        self.f2_audit_readonly = os.environ.get(
+            "PMME_F2_DIAG_READONLY", "0").strip().lower() in ("1", "true", "yes")
+        if self.f2_audit_readonly and self.f2_audit == "off":
+            raise ValueError("Readonly audit mode requires PMME_F2_DIAGNOSTIC=d1d2")
         if self.f2_audit != "off" and (
             self.transfer_variant != "gradient" or
             self.f2_method != "original" or
@@ -302,6 +306,7 @@ class STRep(nn.Module):
                 "D1/D2 require original F2, unmodified OT cost, "
                 "no feedback policy and original one-sided PCGrad")
         print("PMME_F2_DIAGNOSTIC", self.f2_audit,
+              "readonly", self.f2_audit_readonly,
               "interval", self.f2_audit_interval,
               "source_budget", self.f2_audit_source_budget,
               "target_budget", self.f2_audit_target_budget)
@@ -915,6 +920,16 @@ class STRep(nn.Module):
                 confidence_tolerance=self.h2_gain_tol,
             )
             print("h2_candidate_audit", report, flush=True)
+
+        if self.f2_audit_readonly:
+            # Checkpoint-only inspection: collect real forward/autograd OT
+            # diagnostics but NEVER call backward() or optimizer.step().
+            # This path is only enabled by the separate read-only driver.
+            self._transfer_records = []
+            self._feedback_inputs = []
+            return (model_loss.detach().cpu().numpy(),
+                    np.mean(total_mse), np.mean(total_rmse),
+                    np.mean(total_mae), np.mean(total_mape))
 
         # H1 audits the ORIGINAL F2 OT update, without changing optimizer
         # state, model weights, or which OT marginal is used for training.
