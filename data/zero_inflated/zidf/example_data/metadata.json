@@ -1,0 +1,21 @@
+{
+  "source": "Independent generation using the algorithm from official ZIDF data/preprocessing.py",
+  "type": "SYNTHETIC_NOT_NOAA_REAL",
+  "note": "Not the same random draws as the published study; demonstration only",
+  "n_samples": 10000,
+  "n_features": 5,
+  "requested_zero_ratio": 0.7,
+  "observed_zero_ratio": 0.6952,
+  "random_seed": 42,
+  "random_generator": "NumPy RandomState/MT19937",
+  "positive_distribution": "Gamma(shape=2.0,scale=0.05); positives multiplied by seasonal factor",
+  "columns": [
+    "periodic",
+    "linear",
+    "random1",
+    "random2",
+    "random3",
+    "target"
+  ],
+  "file": "zidf_synthetic_10000_zero70_seed42.csv"
+}
