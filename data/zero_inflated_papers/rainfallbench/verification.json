@@ -1,0 +1,104 @@
+{
+  "saeczi/raw/samp.rda": {
+    "status": "verified",
+    "source": "committed_or_submodule",
+    "local_path": "saeczi/raw/samp.rda",
+    "bytes": 27899,
+    "git_blob_sha1": "6df7eb79d82f62777e2fe2f4fa02a18d7bf76bd3"
+  },
+  "saeczi/raw/pop.rda": {
+    "status": "verified",
+    "source": "committed_or_submodule",
+    "local_path": "saeczi/raw/pop.rda",
+    "bytes": 124974,
+    "git_blob_sha1": "e42b6a1ac2484069f0d2fadeca5ddd1b58cf74df"
+  },
+  "rainfallbench/stations/J340_data.csv": {
+    "status": "verified",
+    "source": "committed_or_submodule",
+    "local_path": "rainfallbench/stations/J340_data.csv",
+    "bytes": 4652001,
+    "git_blob_sha1": "e18bf3ff1125621d824c0f41bde9907610f9feaa",
+    "statistics": {
+      "columns": [
+        "datetime",
+        "pwv",
+        "t2m",
+        "sp",
+        "wind_speed",
+        "rh",
+        "tp_era5",
+        "gpm_precip_sum_1h"
+      ],
+      "warning": "No known precipitation target column; requires schema inspection"
+    }
+  },
+  "rainfallbench/stations/ZIMM_data.csv": {
+    "status": "verified",
+    "source": "committed_or_submodule",
+    "local_path": "rainfallbench/stations/ZIMM_data.csv",
+    "bytes": 4680618,
+    "git_blob_sha1": "125f068f4f8b9effa8016614e2d7543ebb01ff8d",
+    "statistics": {
+      "columns": [
+        "datetime",
+        "pwv",
+        "t2m",
+        "sp",
+        "wind_speed",
+        "rh",
+        "tp_era5",
+        "gpm_precip_sum_1h"
+      ],
+      "warning": "No known precipitation target column; requires schema inspection"
+    }
+  },
+  "rainfallbench/stations/P095_data.csv": {
+    "status": "verified",
+    "source": "committed_or_submodule",
+    "local_path": "rainfallbench/stations/P095_data.csv",
+    "bytes": 4536152,
+    "git_blob_sha1": "40fdf4fec2f56ea7aab3b200e41fbb20301e0aee",
+    "statistics": {
+      "columns": [
+        "datetime",
+        "pwv",
+        "t2m",
+        "sp",
+        "wind_speed",
+        "rh",
+        "tp_era5",
+        "gpm_precip_sum_1h"
+      ],
+      "warning": "No known precipitation target column; requires schema inspection"
+    }
+  },
+  "rainfallbench/stations/JFNG_data_15min.csv": {
+    "status": "verified",
+    "source": "committed_or_submodule",
+    "local_path": "rainfallbench/stations/JFNG_data_15min.csv",
+    "bytes": 9325353,
+    "git_blob_sha1": "866000f353d6deda73600f40d204eb5909e3da83",
+    "statistics": {
+      "target": "tp",
+      "valid_rows": 171069,
+      "zero_rows": 0,
+      "positive_rows": 171069,
+      "zero_ratio": 0.0,
+      "distinct_positive_values_sampled": 837,
+      "columns": [
+        "date",
+        "t2m",
+        "sp",
+        "rh",
+        "wind_speed",
+        "pwv",
+        "tp"
+      ]
+    }
+  },
+  "hybrid_nhmm_copula/upstream/Data/mapa_estaciones_precipitaciones_clean.csv.zip": {
+    "status": "missing",
+    "note": "Run git submodule update --init --recursive if applicable"
+  }
+}
