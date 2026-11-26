@@ -16,7 +16,7 @@ SOURCE_POINTS="${PMME_H4_SOURCE_POINTS:-256}"
 TARGET_POINTS="${PMME_H4_TARGET_POINTS:-128}"
 MIN_GROUP="${PMME_H4_MIN_GROUP:-12}"
 MIN_MASS="${PMME_H4_MIN_ALPHA_MASS:-0.02}"
-GROUPS="${PMME_H4_GROUPS:-accurate,inaccurate,short_weak,mid_weak,long_weak,balanced}"
+GROUP_SPEC="${PMME_H4_GROUPS:-accurate,inaccurate,short_weak,mid_weak,long_weak,balanced}"
 KEEP="${PMME_H4_KEEP_FRACTION:-0.5}"
 SEED="${PMME_H4_SEED:-1}"
 GPU="${PMME_H4_GPU:-0}"
@@ -31,7 +31,7 @@ CKPT_SHA="$(sha256sum "$CHECKPOINT"|awk '{print $1}')"
 COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
 CONFIG="$(printf 'branch=%s\ncommit=%s\ncheckpoint=%s\ncheckpoint_sha256=%s\nseed=%s\nprobe_batches=%s\nsource_points=%s\ntarget_points=%s\ngroups=%s\nkeep_fraction=%s\nmin_group=%s\nmin_mass=%s\ngpu=%s\ntraining_updates=0\n' \
   "$(git -C "$ROOT" branch --show-current)" "$COMMIT" "$CHECKPOINT" "$CKPT_SHA" \
-  "$SEED" "$N" "$SOURCE_POINTS" "$TARGET_POINTS" "$GROUPS" "$KEEP" "$MIN_GROUP" "$MIN_MASS" "$GPU")"
+  "$SEED" "$N" "$SOURCE_POINTS" "$TARGET_POINTS" "$GROUP_SPEC" "$KEEP" "$MIN_GROUP" "$MIN_MASS" "$GPU")"
 if [[ -f "$RUN_ROOT/run_config.txt" ]]; then
   [[ "$(cat "$RUN_ROOT/run_config.txt")" == "$CONFIG" ]] || {
     echo "[ERROR] Run directory already used for different settings/commit" >&2
@@ -56,7 +56,7 @@ if (
     --probe-batches "$N" \
     --source-points "$SOURCE_POINTS" \
     --target-points "$TARGET_POINTS" \
-    --groups "$GROUPS" \
+    --groups "$GROUP_SPEC" \
     --keep-fraction "$KEEP" \
     --min-group-points "$MIN_GROUP" \
     --min-alpha-mass "$MIN_MASS" \
