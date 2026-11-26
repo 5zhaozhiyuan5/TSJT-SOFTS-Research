@@ -26,6 +26,7 @@ from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
 from transfer_utility import VARIANTS, compute_weights
+from f2_ot_schedule import validate_schedule, effective_ot_scale, phase as f2_ot_phase
 from f2_four_extensions import METHODS as F2_METHODS, compute_f2_extension
 from f2_gradient_utility_audit import (probe_window_masks, audit_f2_source_utility)
 from feedback_utility import (
@@ -181,6 +182,18 @@ class STRep(nn.Module):
         ))
         if not math.isfinite(self.transfer_ot_scale) or self.transfer_ot_scale <= 0:
             raise ValueError("PMME_TRANSFER_OT_SCALE must be finite and positive")
+        # H3 -> T0/T1/T2: ONLY the Stage-I OT loss coefficient changes.
+        # T0 runs the exact original F2 scale; T1/T2 linearly anneal after
+        # epoch 2000 (default), not the F2 marginal, OT cost or optimizer.
+        self.ot_schedule = os.environ.get("PMME_F2_OT_SCHEDULE", "t0").lower().strip()
+        self.ot_decay_start = int(os.environ.get("PMME_F2_OT_DECAY_START", "2000"))
+        self.ot_decay_end = int(os.environ.get("PMME_F2_OT_DECAY_END", "2999"))
+        self.ot_tail_fraction = float(os.environ.get("PMME_F2_OT_TAIL_FRACTION", "0.25"))
+        validate_schedule(
+            self.ot_schedule, self.transfer_ot_scale, int(self.DAepoch_args),
+            self.ot_decay_start, self.ot_decay_end, self.ot_tail_fraction
+        )
+        self.current_ot_scale = 0.0
         self.transfer_temperature = float(os.environ.get(
             "PMME_TRANSFER_TEMPERATURE", "8.0"
         ))
@@ -322,9 +335,49 @@ class STRep(nn.Module):
         print("PMME_STAGE1_TRANSFER_CONFIG", "ot_scale", self.transfer_ot_scale,
               "temperature", self.transfer_temperature,
               "min_ess", self.transfer_min_ess)
+        if self.ot_schedule != "t0" and (
+            self.transfer_variant != "gradient" or
+            self.pair_variant != "f2" or self.f2_method != "original" or
+            self.feedback_mode != "g0" or self.DA != "OT" or
+            self.projection_args != 1
+        ):
+            raise ValueError(
+                "T1/T2 OT schedules require plain F2, no feedback/pair edits, "
+                "OT domain alignment, and one-sided PCGrad"
+            )
+        print("PMME_F2_OT_SCHEDULE_CONFIG", self.ot_schedule,
+              "base_scale", self.transfer_ot_scale,
+              "DAepoch", self.DAepoch_args,
+              "decay_start", self.ot_decay_start,
+              "decay_end", self.ot_decay_end,
+              "tail_fraction", self.ot_tail_fraction, flush=True)
 
-    def meta_train_revise(self, data, matrix, epoch): 
-        
+    def meta_train_revise(self, data, matrix, epoch):
+        # Set the actual OT scale ONCE per Stage-I epoch, prior to 3-city OT.
+        self.current_ot_scale = effective_ot_scale(
+            int(epoch), mode=self.ot_schedule, base_scale=self.transfer_ot_scale,
+            daepoch=int(self.DAepoch_args), decay_start=self.ot_decay_start,
+            decay_end=self.ot_decay_end, tail_fraction=self.ot_tail_fraction
+        )
+        terminal_epoch = int(getattr(self.args, "train_epochs", 0)) - 1
+        if (epoch % 25 == 0 or epoch in (
+                self.DAepoch_args, self.ot_decay_start,
+                self.ot_decay_end, terminal_epoch)):
+            print("f2_ot_schedule", "epoch", int(epoch),
+                  "policy", self.ot_schedule,
+                  "phase", f2_ot_phase(
+                      int(epoch), mode=self.ot_schedule,
+                      daepoch=int(self.DAepoch_args),
+                      decay_start=self.ot_decay_start,
+                      decay_end=self.ot_decay_end
+                  ),
+                  "base_scale", self.transfer_ot_scale,
+                  "effective_scale", self.current_ot_scale,
+                  "DAcoef", self.DAcoef_args,
+                  "effective_ot_coefficient",
+                  self.current_ot_scale * self.DAcoef_args,
+                  flush=True)
+
         total_mae = []
         total_mse = []
         total_rmse = []
@@ -593,7 +646,7 @@ class STRep(nn.Module):
             # No domain classifier, BCE, pseudo-domain labels or DVGP.
             alpha = torch.full((size1,), 1.0 / size1, device=x1.device)
             beta = torch.full((size2,), 1.0 / size2, device=x2.device)
-            OT_loss_scale = self.transfer_ot_scale
+            OT_loss_scale = self.current_ot_scale
             ratio1, ratio2 = 1.0, 1.0
             if need_transfer:
                 source_features, source_head_output = self._transfer_records[index + 1]
@@ -847,7 +900,7 @@ class STRep(nn.Module):
                         # H2-A1: original full-sized, same y and same OT
                         # strength; ONLY sample marginals differ. Record
                         # detached all-parameter OT gradient tuples.
-                        coefficient = self.DAcoef_args * self.transfer_ot_scale
+                        coefficient = self.DAcoef_args * self.current_ot_scale
                         uniform_alpha = torch.full_like(
                             alpha, 1.0 / alpha.numel()
                         )
@@ -986,7 +1039,8 @@ class STRep(nn.Module):
                     print("task_utility_gradient_diagnostic",
                           "ot_to_target_norm_ratio", norm_ratio,
                           "ot_vs_target_cosine", cosine,
-                          "ot_scale", self.transfer_ot_scale)
+                          "ot_scale", self.current_ot_scale,
+                          "base_ot_scale", self.transfer_ot_scale)
                 else:
                     print("task_utility_gradient_diagnostic missing_gradient")
 
