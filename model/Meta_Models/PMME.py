@@ -26,6 +26,9 @@ from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
 from transfer_utility import VARIANTS, compute_weights
+from prediction_reliability import (
+    source_prediction_quality, calibrate_source_alpha
+)
 from f2_ot_schedule import validate_schedule, effective_ot_scale, phase as f2_ot_phase
 from f2_four_extensions import METHODS as F2_METHODS, compute_f2_extension
 from f2_gradient_utility_audit import (probe_window_masks, audit_f2_source_utility)
@@ -194,6 +197,14 @@ class STRep(nn.Module):
             self.ot_decay_start, self.ot_decay_end, self.ot_tail_fraction
         )
         self.current_ot_scale = 0.0
+        # PRC: one optional source-pattern forecast reliability gate on F2 alpha.
+        # Zero means exact original F2, no new data access or math.
+        self.accuracy_strength = float(os.environ.get(
+            "PMME_F2_ACCURACY_STRENGTH", "0.0"
+        ))
+        if (not math.isfinite(self.accuracy_strength) or
+                not 0.0 <= self.accuracy_strength <= 1.0):
+            raise ValueError("PMME_F2_ACCURACY_STRENGTH must be in [0,1]")
         self.transfer_temperature = float(os.environ.get(
             "PMME_TRANSFER_TEMPERATURE", "8.0"
         ))
@@ -351,6 +362,24 @@ class STRep(nn.Module):
               "decay_start", self.ot_decay_start,
               "decay_end", self.ot_decay_end,
               "tail_fraction", self.ot_tail_fraction, flush=True)
+        if self.accuracy_strength > 0 and (
+            self.transfer_variant != "gradient" or
+            self.f2_method != "original" or
+            self.pair_variant != "f2" or
+            self.feedback_mode != "g0" or
+            self.ot_schedule != "t0" or
+            self.DA != "OT" or self.projection_args != 1
+        ):
+            raise ValueError(
+                "PRC requires exact original F2: gradient alpha, no F2 extensions, "
+                "no pair/feedback edits, fixed OT scale, and original PCGrad"
+            )
+        print("PMME_F2_ACCURACY_CONFIG",
+              "strength", self.accuracy_strength,
+              "mode", ("prc" if self.accuracy_strength > 0 else "f2"),
+              "reference", "persistence_last_speed",
+              "uses_labels", "source_training_only",
+              flush=True)
 
     def meta_train_revise(self, data, matrix, epoch):
         # Set the actual OT scale ONCE per Stage-I epoch, prior to 3-city OT.
@@ -388,6 +417,7 @@ class STRep(nn.Module):
         rep_target = []
         y_source = []
         y_target = []
+        source_prediction_quality_records = []
 
         # Only capture the final forecast head when OT is actually active.
         need_transfer = (
@@ -441,6 +471,16 @@ class STRep(nn.Module):
             else:
                 rep_source.append(rep)
                 y_source.append(y_unscale)
+                if need_transfer and self.accuracy_strength > 0:
+                    # out/y are REAL speed units; x[:,:,-1,0] is city-normalized.
+                    # A current pre-update training forecast, detached from OT.
+                    quality, quality_stats = source_prediction_quality(
+                        out.detach(), y.detach(), data[i].x,
+                        data[i].means, data[i].stds
+                    )
+                    source_prediction_quality_records.append(
+                        (quality, quality_stats)
+                    )
                 
             
             if i>0:   
@@ -666,6 +706,20 @@ class STRep(nn.Module):
                     temperature=self.transfer_temperature,
                     min_ess_fraction=self.transfer_min_ess
                 )
+                if self.accuracy_strength > 0:
+                    quality, quality_stats = source_prediction_quality_records[index]
+                    alpha, accuracy_weight_stats = calibrate_source_alpha(
+                        alpha, quality, strength=self.accuracy_strength
+                    )
+                    if epoch % 25 == 0 or epoch == self.DAepoch_args:
+                        print(
+                            "f2_accuracy_reliability", "epoch", epoch,
+                            "city", str(data[index + 1].data_name),
+                            "target_group", target_group,
+                            "prediction_quality", quality_stats,
+                            "alpha_calibration", accuracy_weight_stats,
+                            flush=True
+                        )
                 if self.f2_method != "original":
                     alpha, beta, extended_stats = compute_f2_extension(
                         source_features.detach(), source_deltas,
