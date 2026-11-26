@@ -51,3 +51,9 @@ python data/zero_inflated/scripts/manage_datasets.py zidf-noaa --start-year 1948
 官方配置 South Australia 空间范围：纬度 -38 到 -26，经度 129 到 141。原始 \`lat\` 可能是降序坐标，因此直接使用 \`slice(-38,-26)\` 可能选不到区域；请确认排序方向。区域平均后的 \`prate\` 可能不再具有原始网格点同样的零值比例，必须本地重算并与论文描述对比。对降水率到日累计降水的换算需要核实源文件的 \`units\` 和时间定义，例如 kg/m²/s 对应的全天量需乘以 86400 秒（1 kg/m² 水约等于 1 mm）。
 
 **本次未上传原始 NOAA NetCDF，也未声称可直接得到作者表格中的 68.3% 零值比例。**
+
+## 已提交的合成样例文件（不是 NOAA 原始数据）
+
+- `example_data/zidf_synthetic_10000_zero70_seed42.csv`：10,000 条真实生成并已上传的零膨胀合成记录；字段为 `periodic,linear,random1,random2,random3,target`，实际零值占比 69.52%。
+- `example_data/metadata.json`：生成参数和来源标记。
+- `example_data/README.md`：逐文件说明。可用于测试数据加载，但不能代替 1948–2014 年南澳大利亚真实降水数据。
