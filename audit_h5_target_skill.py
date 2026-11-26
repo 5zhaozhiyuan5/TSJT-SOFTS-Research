@@ -211,9 +211,14 @@ def main():
                 src_pred,src_true,history_pool[0],
                 city_data.means,city_data.stds
             )
+            # Compute demand on the same target-FIT node/window pool as OT.
+            # Do not accidentally calibrate a sampled OT intervention using
+            # a different collection of target labels.
+            selected_target_pred=t_preds[i][t_masks[i]].reshape(-1,36).index_select(0,tids)
+            selected_target_truth=t_truths[i][t_masks[i]].reshape(-1,36).index_select(0,tids)
             demand,demand_stats=target_fit_demand(
-                t_preds[i][t_masks[i]],
-                t_truths[i][t_masks[i]],
+                selected_target_pred.unsqueeze(0),
+                selected_target_truth.unsqueeze(0),
                 batch[0].stds
             )
             band_cos=band_head_cosine(
