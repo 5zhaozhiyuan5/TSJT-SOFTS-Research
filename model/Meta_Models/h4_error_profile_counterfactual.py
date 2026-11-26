@@ -133,6 +133,52 @@ def downweight_group(alpha, mask, keep_fraction=0.5):
     }
 
 
+
+@torch.no_grad()
+def matched_placebo_mask(alpha, true_mask, seed, trials=24):
+    """Reproducible count-matched false group, chosen using F2 MASS alone.
+
+    Never looks at probe predictions/labels. Candidate masks are pseudo-random
+    and kept as disjoint as possible from the original accurate group.
+    The placebo mass is only approximately matched; log mismatch explicitly.
+    """
+    if (alpha.ndim!=1 or true_mask.ndim!=1 or
+            alpha.numel()!=true_mask.numel() or true_mask.dtype!=torch.bool):
+        raise ValueError("Invalid alpha/true group for placebo")
+    if not bool(true_mask.any()) or bool(true_mask.all()) or trials<1:
+        raise ValueError("Placebo requires nontrivial group and trials")
+    n=len(alpha)
+    k=int(true_mask.sum().item())
+    desired_mass=float(alpha[true_mask].sum().item())
+    generator=torch.Generator(device="cpu").manual_seed(int(seed))
+    best=None
+    objective=float("inf")
+    chosen_stats=None
+    for _ in range(trials):
+        perm=torch.randperm(n,generator=generator)[:k]
+        candidate=torch.zeros(n,dtype=torch.bool,device=alpha.device)
+        candidate[perm.to(device=alpha.device)]=True
+        overlap=int((candidate&true_mask).sum().item())
+        mass=float(alpha[candidate].sum().item())
+        # Relative alpha-mass mismatch PLUS a penalty for overlapping source
+        # samples; matching decisions never use the target probe labels.
+        mismatch=abs(mass-desired_mass)/(desired_mass+1e-9)
+        value=mismatch+4.0*overlap/max(1,k)
+        if value<objective:
+            objective=value
+            best=candidate
+            chosen_stats={
+                "count":k,
+                "mass_original":desired_mass,
+                "mass_placebo":mass,
+                "relative_mass_mismatch":mismatch,
+                "overlap_count":overlap,
+                "seed":int(seed),
+                "trials":trials,
+            }
+    return best,chosen_stats
+
+
 def shadow_profile_audit(*,model,optimizer,source_task_loss,target_fit_task_loss,
                          entries,target_data,probe_mask,sample_index,
                          checkpoint_epoch,beta=5e-4):
