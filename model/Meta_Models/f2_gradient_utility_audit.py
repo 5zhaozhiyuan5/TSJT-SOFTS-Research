@@ -89,7 +89,7 @@ def _fixed_pool(scores, max_source: int):
 
 @torch.no_grad()
 def _selected_weights(cosine, conflict, sign_lambda: float, temperature: float):
-    """Six candidate distributions, same source/target sample support."""
+    """Seven candidate distributions, same source/target sample support."""
     if not 0 <= sign_lambda <= 100:
         raise ValueError("Invalid sign_lambda")
     n = cosine.numel()
@@ -219,7 +219,11 @@ def audit_f2_source_utility(*, source_rep, source_future, source_features,
             "city": str(city),
             "target_group": int(target_group),
             "source_total": int(ns),
+            "source_batch_windows": int(source_features.shape[0]),
+            "source_node_count": int(source_features.shape[1]),
             "source_subset": int(source_ids.numel()),
+            "target_fit_windows": int(target_fit_features.shape[0]),
+            "target_node_count": int(target_fit_features.shape[1]),
             "target_fit_total": int(nt),
             "target_fit_subset": int(target_ids.numel()),
             "source_subset_flat_indices": source_ids.cpu().tolist(),
