@@ -35,7 +35,7 @@ jobs:
               base/"rainfallbench/stations/J340_data.csv",
               base/"rainfallbench/stations/ZIMM_data.csv",
               base/"rainfallbench/stations/P095_data.csv",
-              base/"rainfallbench/stations/JFNG_data_15min.csv",
+              base/"rainfallbench/upstream/dataset/Rain/JFNG_data_15min.csv",
           ]
           cols = ["gpm_precip_sum_1h", "tp_era5", "tp", "precipitation"]
           def analyze(path, source):
