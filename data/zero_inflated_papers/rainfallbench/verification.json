@@ -20,6 +20,12 @@
     "bytes": 4652001,
     "git_blob_sha1": "e18bf3ff1125621d824c0f41bde9907610f9feaa",
     "statistics": {
+      "target": "gpm_precip_sum_1h",
+      "valid_rows": 59160,
+      "zero_rows": 47690,
+      "positive_rows": 11470,
+      "zero_ratio": 0.8061189993238674,
+      "distinct_positive_values_sampled": 1760,
       "columns": [
         "datetime",
         "pwv",
@@ -29,8 +35,7 @@
         "rh",
         "tp_era5",
         "gpm_precip_sum_1h"
-      ],
-      "warning": "No known precipitation target column; requires schema inspection"
+      ]
     }
   },
   "rainfallbench/stations/ZIMM_data.csv": {
@@ -40,6 +45,12 @@
     "bytes": 4680618,
     "git_blob_sha1": "125f068f4f8b9effa8016614e2d7543ebb01ff8d",
     "statistics": {
+      "target": "gpm_precip_sum_1h",
+      "valid_rows": 59160,
+      "zero_rows": 50248,
+      "positive_rows": 8912,
+      "zero_ratio": 0.8493576741041244,
+      "distinct_positive_values_sampled": 1302,
       "columns": [
         "datetime",
         "pwv",
@@ -49,8 +60,7 @@
         "rh",
         "tp_era5",
         "gpm_precip_sum_1h"
-      ],
-      "warning": "No known precipitation target column; requires schema inspection"
+      ]
     }
   },
   "rainfallbench/stations/P095_data.csv": {
@@ -60,6 +70,12 @@
     "bytes": 4536152,
     "git_blob_sha1": "40fdf4fec2f56ea7aab3b200e41fbb20301e0aee",
     "statistics": {
+      "target": "gpm_precip_sum_1h",
+      "valid_rows": 59160,
+      "zero_rows": 56031,
+      "positive_rows": 3129,
+      "zero_ratio": 0.9471095334685599,
+      "distinct_positive_values_sampled": 588,
       "columns": [
         "datetime",
         "pwv",
@@ -69,31 +85,6 @@
         "rh",
         "tp_era5",
         "gpm_precip_sum_1h"
-      ],
-      "warning": "No known precipitation target column; requires schema inspection"
-    }
-  },
-  "rainfallbench/stations/JFNG_data_15min.csv": {
-    "status": "verified",
-    "source": "committed_or_submodule",
-    "local_path": "rainfallbench/stations/JFNG_data_15min.csv",
-    "bytes": 9325353,
-    "git_blob_sha1": "866000f353d6deda73600f40d204eb5909e3da83",
-    "statistics": {
-      "target": "tp",
-      "valid_rows": 171069,
-      "zero_rows": 0,
-      "positive_rows": 171069,
-      "zero_ratio": 0.0,
-      "distinct_positive_values_sampled": 837,
-      "columns": [
-        "date",
-        "t2m",
-        "sp",
-        "rh",
-        "wind_speed",
-        "pwv",
-        "tp"
       ]
     }
   },
