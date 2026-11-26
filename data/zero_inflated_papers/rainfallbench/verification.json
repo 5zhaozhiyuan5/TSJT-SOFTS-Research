@@ -89,7 +89,24 @@
     }
   },
   "hybrid_nhmm_copula/upstream/Data/mapa_estaciones_precipitaciones_clean.csv.zip": {
-    "status": "missing",
-    "note": "Run git submodule update --init --recursive if applicable"
-  }
+    "status": "verified",
+    "source": "pinned_upstream_git_submodule",
+    "local_path": "hybrid_nhmm_copula/upstream/Data/mapa_estaciones_precipitaciones_clean.csv.zip",
+    "bytes": 33960384,
+    "git_blob_sha1": "0d007e8f179c4602ca5d44a294cf5c2defda623f",
+    "zip_crc": "passed",
+    "zip_contents": [
+      {
+        "name": "mapa_estaciones_precipitaciones_clean.csv",
+        "uncompressed_bytes": 216657356
+      },
+      {
+        "name": "__MACOSX/._mapa_estaciones_precipitaciones_clean.csv",
+        "uncompressed_bytes": 163
+      }
+    ],
+    "verification_run": "https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/45774197445",
+    "note": "Verified in a recursive submodule checkout. This file is a submodule target, not rehosted in parent repository."
+  },
+  "_verification_context": "Full recursive submodules checkout on GitHub Actions 2026-11-26. RainfallBench station files and saeczi directly committed; Chile ZIP read from source submodule."
 }
