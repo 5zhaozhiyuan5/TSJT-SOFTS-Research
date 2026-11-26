@@ -34,14 +34,18 @@ def source_prediction_quality(prediction, truth, history, city_mean, city_std):
     if not torch.isfinite(prediction).all() or not torch.isfinite(truth).all():
         raise ValueError("Nonfinite prediction or source label")
     pred, target = prediction.detach().float(), truth.detach().float()
-    h = history.detach().to(device=pred.device, dtype=pred.dtype)
+    # Only transfer the last speed slice (B,N), not the full 288-step
+    # traffic history tensor; important for memory on large source cities.
+    h_last = history.detach()[:, :, -1, 0].to(
+        device=pred.device, dtype=pred.dtype
+    )
     mean = torch.as_tensor(city_mean, device=pred.device,
                            dtype=pred.dtype).reshape(-1)[0]
     std = torch.as_tensor(city_std, device=pred.device,
                           dtype=pred.dtype).reshape(-1)[0]
     if not (torch.isfinite(mean) and torch.isfinite(std) and std > 0):
         raise ValueError("Invalid city mean/std")
-    persistence = h[:, :, -1, 0] * std + mean
+    persistence = h_last * std + mean
     # Physically meaningful absolute error; city-scale normalized for fairness.
     raw_error = (pred - target).abs().mean(dim=-1)
     error = raw_error / std
