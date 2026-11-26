@@ -31,6 +31,7 @@ else
   GEOMETRY=capped
 fi
 RUN_ROOT="${PMME_H9_RUN_ROOT:-$ROOT/experiments/h9-${GEOMETRY}-updates${UPDATES}-dev${DAYS}d}"
+RUN_ROOT="$(python -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$RUN_ROOT")"
 mkdir -p "$RUN_ROOT"
 COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
 BRANCH="$(git -C "$ROOT" branch --show-current)"
