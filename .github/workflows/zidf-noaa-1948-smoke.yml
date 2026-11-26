@@ -1,0 +1,32 @@
+name: ZIDF NOAA real-data 1948 smoke download
+on:
+  push:
+    branches:
+      - data/zero-inflated-continuous-datasets-20261126
+    paths:
+      - .github/workflows/zidf-noaa-1948-smoke.yml
+  workflow_dispatch:
+jobs:
+  fetch-year:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch six official NOAA NetCDF files for 1948 (regional subset)
+        run: |
+          python data/zero_inflated/scripts/download_zidf_noaa.py download \
+            --start-year 1948 --end-year 1948 --retries 2 --timeout 100
+      - name: Verify downloaded NetCDF files
+        run: |
+          python data/zero_inflated/scripts/download_zidf_noaa.py verify \
+            --start-year 1948 --end-year 1948
+      - name: Upload actual 1948 NOAA NetCDF data as action artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zidf-noaa-sa-1948-nc
+          path: data/zero_inflated/zidf/raw/noaa_sa/
+          if-no-files-found: warn
+          retention-days: 7
