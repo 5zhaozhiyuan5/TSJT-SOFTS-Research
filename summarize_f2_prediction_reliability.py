@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Compare new PRC against original F2, selecting checkpoints by support validation.
+"""Summarize PRC checkpoints selected by target-support validation.
 
-Outputs Stage-I and official Stage-II test MAE/RMSE, for 36 horizons and
-10/60/120/180min. Delta is PRC - F2; negative means better.
+Defaults to PRC-only runs. If a matching same-commit F2 is present it can be
+compared, but historical F2/T0 seed1 is a separate-commit contextual reference.
 """
 import argparse
 import csv
@@ -60,7 +60,7 @@ def main():
             continue
         base=by_key.get(("f2",r["stage"],r["seed"]))
         if base is None:
-            print("[WARN] No matching F2 baseline:",r["stage"],r["seed"])
+            # PRC-only experiment intentionally does not rerun the F2 baseline.
             continue
         item={"seed":r["seed"],"stage":r["stage"],
               "prc_best_epoch":r["best_support_epoch"],
@@ -88,6 +88,15 @@ def main():
         print("PRC-F2 seed%s %s delta36MAE=%+.6f delta36RMSE=%+.6f" % (
             d["seed"],d["stage"],d["delta_mean_36_horizon_mae"],
             d["delta_mean_36_horizon_rmse"]))
+    historical_f2_seed1_stage2_mae=2.372713333333333
+    for r in results:
+        if r["mode"]=="prc" and r["seed"]=="1" and r["stage"]=="stage2":
+            print("HISTORICAL_REFERENCE_ONLY F2/T0 seed1 Stage-II 36MAE=%.6f "
+                  "PRC-minus-history=%+.6f (different code commit; NOT a "
+                  "same-run paired comparison)" % (
+                  historical_f2_seed1_stage2_mae,
+                  r["mean_36_horizon_mae"]-historical_f2_seed1_stage2_mae
+            ))
     print("Saved",rows_path)
 
 
