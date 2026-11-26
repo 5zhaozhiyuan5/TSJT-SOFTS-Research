@@ -1,0 +1,1 @@
+OT_DECAY_VERIFIED t0 samples 121 DAepoch 0.01 start 0.01 end 0.01 last 0.01

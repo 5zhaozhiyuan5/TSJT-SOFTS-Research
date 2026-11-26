@@ -132,4 +132,8 @@ experiments/f2-late-ot-decay/matched_deltas_vs_t0.csv
 5. 使用目标支持验证分数选择 checkpoint，目标测试集只作最终离线报告；注意原训练脚本每 100 epoch 仍会打印测试指标，不应据此挑选最佳候选或调整 schedule。
 6. H3 checkpoint 单步探针使用的是见过的支持集，不能与这里的测试集 MAE 在数字上直接比较。
 
-此分支提交的是**代码和实验设计**，未在用户服务器上执行实际 GPU 训练，不存在 T0/T1/T2 的新结果。
+## 6. seed1 正式运行结果（2026-11-26）
+
+T0、T1、T2 均在服务器完成 Stage-I（3000 epoch）和 Stage-II（6000 epoch），每个变体各运行 seed1。三个 run 都有 `COMPLETED` 标记，未发现失败标记；实际 OT 调度核验分别通过，T1 在 epoch 2999 降为 0，T2 降为 0.0025。
+
+正式日志、汇总 CSV 和论文对比表保存在 `experiment_logs/experiment-pmme-f2-late-ot-decay-t0t2-20261126/`。T1、T2 的 Stage-II 36 步平均 MAE 分别为 2.37636 和 2.38693；固定 OT 对照 T0 为 2.37271。因此本轮单 seed 结果暂不支持 T1/T2 改善整体平均 MAE。各时长的 MAE/RMSE 与论文 Table 2 的详细比较见同目录 `comparison_to_paper.md`。单 seed 不用于推断统计显著性。

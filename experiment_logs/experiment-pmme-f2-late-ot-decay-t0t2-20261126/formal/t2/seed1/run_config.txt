@@ -1,0 +1,16 @@
+branch=experiment/pmme-f2-late-ot-decay-t0t2-20261126
+git_commit=ef11d9c3cd14218451e70106314a49add9429f32
+seed=1
+mode=t2
+f2_method=original
+transfer_variant=gradient
+feedback_mode=g0
+pair_variant=f2
+stage1_epochs=3000
+stage2_epochs=6000
+daepoch=1500
+decay_start=2000
+decay_end=2999
+ot_base_scale=0.01
+t2_tail_fraction=0.25
+gpu=0

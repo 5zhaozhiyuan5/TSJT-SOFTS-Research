@@ -1,0 +1,1 @@
+OT_DECAY_VERIFIED t2 samples 121 DAepoch 0.01 start 0.01 end 0.0025 last 0.0025

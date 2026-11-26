@@ -1,0 +1,20 @@
+[RUN] mode=t0 seed=1 Stage-I=3000 Stage-II=6000
+[DONE] mode=t0 seed=1 logs=/home/zhaozhiyuan/experiment-pmme-f2-late-ot-decay-t0t2-20261126/runs/formal/t0/seed1
+[RUN] mode=t1 seed=1 Stage-I=3000 Stage-II=6000
+[DONE] mode=t1 seed=1 logs=/home/zhaozhiyuan/experiment-pmme-f2-late-ot-decay-t0t2-20261126/runs/formal/t1/seed1
+[RUN] mode=t2 seed=1 Stage-I=3000 Stage-II=6000
+[DONE] mode=t2 seed=1 logs=/home/zhaozhiyuan/experiment-pmme-f2-late-ot-decay-t0t2-20261126/runs/formal/t2/seed1
+Target test metrics from checkpoints SELECTED BY SUPPORT validation.
+Do not retune T1/T2 using target test results.
+t0/1/stage1 best=2899  mean36MAE=2.42948 MAE(10/60/120/180)=1.42953/2.33793/2.72919/2.98423
+t1/1/stage1 best=2399  mean36MAE=2.40624 MAE(10/60/120/180)=1.40539/2.33201/2.70506/2.95012
+t2/1/stage1 best=2399  mean36MAE=2.41201 MAE(10/60/120/180)=1.41878/2.34239/2.71579/2.94475
+t0/1/stage2 best=5999  mean36MAE=2.37271 MAE(10/60/120/180)=1.37044/2.30205/2.67932/2.92548
+t1/1/stage2 best=5999  mean36MAE=2.37636 MAE(10/60/120/180)=1.37496/2.29898/2.67924/2.92655
+t2/1/stage2 best=5299  mean36MAE=2.38693 MAE(10/60/120/180)=1.39251/2.30563/2.69089/2.93356
+Delta t1 vs T0 seed1 stage1: 36MAE=-0.02324 MAE(10/60/120/180)=-0.02414/-0.00592/-0.02413/-0.03411
+Delta t2 vs T0 seed1 stage1: 36MAE=-0.01746 MAE(10/60/120/180)=-0.01075/+0.00446/-0.01340/-0.03948
+Delta t1 vs T0 seed1 stage2: 36MAE=+0.00365 MAE(10/60/120/180)=+0.00452/-0.00307/-0.00008/+0.00107
+Delta t2 vs T0 seed1 stage2: 36MAE=+0.01421 MAE(10/60/120/180)=+0.02207/+0.00358/+0.01157/+0.00808
+Summaries saved: /home/zhaozhiyuan/experiment-pmme-f2-late-ot-decay-t0t2-20261126/runs/formal/selected_checkpoint_metrics.csv
+T0/T1/T2 selected variants completed.
