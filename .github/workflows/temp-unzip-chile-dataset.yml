@@ -1,0 +1,149 @@
+name: TEMP Extract Chile zero-inflated CSV into dataset branch
+on:
+  push:
+    branches:
+      - datasets/continuous-zero-inflated-verified-20261126
+    paths:
+      - .github/workflows/temp-unzip-chile-dataset.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unzip-and-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          submodules: false
+      - name: Extract original CSV and validate ZIP CRC + byte integrity
+        run: |
+          python - <<'PY'
+          import hashlib, json, shutil, zipfile
+          from pathlib import Path
+          p = Path("data/zero_inflated_papers/hybrid_nhmm_copula/raw")
+          zpath = p/"mapa_estaciones_precipitaciones_clean.csv.zip"
+          out = p/"mapa_estaciones_precipitaciones_clean.csv"
+          sha1 = hashlib.sha1()
+          with zpath.open("rb") as f:
+              sha1.update(f"blob {zpath.stat().st_size}\0".encode())
+              for chunk in iter(lambda: f.read(2**20), b""):
+                  sha1.update(chunk)
+          assert sha1.hexdigest() == "0d007e8f179c4602ca5d44a294cf5c2defda623f", "Source ZIP mismatch"
+          with zipfile.ZipFile(zpath) as z:
+              assert z.testzip() is None, "ZIP CRC failed"
+              info = z.getinfo("mapa_estaciones_precipitaciones_clean.csv")
+              assert info.file_size == 216657356, "Uncompressed file size mismatch"
+              with z.open(info) as inp, out.open("wb") as target:
+                  shutil.copyfileobj(inp,target,length=2**20)
+          assert out.stat().st_size == 216657356
+          dig = hashlib.sha256()
+          with out.open("rb") as f:
+              for chunk in iter(lambda: f.read(2**20), b""):
+                  dig.update(chunk)
+          meta = {
+            "source":"mauricio-herrera/hybrid-nhmm-copula-precipitation-framework",
+            "source_commit":"c09e5c46c6c5c237c86a3d214768febfc9e0dbac",
+            "source_git_blob_sha1":"0d007e8f179c4602ca5d44a294cf5c2defda623f",
+            "uncompressed_csv":"mapa_estaciones_precipitaciones_clean.csv",
+            "uncompressed_bytes":out.stat().st_size,
+            "uncompressed_sha256":dig.hexdigest(),
+            "zip_crc":"passed"
+          }
+          (p/"extraction_verified.json").write_text(json.dumps(meta,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+          print("EXTRACTED",out,"BYTES",out.stat().st_size,"SHA256",dig.hexdigest(),flush=True)
+          PY
+      - name: Upload extracted full CSV with Git LFS, or losslessly split into plain CSV parts if LFS cannot be used
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          DATADIR=data/zero_inflated_papers/hybrid_nhmm_copula/raw
+          CSV=mapa_estaciones_precipitaciones_clean.csv
+          BRANCH=datasets/continuous-zero-inflated-verified-20261126
+          if command -v git-lfs >/dev/null 2>&1; then
+            cp "$DATADIR/$CSV" "$RUNNER_TEMP/chile-full.csv"
+            git lfs install --local
+            git lfs track "$DATADIR/$CSV"
+            git add .gitattributes "$DATADIR/$CSV" "$DATADIR/extraction_verified.json"
+            git rm "$DATADIR/$CSV.zip"
+            git commit -m "data(chile): unpack complete 216MB CSV using Git LFS (remove ZIP)"
+            if git push origin "HEAD:refs/heads/$BRANCH"; then
+              echo "DATA_UPLOAD_MODE=lfs" >> "$GITHUB_STEP_SUMMARY"
+              echo "✅ Uploaded uncompressed original CSV through Git LFS" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Git LFS push failed. Will use validated standard-Git CSV parts instead."
+            git reset --hard "origin/$BRANCH"
+            mkdir -p "$DATADIR"
+            mv "$RUNNER_TEMP/chile-full.csv" "$DATADIR/$CSV"
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          folder=Path("data/zero_inflated_papers/hybrid_nhmm_copula/raw")
+          original=folder/"mapa_estaciones_precipitaciones_clean.csv"
+          original_sha=hashlib.sha256(original.read_bytes()).hexdigest()
+          assert original.stat().st_size==216657356
+          out=folder/"csv_parts"
+          out.mkdir(exist_ok=True)
+          max_file_size=42*1024*1024
+          files=[]
+          with original.open("rb") as src:
+              header=src.readline()
+              assert header.startswith(b'"year"'), "Unexpected original CSV header"
+              index=0
+              part=None
+              size=0
+              rows=0
+              for line in src:
+                  if part is None or (size+len(line)>max_file_size and rows>0):
+                      if part is not None:
+                          part.close()
+                          files[-1]["rows"]=rows
+                      index+=1
+                      target=out/f"precipitation_part_{index:03d}.csv"
+                      part=target.open("wb")
+                      part.write(header)
+                      size=len(header)
+                      rows=0
+                      files.append({"name":target.name})
+                  part.write(line)
+                  size+=len(line)
+                  rows+=1
+              if part is not None:
+                  part.close()
+                  files[-1]["rows"]=rows
+          for item in files:
+              f=out/item["name"]
+              item["bytes"]=f.stat().st_size
+              item["sha256"]=hashlib.sha256(f.read_bytes()).hexdigest()
+              assert item["bytes"]<100*1024*1024, "Exceeds GitHub regular blob hard limit"
+          verify=hashlib.sha256()
+          with (out/files[0]["name"]).open("rb") as f:
+              while b:=f.read(2**20): verify.update(b)
+          for item in files[1:]:
+              with (out/item["name"]).open("rb") as f:
+                  assert f.readline()==header
+                  while b:=f.read(2**20):verify.update(b)
+          assert verify.hexdigest()==original_sha, "Unpacked CSV split reconstruction differs byte for byte"
+          meta=json.loads((folder/"extraction_verified.json").read_text())
+          meta["storage"]="lossless_csv_parts_in_regular_git"
+          meta["original_uncompressed_sha256"]=original_sha
+          meta["parts"]=files
+          meta["sum_rows"]=sum(f["rows"] for f in files)
+          (folder/"extraction_verified.json").write_text(json.dumps(meta,ensure_ascii=False,indent=2)+"\n")
+          print("UNPACKED CSV SPLIT",len(files),"PARTS; original SHA256",original_sha,flush=True)
+          print("FILES",json.dumps(files,ensure_ascii=False),flush=True)
+          original.unlink()
+          PY
+          git add "$DATADIR/csv_parts/" "$DATADIR/extraction_verified.json"
+          git rm "$DATADIR/$CSV.zip"
+          git commit -m "data(chile): replace ZIP with verified unpacked CSV parts in ordinary Git"
+          git push origin "HEAD:refs/heads/$BRANCH"
+          echo "DATA_UPLOAD_MODE=split-csv" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ Stored original uncompressed dataset as readable regular-Git CSV parts" >> "$GITHUB_STEP_SUMMARY"
