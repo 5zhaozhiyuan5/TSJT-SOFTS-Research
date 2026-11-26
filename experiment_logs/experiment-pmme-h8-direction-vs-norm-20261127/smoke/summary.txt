@@ -1,0 +1,15 @@
+H8: checkpoint-only, ZERO F2/Stage-II training; SUPPORT-only shadow.
+H8 primary: projected_half better than SAME-GRADIENT-NORM raw OT?
+H8 secondary: projected_half better than SAME-AdamW-STEP-NORM raw OT?
+Identity F2 replay numerical noise max 0.0
+adamw_step_norm_matched_raw gain_vs_F2=+0.000192404 gain_vs_half=+0.000002384 gain_vs_norm_matched=+0.000005960 gain_vs_adamw_matched=+0.000000000
+all_off gain_vs_F2=+0.000406504 gain_vs_half=+0.000216484 gain_vs_norm_matched=+0.000220060 gain_vs_adamw_matched=+0.000214100
+direction_norm_matched_half gain_vs_F2=+0.000251055 gain_vs_half=+0.000061035 gain_vs_norm_matched=+0.000064611 gain_vs_adamw_matched=+0.000058651
+f2 gain_vs_F2=+0.000000000 gain_vs_half=-0.000190020 gain_vs_norm_matched=-0.000186443 gain_vs_adamw_matched=-0.000192404
+global_half gain_vs_F2=+0.000190020 gain_vs_half=+0.000000000 gain_vs_norm_matched=+0.000003576 gain_vs_adamw_matched=-0.000002384
+identity gain_vs_F2=+0.000000000 gain_vs_half=-0.000190020 gain_vs_norm_matched=-0.000186443 gain_vs_adamw_matched=-0.000192404
+norm_matched_raw gain_vs_F2=+0.000186443 gain_vs_half=-0.000003576 gain_vs_norm_matched=+0.000000000 gain_vs_adamw_matched=-0.000005960
+projected_half gain_vs_F2=+0.000276804 gain_vs_half=+0.000086784 gain_vs_norm_matched=+0.000090361 gain_vs_adamw_matched=+0.000084400
+All optimizer-calibrations within 1%: True
+DECISIONS {"adamw_control_calibration_usable": true, "primary_direction_vs_same_gradient_norm": {"pass": false, "reason": "fewer than 8 correlated probes"}, "prior_h7_winner_vs_global_half": {"pass": false, "reason": "fewer than 8 correlated probes"}, "readme": "H8 probes are all within original F2 checkpoint's already-seen support; no generalization or statistical significance.", "secondary_direction_vs_same_adamw_step_norm": {"pass": false, "reason": "fewer than 8 correlated probes"}}
+No result constitutes an independent target validation or final model improvement.

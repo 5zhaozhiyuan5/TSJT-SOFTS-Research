@@ -1,0 +1,34 @@
+{
+  "adamw_control_calibration_usable": true,
+  "primary_direction_vs_same_gradient_norm": {
+    "first4": 0.0002530813217163086,
+    "last4": 6.502866744995117e-05,
+    "mean": 0.00015905499458312988,
+    "median": 5.7220458984375e-05,
+    "median_threshold": 5e-05,
+    "outlier_share": 0.641371557054525,
+    "pass": false,
+    "positive": 8
+  },
+  "prior_h7_winner_vs_global_half": {
+    "first4": 0.0002614259719848633,
+    "last4": 6.93202018737793e-05,
+    "mean": 0.0001653730869293213,
+    "median": 6.330013275146484e-05,
+    "median_threshold": 5e-05,
+    "outlier_share": 0.6318255541539016,
+    "pass": false,
+    "positive": 8
+  },
+  "readme": "H8 probes are all within original F2 checkpoint's already-seen support; no generalization or statistical significance.",
+  "secondary_direction_vs_same_adamw_step_norm": {
+    "first4": 0.0002606511116027832,
+    "last4": 7.11679458618164e-05,
+    "mean": 0.0001659095287322998,
+    "median": 6.35385513305664e-05,
+    "median_threshold": 5e-05,
+    "outlier_share": 0.6321178372552542,
+    "pass": false,
+    "positive": 8
+  }
+}

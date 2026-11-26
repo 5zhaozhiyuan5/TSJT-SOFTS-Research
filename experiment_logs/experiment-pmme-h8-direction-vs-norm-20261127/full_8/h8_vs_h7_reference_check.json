@@ -1,0 +1,9 @@
+{
+  "matched": true,
+  "max_mae_differences": {
+    "f2__f2": 0.0,
+    "global_half__global_half": 0.0,
+    "projected_half__city_projection_half": 1.430511474609375e-06
+  },
+  "tolerance": 1e-05
+}

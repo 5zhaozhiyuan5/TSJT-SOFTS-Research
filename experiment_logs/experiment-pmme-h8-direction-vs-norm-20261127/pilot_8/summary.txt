@@ -1,0 +1,15 @@
+H8: checkpoint-only, ZERO F2/Stage-II training; SUPPORT-only shadow.
+H8 primary: projected_half better than SAME-GRADIENT-NORM raw OT?
+H8 secondary: projected_half better than SAME-AdamW-STEP-NORM raw OT?
+Identity F2 replay numerical noise max 0.0
+adamw_step_norm_matched_raw gain_vs_F2=+0.000005931 gain_vs_half=-0.000000536 gain_vs_norm_matched=-0.000006855 gain_vs_adamw_matched=+0.000000000
+all_off gain_vs_F2=+0.000274897 gain_vs_half=+0.000268430 gain_vs_norm_matched=+0.000262111 gain_vs_adamw_matched=+0.000268966
+direction_norm_matched_half gain_vs_F2=+0.000162959 gain_vs_half=+0.000156492 gain_vs_norm_matched=+0.000150174 gain_vs_adamw_matched=+0.000157028
+f2 gain_vs_F2=+0.000000000 gain_vs_half=-0.000006467 gain_vs_norm_matched=-0.000012785 gain_vs_adamw_matched=-0.000005931
+global_half gain_vs_F2=+0.000006467 gain_vs_half=+0.000000000 gain_vs_norm_matched=-0.000006318 gain_vs_adamw_matched=+0.000000536
+identity gain_vs_F2=+0.000000000 gain_vs_half=-0.000006467 gain_vs_norm_matched=-0.000012785 gain_vs_adamw_matched=-0.000005931
+norm_matched_raw gain_vs_F2=+0.000012785 gain_vs_half=+0.000006318 gain_vs_norm_matched=+0.000000000 gain_vs_adamw_matched=+0.000006855
+projected_half gain_vs_F2=+0.000171840 gain_vs_half=+0.000165373 gain_vs_norm_matched=+0.000159055 gain_vs_adamw_matched=+0.000165910
+All optimizer-calibrations within 1%: True
+DECISIONS {"adamw_control_calibration_usable": true, "primary_direction_vs_same_gradient_norm": {"first4": 0.0002530813217163086, "last4": 6.502866744995117e-05, "mean": 0.00015905499458312988, "median": 5.7220458984375e-05, "median_threshold": 5e-05, "outlier_share": 0.641371557054525, "pass": false, "positive": 8}, "prior_h7_winner_vs_global_half": {"first4": 0.0002614259719848633, "last4": 6.93202018737793e-05, "mean": 0.0001653730869293213, "median": 6.330013275146484e-05, "median_threshold": 5e-05, "outlier_share": 0.6318255541539016, "pass": false, "positive": 8}, "readme": "H8 probes are all within original F2 checkpoint's already-seen support; no generalization or statistical significance.", "secondary_direction_vs_same_adamw_step_norm": {"first4": 0.0002606511116027832, "last4": 7.11679458618164e-05, "mean": 0.0001659095287322998, "median": 6.35385513305664e-05, "median_threshold": 5e-05, "outlier_share": 0.6321178372552542, "pass": false, "positive": 8}}
+No result constitutes an independent target validation or final model improvement.

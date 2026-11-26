@@ -1,0 +1,16 @@
+{
+  "adamw_control_calibration_usable": true,
+  "primary_direction_vs_same_gradient_norm": {
+    "pass": false,
+    "reason": "fewer than 8 correlated probes"
+  },
+  "prior_h7_winner_vs_global_half": {
+    "pass": false,
+    "reason": "fewer than 8 correlated probes"
+  },
+  "readme": "H8 probes are all within original F2 checkpoint's already-seen support; no generalization or statistical significance.",
+  "secondary_direction_vs_same_adamw_step_norm": {
+    "pass": false,
+    "reason": "fewer than 8 correlated probes"
+  }
+}

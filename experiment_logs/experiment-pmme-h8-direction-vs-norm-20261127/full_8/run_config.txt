@@ -1,0 +1,12 @@
+branch=experiment/pmme-h8-direction-vs-norm-20261127
+commit=c2b3e638b840cf7d53cbcc5281a399c20fe2eed8
+checkpoint=/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth
+checkpoint_sha256=f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf
+probe_batches=8
+source_points=0
+target_points=0
+seed=1
+gpu=0
+ot_scale=0.01
+training_updates=0
+stage2_runs=0

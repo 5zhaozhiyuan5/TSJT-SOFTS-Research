@@ -3,7 +3,7 @@
 **分支：** `experiment/pmme-h8-direction-vs-norm-20261127`  
 **基于：** H7 已完成的 full-OT 日志提交 `e35dd64d5cde2f50b9614bdebd5d86731f411bf3`。
 
-> 本阶段只添加独立诊断脚本和单测。**不重新训练 F2、不训练 Stage-II、不修改官方 PMME / SOFTS / OT / 原有 F2 加权代码。** 尚无本 H8 实验数据，代码提交不等于 GPU 验证成功。
+> 本阶段只添加独立诊断脚本和单测。**不重新训练 F2、不训练 Stage-II、不修改官方 PMME / SOFTS / OT / 原有 F2 加权代码。** 本次只读审计执行记录见第 7 节。
 
 ## 1. 研究动机和待证问题
 
@@ -161,4 +161,36 @@ H8 **主判据**为 `projected_half` vs `norm_matched_raw`：
 5. `tests/test_h8_direction_norm_audit.py`
 6. `H8_DIRECTION_VS_NORM_EXPERIMENT.md`
 
-**实现前已有实验观察与本次代码不能混淆：H8 实验尚未运行；没有提供新的最终 MAE/RMSE。**
+**实现提交与本次只读审计结果分开记录：H8 没有训练模型，也没有新的最终测试集 MAE/RMSE。**
+
+## 7. Server execution record (2026-11-27)
+
+H8 ran on commit `c2b3e638b840cf7d53cbcc5281a399c20fe2eed8` with the server's existing PMME environment. No package or dataset download/install occurred. The pinned original F2 Stage-I epoch-2899 checkpoint SHA256 matched `f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf`.
+
+| Run | Probes | OT points | Status |
+| --- | ---: | --- | --- |
+| Smoke | 1 | capped 256 source / 128 target | `COMPLETED` |
+| Pilot | 8 | capped 256 source / 128 target | `COMPLETED` |
+| Full OT | 8 | uncapped (`0` means full geometry) | `COMPLETED` |
+
+All three run directories contain `COMPLETED`; none contains `FAILED`. H8 made **0 training updates** and ran **0 Stage-II evaluations**. CPU-only unit tests in the run plan were not run. The target was PEMS-BAY, with Chengdu, METR-LA and Shenzhen sources. All scores are one-step shadow results on correlated target-support probes already seen by the checkpoint, not independent evaluation or final-model accuracy.
+
+The full-OT F2, `global_half`, and projected-half shadow scores reproduced H7's archived references within `1e-5`: maximum differences were `0.0`, `0.0`, and `1.43e-6`, respectively. AdamW step-norm calibration was usable; all 8 calibration errors were within 1%.
+
+### Full-OT paired gains
+
+Positive gain means lower target-support probe MAE for the first named policy. The primary contrast is `projected_half` against `norm_matched_raw`, which holds the raw OT gradient norm equal; the secondary contrast is against `adamw_step_norm_matched_raw`, which matches the OT-induced AdamW displacement norm.
+
+| Contrast | Mean gain | Median | Positive | First / last 4 mean | Max absolute share | Screen |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `projected_half` vs `norm_matched_raw` | +0.000082314 | +0.000071645 | 8/8 | +0.000077426 / +0.000087202 | 0.234 | Pass |
+| `projected_half` vs `adamw_step_norm_matched_raw` | +0.000095934 | +0.000089407 | 8/8 | +0.000091255 / +0.000100613 | 0.180 | Pass; step match within 1% |
+| `projected_half` vs `global_half` | +0.000096053 | +0.000090003 | 8/8 | +0.000092089 / +0.000100017 | 0.177 | Pass |
+
+For the primary same-gradient-norm contrast, short-, mid- and long-horizon gains were all positive: `+0.000079155`, `+0.000083417`, and `+0.000084370`. Identity replay noise was zero, so the median threshold was `0.00005`.
+
+### Interpretation
+
+The projected direction passed both the same-gradient-norm and same-AdamW-step-norm screens in these 8 correlated support probes. This is consistent with a local direction effect beyond merely reducing gradient or optimizer-step magnitude. It is still a one-step shadow audit on support data previously seen by the checkpoint; it does not establish generalization, statistical significance, or improvement after model training. Do not compare these gains numerically with paper Stage-II MAE.
+
+Successful raw run logs are stored under `experiment_logs/experiment-pmme-h8-direction-vs-norm-20261127/{smoke,pilot_8,full_8}`. Each folder includes result JSONL, metadata, policy table, optimizer/city traces, decision JSON, `train.out`, summary, run config and completion marker.

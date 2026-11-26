@@ -1,0 +1,43 @@
+{
+  "adamw_control_calibration_usable": true,
+  "h7_reference_replay": {
+    "matched": true,
+    "max_mae_differences": {
+      "f2__f2": 0.0,
+      "global_half__global_half": 0.0,
+      "projected_half__city_projection_half": 1.430511474609375e-06
+    },
+    "tolerance": 1e-05
+  },
+  "primary_direction_vs_same_gradient_norm": {
+    "first4": 7.742643356323242e-05,
+    "last4": 8.720159530639648e-05,
+    "mean": 8.231401443481445e-05,
+    "median": 7.164478302001953e-05,
+    "median_threshold": 5e-05,
+    "outlier_share": 0.2338884866039102,
+    "pass": true,
+    "positive": 8
+  },
+  "prior_h7_winner_vs_global_half": {
+    "first4": 9.208917617797852e-05,
+    "last4": 0.00010001659393310547,
+    "mean": 9.605288505554199e-05,
+    "median": 9.000301361083984e-05,
+    "median_threshold": 5e-05,
+    "outlier_share": 0.17654359292584548,
+    "pass": true,
+    "positive": 8
+  },
+  "readme": "H8 probes are all within original F2 checkpoint's already-seen support; no generalization or statistical significance.",
+  "secondary_direction_vs_same_adamw_step_norm": {
+    "first4": 9.125471115112305e-05,
+    "last4": 0.00010061264038085938,
+    "mean": 9.593367576599121e-05,
+    "median": 8.940696716308594e-05,
+    "median_threshold": 5e-05,
+    "outlier_share": 0.18018018018018017,
+    "pass": true,
+    "positive": 8
+  }
+}
