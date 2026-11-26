@@ -206,7 +206,7 @@ class ForecastAccumulator:
                 for k,v in sorted(self.days.items())
             },
             "value_count":self.count,
-            "window_count":int(self.hcount* self.horizon/self.count * (self.count//self.horizon)//(self.hcount)) if False else None,
+            "window_count":None,
         }
 
 
