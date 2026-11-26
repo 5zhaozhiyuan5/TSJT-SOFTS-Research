@@ -1,0 +1,27 @@
+{
+  "audit_version": "h3-v1",
+  "batch_size_source": 16,
+  "checkpoint_epoch": 2899,
+  "checkpoint_path": "/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth",
+  "checkpoint_sha256": "f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf",
+  "f2_reference": "ORIGINAL F2 cosine formula, recomputed using fit-only target windows (not all-support training alpha)",
+  "full_ot_geometry": true,
+  "optimizer": "loaded original AdamW state, virtual step only",
+  "ot_cost": "original concat(rep, sqrt(100)*normalized_future), GeomLoss(p=1, blur=0.001, debias=False)",
+  "ot_scale": 0.01,
+  "pcgrad": "one-sided full-parameter source_plus_OT against target FIT",
+  "seed": 1,
+  "source_cities": [
+    "chengdu_m",
+    "metr-la",
+    "shenzhen",
+    "pems-bay",
+    "pems-bay"
+  ],
+  "source_points": 0,
+  "target_city": "pems-bay",
+  "target_points": 0,
+  "target_split": "three-day support; modulo-5 probe; not independent",
+  "target_windows": 46,
+  "training_updates": 0
+}

@@ -1,0 +1,9 @@
+branch=experiment/pmme-f2-h3-city-counterfactual-20261126
+commit=76db05e43b22edf027a4aa8cf356de57fcf98eca
+checkpoint=/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth
+checkpoint_sha256=f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf
+seed=1
+probe_batches=8
+source_points=0
+target_points=0
+gpu=0

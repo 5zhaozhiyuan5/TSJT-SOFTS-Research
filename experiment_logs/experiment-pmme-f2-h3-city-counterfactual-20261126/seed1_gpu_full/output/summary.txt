@@ -1,0 +1,11 @@
+H3 one-step PCGrad+AdamW SHADOW; within three-day support only.
+Positive gain = less probe loss than all-three-city F2; no forecast test, no independent generalization claim.
+Records: 8 ; full geometry: True
+all_off                      mean_gain=+0.00062325597 positive=87.5% mean_mae_gain=+0.00062313676 bands=+0.000566766/+0.000716299/+0.000586599 MAE(10,60,120,180)=+0.000198364/+0.000778377/+0.000840992/+4.32134e-06
+city_off:shenzhen            mean_gain=+0.00012084842 positive=62.5% mean_mae_gain=+0.00012075901 bands=+0.000193059/+8.81553e-05/+8.14795e-05 MAE(10,60,120,180)=+0.000103489/+0.000171483/+9.92417e-06/-7.54297e-05
+city_off:chengdu_m           mean_gain=+7.0124865e-05 positive=87.5% mean_mae_gain=+7.0035458e-05 bands=+0.00012587/-1.67787e-05/+0.000101358 MAE(10,60,120,180)=+9.35644e-05/+0.0001086/-3.54052e-05/+6.30021e-05
+city_uniform:chengdu_m       mean_gain=+2.3543835e-06 positive=62.5% mean_mae_gain=+2.1755695e-06 bands=-2.47359e-06/-3.30806e-06/+1.2815e-05 MAE(10,60,120,180)=-2.01166e-05/-5.96046e-07/-4.02331e-06/+9.83477e-07
+f2                           mean_gain=+0 positive= 0.0% mean_mae_gain=+0 bands=+0/+0/+0 MAE(10,60,120,180)=+0/+0/+0/+0
+city_off:metr-la             mean_gain=-1.2874603e-05 positive=62.5% mean_mae_gain=-1.2904406e-05 bands=+5.92023e-05/-8.47876e-05/-1.28746e-05 MAE(10,60,120,180)=+7.56532e-05/-1.12057e-05/-0.000111312/-8.27909e-05
+city_uniform:metr-la         mean_gain=-3.4511089e-05 positive=25.0% mean_mae_gain=-3.4451485e-05 bands=+3.57628e-07/-3.99351e-05/-6.36578e-05 MAE(10,60,120,180)=-2.59578e-05/-4.19319e-05/-5.52833e-05/-7.45654e-05
+city_uniform:shenzhen        mean_gain=-0.00012850761 positive=37.5% mean_mae_gain=-0.00012847781 bands=-3.03835e-05/-0.000110328/-0.000244647 MAE(10,60,120,180)=-4.16785e-05/-7.83205e-05/-0.000203997/-0.000285834
