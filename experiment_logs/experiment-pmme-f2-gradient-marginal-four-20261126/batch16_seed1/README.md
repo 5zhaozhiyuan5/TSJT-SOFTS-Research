@@ -6,4 +6,4 @@
 - Stage I: 3000 epochs; Stage II: 6000 epochs; DAepoch 1500; OT scale 0.01.
 - Existing server PMME environment; no server downloads or package installation.
 
-Status at this snapshot: `mag/seed1` and `sign/seed1` completed Stage I and Stage II. `ema/seed1` reached Stage I epoch 2725/3000; `biot/seed1` is queued. Logs are gzip-compressed as `train.out.gz`.
+Status at this snapshot: `mag/seed1`, `sign/seed1`, and `ema/seed1` completed Stage I and Stage II. `biot/seed1` is at Stage I epoch 675/3000. Logs are gzip-compressed as `train.out.gz`.

@@ -1,0 +1,11 @@
+branch=experiment/pmme-f2-gradient-marginal-four-20261126
+git_commit=46b6c4c56ee73d79fbc54448823ee725add403de
+seed=1
+f2_method=biot
+pair_variant=f2
+transfer_variant=gradient
+feedback_mode=g0
+ot_scale=0.01
+stage1_epochs=3000
+stage2_epochs=6000
+daepoch=1500
