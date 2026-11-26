@@ -1,0 +1,38 @@
+{
+  "audit_version": "h7-v1",
+  "candidate_policies": [
+    "f2",
+    "global_half",
+    "city_off:shenzhen",
+    "global_projection",
+    "city_projection",
+    "city_projection_half",
+    "identity"
+  ],
+  "checkpoint": "/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth",
+  "checkpoint_epoch": 2899,
+  "checkpoint_sha256": "f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf",
+  "full_ot_geometry": true,
+  "novelty_claim": false,
+  "optimizer": "all-parameter one-sided PCGrad, original AdamW state",
+  "original_ot_scale": 0.01,
+  "ot_cost": "original GeomLoss(p=1,blur=.001,debias=False); concat(SOFTS_rep,10*RevIN_true_future)",
+  "probe_batches": 8,
+  "probe_for_policy_selection": false,
+  "projection": "OT component against target FIT gradient BEFORE original whole-update PCGrad; no probe labels",
+  "seed": 1,
+  "source_cities": [
+    "chengdu_m",
+    "metr-la",
+    "shenzhen"
+  ],
+  "source_points": 0,
+  "stage2_runs": 0,
+  "target_city": "pems-bay",
+  "target_points": 0,
+  "target_probe_previously_seen_by_checkpoint": true,
+  "target_support_only": true,
+  "training_updates": 0,
+  "transport_matrix_explicitly_materialized": false,
+  "warning": "Support windows overlap in time; no independent test MAE"
+}

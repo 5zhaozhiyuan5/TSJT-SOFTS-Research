@@ -2,7 +2,7 @@
 
 **Branch:** `experiment/pmme-h7-ot-gradient-projection-20261127`  
 **Based on H6 completed full-OT run commit:** `184db4b5c04982b269bee7d29e3bbc5b82d2cd57`  
-**Status:** Code committed; server CPU unit tests / GPU smoke / full-OT audit NOT yet executed. No claimed forecast accuracy improvement.
+**Status:** GPU smoke, capped pilot and full-OT audit completed on the server; 0 training updates and 0 Stage-II runs. CPU unit tests were not run. No claimed forecast accuracy improvement.
 
 ## 1. Motivation from real, previously uploaded logs
 
@@ -151,3 +151,38 @@ Each per-batch record tracks 3-city gradient projections, OT alpha ESS/top mass/
 - `H7_OT_COMPONENT_PROJECTION_EXPERIMENT.md`
 
 H7 is an isolated diagnostic code path. The upstream Stage-I F2 and Stage-II official training code remain unmodified.
+
+## 7. Server execution record (2026-11-27)
+
+The audit ran on commit `8d0ce5454037b3eca8b6c52e56e485dcbe7f79c2` using the existing PMME environment on the server; no packages or data were downloaded or installed. The pinned original F2 Stage-I epoch-2899 checkpoint SHA256 matched `f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf`.
+
+| Run | Probes | OT points | Status |
+| --- | ---: | --- | --- |
+| Smoke | 1 | capped 256 source / 128 target | `COMPLETED` |
+| Pilot | 8 | capped 256 source / 128 target | `COMPLETED` |
+| Full OT | 8 | uncapped (`0` means full geometry) | `COMPLETED` |
+
+All three run directories contain `COMPLETED`; none contains `FAILED`. H7 made **0 training updates** and ran **0 Stage-II evaluations**. CPU-only unit tests from the run plan were not executed. The target is PEMS-BAY, sources are Chengdu, METR-LA and Shenzhen, and all scores are one-step shadow updates on correlated target-support probes already seen by the original checkpoint. These are not independent test results or paper-comparable Stage-II MAE.
+
+The full-OT run's F2 and `global_half` shadow MAEs matched the archived H6 reference exactly (maximum absolute difference `0.0` for both), confirming the same checkpoint, probe order and shadow replay.
+
+### Full-OT paired gains against `global_half`
+
+Positive gain means lower target-support probe MAE than the H6 `global_half` shadow update. The prespecified screen requires at least 6/8 positive batches, positive first-four and last-four means, median gain above `max(0.00005, 10 × identity noise)`, and maximum absolute batch share at most 0.5. Identity replay noise was zero.
+
+| Policy | Mean gain | Median | Positive | First / last 4 mean | Max absolute share | Screen |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `city_projection_half` | +0.000096560 | +0.000090718 | 8/8 | +0.000092745 / +0.000100374 | 0.176 | Pass |
+| `global_projection` | −0.000109971 | −0.000069261 | 1/8 | −0.000057042 / −0.000162899 | 0.539 | Fail |
+| `city_projection` | −0.000110358 | −0.000069618 | 1/8 | −0.000057995 / −0.000162721 | 0.537 | Fail |
+| `city_off:shenzhen` | −0.000052929 | −0.000048757 | 2/8 | −0.000065506 / −0.000040352 | 0.426 | Fail |
+
+For `city_projection_half`, short-, mid- and long-horizon gains against `global_half` were all positive: `+0.000089243`, `+0.000079274`, and `+0.000121295`.
+
+### Projection interpretation
+
+All three city OT components conflicted with the target-FIT gradient in **8/8** full-OT probes. Global projection and the sum of city projections were therefore numerically equivalent: maximum relative difference `7.42e-8`. Consequently, the passing `city_projection_half` result is equivalent here to a half-strength global projected gradient; it is not evidence of an incremental citywise projection benefit.
+
+The unscaled `global_projection` and `city_projection` policies both failed against `global_half`. The half-strength projected policy passed the prespecified one-step screen, which supports only a local, in-support hypothesis. The support was already seen by the checkpoint and the probes overlap in time; independent chronological evaluation and a separately authorized training study would be needed before claiming improved trained-model performance. Do not compare these gains numerically with paper Stage-II MAE.
+
+Successful raw run logs are stored under `experiment_logs/experiment-pmme-h7-ot-gradient-projection-20261127/{smoke,pilot_8,full_8}`. Each folder includes result JSONL, metadata, policy summary, projection traces, `train.out`, summary files, run config and completion marker.

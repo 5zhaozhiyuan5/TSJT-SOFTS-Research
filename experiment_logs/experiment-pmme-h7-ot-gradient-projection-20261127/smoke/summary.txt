@@ -1,0 +1,13 @@
+H7: existing original-F2 checkpoint, real OT, no training, no stage II.
+Primary comparison is H6 global_half; positive means lower shadow MAE.
+NOT independent target validation, because checkpoint saw all support probes.
+Identity F2 numerical noise max: 0.0000000000
+f2                      vsF2=+0.000000000 vsHalf=-0.000190020 medVsHalf=-0.000190020 pos=0/1 outlier=1.000
+global_half             vsF2=+0.000190020 vsHalf=+0.000000000 medVsHalf=+0.000000000 pos=0/1 outlier=0.000
+city_off:shenzhen       vsF2=+0.000142574 vsHalf=-0.000047445 medVsHalf=-0.000047445 pos=0/1 outlier=1.000
+global_projection       vsF2=+0.000164032 vsHalf=-0.000025988 medVsHalf=-0.000025988 pos=0/1 outlier=1.000
+city_projection         vsF2=+0.000165939 vsHalf=-0.000024080 medVsHalf=-0.000024080 pos=0/1 outlier=1.000
+city_projection_half    vsF2=+0.000273466 vsHalf=+0.000083447 medVsHalf=+0.000083447 pos=1/1 outlier=1.000
+identity                vsF2=+0.000000000 vsHalf=-0.000190020 medVsHalf=-0.000190020 pos=0/1 outlier=1.000
+All-three-city conflicts: 1 of 1
+Max relative global-vs-city projection difference: 8.55621482803418e-08

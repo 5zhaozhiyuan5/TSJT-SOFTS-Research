@@ -1,0 +1,8 @@
+{
+  "matched": true,
+  "max_absolute_mae_difference_by_reference": {
+    "f2": 0.0,
+    "global_half": 0.0
+  },
+  "tolerance": 1e-05
+}

@@ -1,0 +1,18 @@
+H7: existing original-F2 checkpoint, real OT, no training, no stage II.
+Primary comparison is H6 global_half; positive means lower shadow MAE.
+NOT independent target validation, because checkpoint saw all support probes.
+Identity F2 numerical noise max: 0.0000000000
+f2                      vsF2=+0.000000000 vsHalf=-0.000223964 medVsHalf=-0.000209451 pos=0/8 outlier=0.184
+global_half             vsF2=+0.000223964 vsHalf=+0.000000000 medVsHalf=+0.000000000 pos=0/8 outlier=0.000
+city_off:shenzhen       vsF2=+0.000171036 vsHalf=-0.000052929 medVsHalf=-0.000048757 pos=2/8 outlier=0.426
+global_projection       vsF2=+0.000113994 vsHalf=-0.000109971 medVsHalf=-0.000069261 pos=1/8 outlier=0.539
+city_projection         vsF2=+0.000113606 vsHalf=-0.000110358 medVsHalf=-0.000069618 pos=1/8 outlier=0.537
+city_projection_half    vsF2=+0.000320524 vsHalf=+0.000096560 medVsHalf=+0.000090718 pos=8/8 outlier=0.176
+identity                vsF2=+0.000000000 vsHalf=-0.000223964 medVsHalf=-0.000209451 pos=0/8 outlier=0.184
+All-three-city conflicts: 8 of 8
+Max relative global-vs-city projection difference: 7.417194050968697e-08
+H6 exact checkpoint/shadow comparison: {"matched": true, "max_absolute_mae_difference_by_reference": {"f2": 0.0, "global_half": 0.0}, "tolerance": 1e-05}
+Screen vs global_half: positive in >=6/8, positive first/last 4,
+median > max(5e-5,10x identity), no single batch >50% abs gain;
+cross-city projection must improve beyond global projection,
+otherwise it has no incremental evidence. All screen-only.
