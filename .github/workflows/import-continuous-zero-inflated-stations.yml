@@ -1,0 +1,74 @@
+name: Import four real RainfallBench station CSVs (verified)
+on:
+  push:
+    branches:
+      - datasets/continuous-zero-inflated-verified-20261126
+    paths:
+      - .github/workflows/import-continuous-zero-inflated-stations.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  copy-verified-original-csvs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          submodules: false
+      - name: Download four original RainfallBench CSVs and verify Git blob hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/zero_inflated_papers/rainfallbench/stations
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          import hashlib, time
+          source = "https://raw.githubusercontent.com/yfangZhang/RainfallBench/b3f2eac38ddaa3ffab86b98d2afe816099201b4a"
+          files = [
+              ("dataset/gnss/Asia/J340_data.csv", "J340_data.csv", 4652001, "e18bf3ff1125621d824c0f41bde9907610f9feaa"),
+              ("dataset/gnss/Europe/ZIMM_data.csv", "ZIMM_data.csv", 4680618, "125f068f4f8b9effa8016614e2d7543ebb01ff8d"),
+              ("dataset/gnss/North_America/P095_data.csv", "P095_data.csv", 4536152, "40fdf4fec2f56ea7aab3b200e41fbb20301e0aee"),
+              ("dataset/Rain/JFNG_data_15min.csv", "JFNG_data_15min.csv", 9325353, "866000f353d6deda73600f40d204eb5909e3da83"),
+          ]
+          outdir = Path("data/zero_inflated_papers/rainfallbench/stations")
+          for subpath, filename, size, sha in files:
+              url = f"{source}/{subpath}"
+              target = outdir / filename
+              print(f"Downloading {url}", flush=True)
+              for attempt in range(4):
+                  try:
+                      request = Request(url, headers={"User-Agent": "Research-Dataset-Verification/1.0"})
+                      with urlopen(request, timeout=90) as response, target.open("wb") as out:
+                          while chunk := response.read(1024 * 1024):
+                              out.write(chunk)
+                      break
+                  except Exception:
+                      target.unlink(missing_ok=True)
+                      if attempt == 3:
+                          raise
+                      time.sleep(2 ** attempt * 3)
+              data = target.read_bytes()
+              got = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+              if len(data) != size or got != sha:
+                  raise RuntimeError(f"Hash/size mismatch for {filename}: {len(data)} {got}")
+              print(f"[OK] {filename}: {len(data)} bytes, SHA1 {got}")
+          PY
+      - name: Inspect actual zero fractions, not assumed paper-wide numbers
+        run: |
+          python data/zero_inflated_papers/verify_datasets.py \
+            --json data/zero_inflated_papers/rainfallbench/verification.json
+      - name: Commit exact source CSV bytes to the dedicated research-data branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/zero_inflated_papers/rainfallbench/stations/*.csv
+          git add data/zero_inflated_papers/rainfallbench/verification.json
+          git commit -m "data: vendor four verified real RainfallBench station CSVs"
+          git push origin HEAD:refs/heads/datasets/continuous-zero-inflated-verified-20261126
