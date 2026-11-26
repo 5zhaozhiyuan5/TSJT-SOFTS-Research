@@ -114,8 +114,10 @@ def _selected_weights(cosine, conflict, sign_lambda: float, temperature: float):
     high_sign = torch.cat(high_parts)
 
     def subset(indices):
-        vec = torch.zeros(n, device=cosine.device, dtype=cosine.dtype)
-        vec[indices] = 1 / len(indices)
+        # Strictly positive mass for GeomLoss Sinkhorn log-weights;
+        # 5% uniform floor, 95% allocated to the chosen stratum.
+        vec = torch.full_like(cosine, 0.05 / n)
+        vec[indices] += 0.95 / len(indices)
         return vec
 
     f2 = torch.softmax(temperature * cosine, dim=0)
