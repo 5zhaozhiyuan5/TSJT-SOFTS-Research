@@ -202,10 +202,18 @@ def main():
         "full_ot_geometry":args.source_points==0 and args.target_points==0,
         "ot_cost":"original concat(rep, sqrt(100)*normalized_future), "
                    "GeomLoss(p=1, blur=0.001, debias=False)",
+        "f2_reference":"ORIGINAL F2 cosine formula, recomputed using "
+                       "fit-only target windows (not all-support training alpha)",
+        "ot_scale":args.ot_scale,
         "pcgrad":"one-sided full-parameter source_plus_OT against target FIT",
         "optimizer":"loaded original AdamW state, virtual step only",
         "training_updates":0,
     }
+    metadata_path=args.output.with_suffix(".metadata.json")
+    metadata_path.write_text(
+        json.dumps(metadata,sort_keys=True,indent=2),
+        encoding="utf-8"
+    )
     print("H3_META_JSON",json.dumps(metadata,sort_keys=True),flush=True)
     print("H3_AUDIT_BEGIN",args.probe_batches,"probe batches",flush=True)
     with args.output.open("w",encoding="utf-8") as stream:
@@ -299,7 +307,7 @@ def main():
                 tgt_future.detach().index_select(0,target_ids)*10.0
             ),dim=-1)
             uniform=torch.full_like(alpha,1.0/len(alpha))
-            coeff=0.01
+            coeff=args.ot_scale
             loss_f2=(criterion(alpha,x,beta,y).sum()*coeff)
             gradients_f2=_grads(loss_f2,params)
             loss_uniform=(criterion(uniform,x,beta,y).sum()*coeff)
@@ -307,13 +315,31 @@ def main():
             entries.append({
                 "city":city,"f2":gradients_f2,"uniform":gradients_uniform
             })
+            top_count=min(16,alpha.numel())
+            top_values,top_positions=torch.topk(alpha.detach(),k=top_count)
+            top_full_ids=source_ids.index_select(0,top_positions)
             city_metadata.append({
-                "city":city,"source_point_total":len(src_rep),
+                "city":city,
+                "target_group":int(group),
+                "source_batch_windows":int(reps[j].shape[0]),
+                "source_nodes":int(reps[j].shape[1]),
+                "source_point_total":len(src_rep),
                 "source_OT_points":len(source_ids),
                 "target_fit_point_total":len(tgt_rep),
                 "target_OT_points":len(target_ids),
                 "target_fit_window_indices":tmask.nonzero().flatten().cpu().tolist(),
                 "f2_source_ess_fraction":weight_diagnostics["ess_frac"],
+                "f2_source_top_indices":top_full_ids.cpu().tolist(),
+                "f2_source_top_masses":top_values.cpu().tolist(),
+                "target_beta_type":"uniform-fit-only",
+                "source_sample_selection":(
+                    "all" if args.source_points==0 else
+                    source_ids.detach().cpu().tolist()
+                ),
+                "target_fit_sample_selection":(
+                    "all" if args.target_points==0 else
+                    target_ids.detach().cpu().tolist()
+                ),
             })
             del loss_f2,loss_uniform,x,y
 
