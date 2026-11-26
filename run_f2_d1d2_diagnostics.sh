@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   echo "Usage: bash $0 /absolute/path/original-f2-stage1.pth" >&2
   exit 2
 }
-CKPT="$1"
+CKPT="$(python -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1")"
 [[ -f "$CKPT" ]] || {
   echo "[ERROR] Existing F2 checkpoint not found: $CKPT" >&2
   exit 2
@@ -20,14 +20,23 @@ SOURCE_BUDGET="${PMME_F2_DIAG_SOURCE_BUDGET:-192}"
 TARGET_BUDGET="${PMME_F2_DIAG_TARGET_BUDGET:-96}"
 GPU="${PMME_F2_DIAG_GPU:-0}"
 mkdir -p "$WORK"
+CKPT_SHA="$(sha256sum "$CKPT" | cut -d' ' -f1)"
+EXPECTED="$(printf 'branch=%s\ncommit=%s\ncheckpoint=%s\ncheckpoint_sha256=%s\nseed=%s\nprobe_batches=%s\nsource_budget=%s\ntarget_budget=%s\ngpu=%s\n' \
+  "$(git -C "$ROOT" branch --show-current)" \
+  "$(git -C "$ROOT" rev-parse HEAD)" "$CKPT" "$CKPT_SHA" "$SEED" "$PROBES" \
+  "$SOURCE_BUDGET" "$TARGET_BUDGET" "$GPU")"
+if [[ -f "$WORK/run_config.txt" ]]; then
+  [[ "$(cat "$WORK/run_config.txt")" == "$EXPECTED" ]] || {
+    echo "[ERROR] Existing audit folder belongs to another checkpoint/settings: $WORK" >&2
+    exit 3
+  }
+else
+  printf '%s\n' "$EXPECTED" > "$WORK/run_config.txt"
+fi
 [[ ! -f "$WORK/COMPLETED" ]] || {
   echo "[SKIP] Existing successful diagnostics $WORK"
   exit 0
 }
-printf 'branch=%s\ncommit=%s\ncheckpoint=%s\nseed=%s\nprobe_batches=%s\nsource_budget=%s\ntarget_budget=%s\ngpu=%s\n' \
-  "$(git -C "$ROOT" branch --show-current)" \
-  "$(git -C "$ROOT" rev-parse HEAD)" "$CKPT" "$SEED" "$PROBES" \
-  "$SOURCE_BUDGET" "$TARGET_BUDGET" "$GPU" > "$WORK/run_config.txt"
 rm -f "$WORK/FAILED"
 export CUDA_VISIBLE_DEVICES="$GPU"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-4}"
