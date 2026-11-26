@@ -160,9 +160,11 @@ def main():
                             "plus 10 unchanged support PROBE (unused by adaptation)",
         "development_chronology":bounds,
         "normalization_warning":"Original F2 full-series scaler reused; not train-only",
+        "historical_evaluation_warning":"Original PMME train_DA_OT.py evaluation() previously evaluated post-support target test data at checkpoint intervals; checkpoint selection used support validation score, but post-support labels have historically been inspected in logs. This is NOT a previously unseen-to-the-researcher holdout.",
         "benchmark_warning":"Post-support development interval was part of original "
                             "PMME test range and cannot be reused as final untouched test",
-        "final_future_touched":False,
+        "reserved_future_labels_used_for_h9_adaptation_or_dev_scoring":False,
+        "full_target_series_read_for_original_preprocessing":True,
         "original_f2_training_updates":0,
         "stage2_runs":0,
         "cloned_optimizer_updates_per_policy":args.max_updates,
