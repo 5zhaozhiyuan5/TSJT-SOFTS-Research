@@ -1,0 +1,13 @@
+purpose=generate_required_original_f2_stage1_checkpoint
+branch=experiment/pmme-f2-gradient-utility-diagnostics-20261126
+branch_commit=d358a4544f639b131de962a826c2cc66ac4dc18f
+method=original_f2_gradient_ot
+seed=1
+target=pems-bay
+sources=chengdu_m,shenzhen,metr-la
+batch_size=16
+stage1_epochs=3000
+stage2_epochs=0
+daepoch=1500
+ot_scale=0.01
+server_downloads=none

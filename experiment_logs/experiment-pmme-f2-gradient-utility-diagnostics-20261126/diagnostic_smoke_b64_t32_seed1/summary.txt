@@ -1,0 +1,30 @@
+D1/D2 original-F2 diagnostic; positive dot means favorable raw first-order OT direction on PROBE prediction loss.
+These are IN-SUPPORT counterfactuals; NOT forecast test MAE, full PCGrad/AdamW gain or statistical significance.
+CITY ALL samples 3 distinct_probe_batches 1
+  D1_cos_high_minus_low_gain mean=0.003464084 positive_fraction=0.667
+  D1_f2_minus_uniform_gain mean=-0.002815648 positive_fraction=0.333
+  D2_sign_low_minus_high_gain_given_mid_cos mean=-0.0005453313 positive_fraction=0.333
+  D2_sign_minus_f2_gain mean=0.001415171 positive_fraction=0.667
+  cosine_conflict_correlation=-0.9993 cosine_gap_under_D2_matched=0.3898
+  OT/probe cosine uniform=-0.0891 F2=-0.1836 sign=-0.1350
+CITY chengdu_m samples 1 distinct_probe_batches 1
+  D1_cos_high_minus_low_gain mean=0.009770409 positive_fraction=1.000
+  D1_f2_minus_uniform_gain mean=-0.002784713 positive_fraction=0.000
+  D2_sign_low_minus_high_gain_given_mid_cos mean=-0.002392737 positive_fraction=0.000
+  D2_sign_minus_f2_gain mean=-0.0006642542 positive_fraction=0.000
+  cosine_conflict_correlation=-0.9994 cosine_gap_under_D2_matched=0.4210
+  OT/probe cosine uniform=0.0140 F2=-0.1101 sign=-0.1362
+CITY metr-la samples 1 distinct_probe_batches 1
+  D1_cos_high_minus_low_gain mean=0.002605717 positive_fraction=1.000
+  D1_f2_minus_uniform_gain mean=0.002727749 positive_fraction=1.000
+  D2_sign_low_minus_high_gain_given_mid_cos mean=0.007383907 positive_fraction=1.000
+  D2_sign_minus_f2_gain mean=0.0005646762 positive_fraction=1.000
+  cosine_conflict_correlation=-0.9992 cosine_gap_under_D2_matched=0.3681
+  OT/probe cosine uniform=-0.2483 F2=-0.1278 sign=-0.0996
+CITY shenzhen samples 1 distinct_probe_batches 1
+  D1_cos_high_minus_low_gain mean=-0.001983874 positive_fraction=0.000
+  D1_f2_minus_uniform_gain mean=-0.00838998 positive_fraction=0.000
+  D2_sign_low_minus_high_gain_given_mid_cos mean=-0.006627163 positive_fraction=0.000
+  D2_sign_minus_f2_gain mean=0.00434509 positive_fraction=1.000
+  cosine_conflict_correlation=-0.9994 cosine_gap_under_D2_matched=0.3803
+  OT/probe cosine uniform=-0.0329 F2=-0.3130 sign=-0.1691
