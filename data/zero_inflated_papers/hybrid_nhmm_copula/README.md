@@ -18,7 +18,7 @@ upstream/Data/mapa_estaciones_precipitaciones_clean.csv.zip
 
 原文件 Git blob SHA-1：`0d007e8f179c4602ca5d44a294cf5c2defda623f`。
 
-解压所得 `mapa_estaciones_precipitaciones_clean.csv` 是处理好的研究输入，大约 244 MB（作者 README 估算），具体大小以真实压缩包为准。字段：
+解压所得 `mapa_estaciones_precipitaciones_clean.csv` 是处理好的研究输入，**216,657,356 字节（实际读取 ZIP 目录测得）**，约 217 MB。字段：
 
 | 字段 | 含义 |
 |---|---|
@@ -40,3 +40,14 @@ python -m zipfile -l data/zero_inflated_papers/hybrid_nhmm_copula/upstream/Data/
 如需进一步解压请使用安全受限的 ZIP 处理方式并预留至少 500 MB 磁盘空间。作者 R 代码：`upstream/Scripts/Hybrid_nHMM_Copula_Simulation_Validation_2022.R`。作者说明的训练时期截至 2021-08-31，2022 年 5–8 月用于外推验证。
 
 **版权/完整性提醒**：作者 `LICENSES.md` 明确表示，处理后的 CSV 可能包含多个上游数据源，需要独立确认完整再分发许可。因此**本分支不二次上传 ZIP**，而通过 Git 子模块固定到作者原始发行文件。软件 MIT 不等于数据可无限制再分发。完整的原始 CR2MET 数据构建与 nHMM 初始估计不全部包含在该存档中。
+
+## 实际数据验证（2026-11-26）
+
+通过固定源码子模块克隆，作者 ZIP 文件 SHA 校验及 CRC 校验均通过。对 ZIP 内主 CSV 的 `precipitation` 字段逐行统计：
+
+- 有效记录：**2,432,940** 条；缺失/无效：**0** 条
+- 精确零值：**793,844** 条，比例 **32.629%**
+- 正值：**1,639,096** 条，其中 **1,638,991** 条有小数部分，证明并非单纯的计数型整数数据
+- 校验工作流：https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/45774197445
+
+以上为作者处理后 CSV 的实际统计，不代表原始未处理 CR2MET 中的总体零值比例。
