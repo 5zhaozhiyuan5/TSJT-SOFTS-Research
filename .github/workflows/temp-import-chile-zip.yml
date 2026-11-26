@@ -1,0 +1,92 @@
+name: TEMP Import Chile research ZIP into data-only branch
+on:
+  push:
+    branches:
+      - datasets/continuous-zero-inflated-verified-20261126
+    paths:
+      - .github/workflows/temp-import-chile-zip.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-verified-original:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          submodules: false
+      - name: Download author's 33.96 MB research data and verify exact Git hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          from hashlib import sha1, sha256
+          from time import sleep
+          import json
+          source = "https://raw.githubusercontent.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework/c09e5c46c6c5c237c86a3d214768febfc9e0dbac/Data/mapa_estaciones_precipitaciones_clean.csv.zip"
+          output = Path("data/zero_inflated_papers/hybrid_nhmm_copula/raw/mapa_estaciones_precipitaciones_clean.csv.zip")
+          expected_size = 33960384
+          expected_git_sha1 = "0d007e8f179c4602ca5d44a294cf5c2defda623f"
+          output.parent.mkdir(parents=True, exist_ok=True)
+          for attempt in range(4):
+              try:
+                  req = Request(source, headers={"User-Agent":"OpenResearch-Reproduction/1.0"})
+                  with urlopen(req, timeout=120) as r, output.open("wb") as f:
+                      while chunk := r.read(1024*1024):
+                          f.write(chunk)
+                  break
+              except Exception:
+                  output.unlink(missing_ok=True)
+                  if attempt == 3: raise
+                  sleep(2**attempt * 3)
+          length = output.stat().st_size
+          if length != expected_size:
+              raise RuntimeError(f"Incorrect size: {length} != {expected_size}")
+          h = sha1()
+          h.update(f"blob {length}\0".encode())
+          s = sha256()
+          with output.open("rb") as f:
+              while chunk := f.read(1024*1024):
+                  h.update(chunk)
+                  s.update(chunk)
+          if h.hexdigest() != expected_git_sha1:
+              raise RuntimeError(f"Source Git hash mismatch: {h.hexdigest()}")
+          import zipfile
+          with zipfile.ZipFile(output) as z:
+              assert z.testzip() is None, "Corrupted ZIP CRC"
+              names = z.namelist()
+              assert "mapa_estaciones_precipitaciones_clean.csv" in names, names
+              main = z.getinfo("mapa_estaciones_precipitaciones_clean.csv")
+              assert main.file_size == 216657356, main.file_size
+          metadata = {
+              "download_status":"REAL_ZIP_COMMITTED_TO_TARGET_BRANCH",
+              "source_repository":"https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework",
+              "source_commit":"c09e5c46c6c5c237c86a3d214768febfc9e0dbac",
+              "source_path":"Data/mapa_estaciones_precipitaciones_clean.csv.zip",
+              "source_url":source,
+              "local_filename":output.name,
+              "size_bytes":length,
+              "source_git_blob_sha1":h.hexdigest(),
+              "sha256":s.hexdigest(),
+              "zip_crc":"passed",
+              "csv_uncompressed_bytes":main.file_size,
+              "origin_data_notice":"Processed data may contain CR2MET/other third-party material. Respect author LICENSES.md and verify redistribution rights before public release."
+          }
+          (output.parent/"download_verified.json").write_text(json.dumps(metadata, indent=2)+"\n")
+          print(f"VALIDATED {output}: {length} B, source blob {h.hexdigest()}, SHA256 {s.hexdigest()}, CRC passed",flush=True)
+          PY
+      - name: Commit real ZIP and provenance to research-data branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/zero_inflated_papers/hybrid_nhmm_copula/raw/
+          git commit -m "data(chile): include real 33.96MB author dataset ZIP with verified provenance"
+          git push origin HEAD:refs/heads/datasets/continuous-zero-inflated-verified-20261126
