@@ -75,4 +75,23 @@ jobs:
                       # Initial subset only to avoid memory/time
                       print("CHILE FIRST LINE",inp.readline()[:450])
                       print("CHILE SAMPLE NEXT LINE",inp.readline()[:450])
+              with z.open(names[0]) as input_csv:
+                  import io
+                  with io.TextIOWrapper(input_csv,encoding="utf-8-sig",errors="replace",newline="") as inp:
+                      reader=csv.DictReader(inp)
+                      total=zeros=positives=positive_fractional=missing=0
+                      unique=set()
+                      for row in reader:
+                          try: value=float(row["precipitation"])
+                          except (TypeError,ValueError): missing+=1;continue
+                          if not (-1e100<value<1e100): missing+=1;continue
+                          total+=1
+                          if value==0:zeros+=1
+                          elif value>0:
+                              positives+=1
+                              if value != int(value):positive_fractional+=1
+                              if len(unique)<5000:unique.add(value)
+                      print("CHILE PRECIPITATION STATS valid",total,"zeros",zeros,"zero_pct",round(100*zeros/total,3) if total else None,
+                            "positive",positives,"positive_fractional",positive_fractional,"missing",missing,
+                            "positive_unique_sample",len(unique),flush=True)
           PY
