@@ -1,0 +1,46 @@
+{
+  "created_at": "2026-11-26",
+  "scope": "zero-inflated continuous-valued observations",
+  "branch": "datasets/continuous-zero-inflated-verified-20261126",
+  "datasets": {
+    "saeczi": {
+      "paper": "Small area estimation of forest biomass via a two-stage model for continuous zero-inflated data",
+      "venue": "Canadian Journal of Forest Research",
+      "year": 2025,
+      "doi": "https://doi.org/10.1139/cjfr-2024-0149",
+      "source_code": "https://github.com/harvard-ufds/saeczi",
+      "data_location": "saeczi/raw",
+      "source_data": "https://github.com/harvard-ufds/saeczi/tree/main/data",
+      "data_type": "forest above-ground biomass: exact zero + continuous positive",
+      "caveat": "Oregon package sample, NOT complete paper's confidential Nevada data",
+      "included_files": [
+        "saeczi/raw/samp.rda",
+        "saeczi/raw/pop.rda"
+      ]
+    },
+    "rainfallbench": {
+      "paper": "How Effective Are Time-Series Models for Precipitation Nowcasting? A Comprehensive Benchmark for GNSS-Based Precipitation Nowcasting",
+      "venue": "IEEE Transactions on Geoscience and Remote Sensing",
+      "year": 2026,
+      "doi": "https://doi.org/10.1109/TGRS.2026.3671768",
+      "source_code": "https://github.com/yfangZhang/RainfallBench",
+      "upstream_commit": "b3f2eac38ddaa3ffab86b98d2afe816099201b4a",
+      "full_original_data": "rainfallbench/upstream/dataset",
+      "sampled_original_data": "rainfallbench/stations",
+      "data_type": "real precipitation nonnegative continuous measurements, many zeros",
+      "note": "All publicly available station data in pinned upstream submodule; directly vendored four station examples only if verified and added by workflow"
+    },
+    "hybrid_nhmm_copula": {
+      "paper": "Characterizing Climate-Driven Shifts in Chilean Rainfall Regimes with a Hybrid Hidden Markov–Copula Framework",
+      "venue": "Hydrology and Earth System Sciences",
+      "year": 2026,
+      "doi": "https://doi.org/10.5194/hess-30-6531-2026",
+      "source_code": "https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework",
+      "upstream_commit": "c09e5c46c6c5c237c86a3d214768febfc9e0dbac",
+      "original_zip": "hybrid_nhmm_copula/upstream/Data/mapa_estaciones_precipitaciones_clean.csv.zip",
+      "upstream_zip_bytes": 33960384,
+      "data_type": "daily precipitation zero-inflated continuous with spatial structure",
+      "note": "Linked to author via git submodule; NOT rehosted because derived data redistribution rights are not conclusively granted"
+    }
+  }
+}

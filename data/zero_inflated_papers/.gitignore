@@ -1,0 +1,5 @@
+# Generated inspection reports / unpacked derived data
+__pycache__/
+*.pyc
+/hybrid_nhmm_copula/extracted/
+/rainfallbench/processed/
