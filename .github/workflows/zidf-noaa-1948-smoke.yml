@@ -1,11 +1,10 @@
-name: ZIDF NOAA real-data 1948 smoke download
+name: ZIDF NOAA real-data 1948 manual download test
+
+# On 2026-11-26 NOAA returned HTTP 429 for GitHub hosted runners.
+# Use manual dispatch only after the server rate limit is lifted.
 on:
-  push:
-    branches:
-      - data/zero-inflated-continuous-datasets-20261126
-    paths:
-      - .github/workflows/zidf-noaa-1948-smoke.yml
   workflow_dispatch:
+
 jobs:
   fetch-year:
     runs-on: ubuntu-latest
@@ -22,11 +21,10 @@ jobs:
         run: |
           python data/zero_inflated/scripts/download_zidf_noaa.py verify \
             --start-year 1948 --end-year 1948
-      - name: Upload actual 1948 NOAA NetCDF data as action artifact
-        if: always()
+      - name: Upload 1948 NOAA NetCDF data only after successful verification
         uses: actions/upload-artifact@v4
         with:
-          name: zidf-noaa-sa-1948-nc
-          path: data/zero_inflated/zidf/raw/noaa_sa/
-          if-no-files-found: warn
+          name: zidf-noaa-sa-1948-verified
+          path: data/zero_inflated/zidf/raw/noaa_sa/subset/1948/*.nc
+          if-no-files-found: error
           retention-days: 7
