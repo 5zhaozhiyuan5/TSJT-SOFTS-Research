@@ -91,3 +91,12 @@ python data/zero_inflated/scripts/download_zidf_noaa.py prepare --start-year 194
 - 如果 NCSS 区域裁剪服务发生错误，可添加 \`--mode global\` 直接下载年度完整全球网格 NetCDF。
 - \`prepare\` 输出至 \`zidf/processed/\`，按各变量独立区域均值、每日对齐， \`prate\` 检测单位后转换为 mm/day，最后保存 \`csv/npz/json\`。**这是我们独立实现的区域聚合方法，不保证与 ZIDF 论文数据加工完全相同；区域均值可能降低或改变精确零值比例。**
 - 当前助手所在环境的 DNS 解析失败，没有在这里成功下载 NOAA 原始文件；请在能够访问 NOAA 的 Windows/Linux 主机执行。不能将只有脚本的目录当作完整数据集。
+
+
+## 实际下载测试记录 — 2026-11-26
+
+- 在当前助手计算环境通过请求 NOAA \`downloads.psl.noaa.gov\` / \`psl.noaa.gov\` 时，出现 DNS 解析失败，未下载到文件。
+- 在 GitHub Actions 工作流 [run 45772146229](https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/45772146229) 实际执行 1948 年 6 个官方 NetCDF 区域裁剪请求，**六个均收到 HTTP 429 Too Many Requests**；NetCDF 校验步骤未执行，**成功下载数为零**。
+- 该失败运行曾自动上传一个只有 724 字节的 artifact，其实**只包含失败日志，不包含 \`.nc\` 数据**，不要将其作为论文数据下载。
+- 现在工作流改为手动执行，且只有 NetCDF 完成校验后才允许上传真实 .nc 文件，以防再出现误导性 artifact。
+- 正常下载建议从本地网络或你的 Linux 服务器运行 \`scripts/download_zidf_noaa.py\`；如收到 429，请尊重 NOAA 的请求限制，稍后重试、降低请求频率，或直接从官方目录用浏览器下载，不应高频请求。
