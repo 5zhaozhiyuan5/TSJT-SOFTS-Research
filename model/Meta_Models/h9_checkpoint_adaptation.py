@@ -290,9 +290,7 @@ def run_h9_adaptation(*,original_model,original_optimizer,
                 "step":step,
                 "batch_seed":batch_seed,
                 "support_batch_hash":fingerprint,
-                "source_city_order":[x["data_name"] for x in []] if False else [
-                    str(x.data_name) for x in batch[1:]
-                ],
+                "source_city_order":[str(x.data_name) for x in batch[1:]],
                 "ot_source_stats":bank["ot_metadata"],
                 "target_fit_count":bank["target_fit_count"],
                 "support_probe_unused_in_training":
