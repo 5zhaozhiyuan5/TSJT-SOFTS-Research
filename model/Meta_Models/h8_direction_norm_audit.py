@@ -179,25 +179,36 @@ def calibrate_adamw_step_norm(*,named,optimizer,source_gradient,target_gradient,
         for i in range(len(coarse_values)-1)
     )
     best=min(cache,key=lambda f:abs(cache[f]-target))
-    if monotonic and coarse_values[-1]>=target:
-        low=0.
-        high=max_factor
+    # AdamW is nonlinear in the gradient and need not be globally monotone.
+    # Bracket ANY coarse interval that crosses the desired step norm, then
+    # bisect that continuous interval even if the full ladder is nonmonotone.
+    brackets=[]
+    for i in range(len(coarse)-1):
+        left,right=coarse[i],coarse[i+1]
+        yleft,yright=coarse_values[i],coarse_values[i+1]
+        if (yleft-target)*(yright-target)<=0:
+            brackets.append((left,right))
+    if brackets:
+        low,high=min(
+            brackets,
+            key=lambda pair:min(
+                abs(value(pair[0])-target),abs(value(pair[1])-target)
+            )
+        )
+        flow=value(low)-target
         for _ in range(iterations):
             mid=.5*(low+high)
             y=value(mid)
             if abs(y-target)<abs(cache[best]-target):
                 best=mid
-            if y<target:
-                low=mid
-            else:
+            if flow*(y-target)<=0:
                 high=mid
-    elif monotonic and coarse_values[-1]<target:
-        # Cannot match within the preregistered safe range; mark as limited.
-        best=max_factor
-    else:
-        # No assumption of monotonicity; use nearest coarse trial only.
-        best=min(cache,key=lambda f:abs(cache[f]-target))
-
+            else:
+                low=mid
+                flow=y-target
+    # Otherwise the requested norm lies outside our bounded safe range or
+    # no coarse bracket exists. Keep the closest observed point, report it
+    # as unmatched, and never infer a direction-only effect from it.
     actual=value(best)
     error=abs(actual-target)
     relative=error/max(target,EPS)
