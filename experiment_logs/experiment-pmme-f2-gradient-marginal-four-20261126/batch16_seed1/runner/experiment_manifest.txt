@@ -1,0 +1,17 @@
+branch=experiment/pmme-f2-gradient-marginal-four-20261126
+git_commit=46b6c4c56ee73d79fbc54448823ee725add403de
+methods=mag sign ema biot
+seeds=1
+batch_size=16
+stage1_epochs=3000
+stage2_epochs=6000
+daepoch=1500
+ot_scale=0.01
+target=pems-bay
+sources=chengdu,shenzhen,metr
+gpu=0
+threads=4
+server=10.131.139.83
+remote_base=/home/zhaozhiyuan/experiment-pmme-f2-gradient-marginal-four-20261126
+server_downloads=none
+source_bundle_sha256=5ad2030b91a1fb69ade5c8ae33aa062f1c9146de173ac84921f04e64c577305e
