@@ -766,7 +766,13 @@ class STRep(nn.Module):
                     x = torch.cat((x1,y1),dim=-1) 
                     y = torch.cat((x2,y2),dim=-1) # y: target  
                     
-                    if OT_loss_scale == 0.0:
+                    if self.f2_audit_readonly:
+                        # The seven matched subset OT counterfactuals above
+                        # already collected exact diagnostic gradients.
+                        # No need to form the original gigantic full-city OT
+                        # graph since a read-only probe will not optimize it.
+                        OT_loss = x1.new_zeros(())
+                    elif OT_loss_scale == 0.0:
                         # G2/G3 "off": skip the expensive full OT calculation.
                         OT_loss = x1.new_zeros(())
                     elif (ratio1>0.00 and ratio2>0.00):
