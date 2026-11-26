@@ -58,10 +58,10 @@
       "doi": "https://doi.org/10.5194/hess-30-6531-2026",
       "source_code": "https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework",
       "upstream_commit": "c09e5c46c6c5c237c86a3d214768febfc9e0dbac",
-      "original_zip": "hybrid_nhmm_copula/upstream/Data/mapa_estaciones_precipitaciones_clean.csv.zip",
+      "original_zip": "hybrid_nhmm_copula/raw/mapa_estaciones_precipitaciones_clean.csv.zip",
       "upstream_zip_bytes": 33960384,
       "data_type": "daily precipitation zero-inflated continuous with spatial structure",
-      "note": "Linked to author via git submodule; NOT rehosted because derived data redistribution rights are not conclusively granted",
+      "note": "Dataset bytes are directly uploaded to this branch; attribution retained. Author LICENSES.md asks redistributors to verify upstream data rights; permission has not been independently established.",
       "verified": {
         "github_actions_run": "https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/45774197445",
         "zip_crc": "passed",
@@ -71,7 +71,11 @@
         "zero_ratio": 0.32629000304158756,
         "positive_values": 1639096,
         "positive_noninteger_values": 1638991
-      }
+      },
+      "directly_committed": true,
+      "status": "Real author ZIP directly committed into this Git branch and exact Git blob SHA verified",
+      "original_git_blob_sha1": "0d007e8f179c4602ca5d44a294cf5c2defda623f",
+      "original_source_url": "https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework/blob/c09e5c46c6c5c237c86a3d214768febfc9e0dbac/Data/mapa_estaciones_precipitaciones_clean.csv.zip"
     }
   }
 }

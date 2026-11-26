@@ -88,10 +88,11 @@
       ]
     }
   },
-  "hybrid_nhmm_copula/upstream/Data/mapa_estaciones_precipitaciones_clean.csv.zip": {
+  "_verification_context": "SAECZI RData and RainfallBench station CSV files directly committed; Chile ZIP now also directly committed (verified byte-for-byte). Only full RainfallBench upstream is a Git submodule.",
+  "hybrid_nhmm_copula/raw/mapa_estaciones_precipitaciones_clean.csv.zip": {
     "status": "verified",
-    "source": "pinned_upstream_git_submodule",
-    "local_path": "hybrid_nhmm_copula/upstream/Data/mapa_estaciones_precipitaciones_clean.csv.zip",
+    "source": "directly_committed_file",
+    "local_path": "hybrid_nhmm_copula/raw/mapa_estaciones_precipitaciones_clean.csv.zip",
     "bytes": 33960384,
     "git_blob_sha1": "0d007e8f179c4602ca5d44a294cf5c2defda623f",
     "zip_crc": "passed",
@@ -106,7 +107,6 @@
       }
     ],
     "verification_run": "https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/45774197445",
-    "note": "Verified in a recursive submodule checkout. This file is a submodule target, not rehosted in parent repository."
-  },
-  "_verification_context": "Full recursive submodules checkout on GitHub Actions 2026-11-26. RainfallBench station files and saeczi directly committed; Chile ZIP read from source submodule."
+    "note": "Full 33.96 MB ZIP directly stored in this GitHub branch. SHA verified against pinned author repository; original author still retains upstream rights."
+  }
 }

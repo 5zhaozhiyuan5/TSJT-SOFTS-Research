@@ -1,6 +1,3 @@
 [submodule "data/zero_inflated_papers/rainfallbench/upstream"]
 	path = data/zero_inflated_papers/rainfallbench/upstream
 	url = https://github.com/yfangZhang/RainfallBench.git
-[submodule "data/zero_inflated_papers/hybrid_nhmm_copula/upstream"]
-	path = data/zero_inflated_papers/hybrid_nhmm_copula/upstream
-	url = https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework.git
