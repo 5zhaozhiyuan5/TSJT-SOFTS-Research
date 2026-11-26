@@ -19,14 +19,12 @@ FILES = {
     "rainfallbench/stations/J340_data.csv": ("e18bf3ff1125621d824c0f41bde9907610f9feaa", 4652001),
     "rainfallbench/stations/ZIMM_data.csv": ("125f068f4f8b9effa8016614e2d7543ebb01ff8d", 4680618),
     "rainfallbench/stations/P095_data.csv": ("40fdf4fec2f56ea7aab3b200e41fbb20301e0aee", 4536152),
-    "rainfallbench/stations/JFNG_data_15min.csv": ("866000f353d6deda73600f40d204eb5909e3da83", 9325353),
     "hybrid_nhmm_copula/upstream/Data/mapa_estaciones_precipitaciones_clean.csv.zip": ("0d007e8f179c4602ca5d44a294cf5c2defda623f", 33960384),
 }
 FALLBACKS = {
     "rainfallbench/stations/J340_data.csv": "rainfallbench/upstream/dataset/gnss/Asia/J340_data.csv",
     "rainfallbench/stations/ZIMM_data.csv": "rainfallbench/upstream/dataset/gnss/Europe/ZIMM_data.csv",
     "rainfallbench/stations/P095_data.csv": "rainfallbench/upstream/dataset/gnss/North_America/P095_data.csv",
-    "rainfallbench/stations/JFNG_data_15min.csv": "rainfallbench/upstream/dataset/Rain/JFNG_data_15min.csv",
 }
 
 
@@ -45,7 +43,7 @@ def zero_stats(path):
         with path.open("r", encoding="utf-8-sig", newline="") as f:
             rows = csv.DictReader(f)
             cols = rows.fieldnames or []
-            possible = [c for c in cols if c.strip().lower() in ("tp", "precipitation", "rainfall", "rain")]
+            possible = [c for c in ("gpm_precip_sum_1h", "tp", "tp_era5", "precipitation", "rainfall", "rain") if c in cols]
             if not possible:
                 return {"columns": cols, "warning": "No known precipitation target column; requires schema inspection"}
             col = possible[0]
