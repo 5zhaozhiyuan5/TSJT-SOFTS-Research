@@ -35,7 +35,8 @@ from audit_h3_city_checkpoint import (
 )
 from audit_f2_checkpoint import source_target_batch
 from h4_error_profile_counterfactual import (
-    GROUP_NAMES,error_profile_groups,downweight_group,shadow_profile_audit
+    GROUP_NAMES,error_profile_groups,downweight_group,matched_placebo_mask,
+    shadow_profile_audit
 )
 
 
@@ -183,6 +184,9 @@ def main():
                   "concat(SOFTS_rep,10*RevIN_future)",
         "source_profiles":"physical-speed source TRAIN forecasting errors "
                           "normalized by source-city std, 3x12-step bands",
+        "placebo":"count-matched pseudorandom accurate-group replacement, "
+                  "pre-probe alpha mass nearest of 24 attempts; skipped "
+                  "if relative mismatch over 50 percent",
         "replay":"all-parameter one-sided PCGrad + checkpoint AdamW state",
         "label_leakage_guard":"No probe future in OT alpha/beta, target-fit "
                               "gradient or virtual optimizer update; shadow "
@@ -287,6 +291,28 @@ def main():
                 changed[profile]=_grads(group_loss,params)
                 perturb_stats[profile]=details
                 del group_loss
+            if "accurate" in perturb_stats:
+                placebo_mask,placebo_info=matched_placebo_mask(
+                    alpha,masks["accurate"],
+                    seed=args.seed*10007+batch_index*31+index
+                )
+                if placebo_info["relative_mass_mismatch"] <= 0.50:
+                    placebo_weight,placebo_details=downweight_group(
+                        alpha,placebo_mask,keep_fraction=args.keep_fraction
+                    )
+                    placebo_loss=criterion(
+                        placebo_weight,x,beta,y
+                    ).sum()*args.ot_scale
+                    changed["placebo_accurate"]=_grads(placebo_loss,params)
+                    perturb_stats["placebo_accurate"]={
+                        **placebo_details,**placebo_info
+                    }
+                    del placebo_loss
+                else:
+                    skipped["placebo_accurate"]={
+                        **placebo_info,
+                        "reason":"not_matched_within_50pct_alpha_mass"
+                    }
             entries.append({
                 "city":str(city_data.data_name),
                 "f2":f2_grad,"changed":changed
