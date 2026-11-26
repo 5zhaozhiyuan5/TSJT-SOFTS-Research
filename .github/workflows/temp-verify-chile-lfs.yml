@@ -1,0 +1,46 @@
+name: TEMP verify 216 MB uncompressed Chile CSV in LFS
+on:
+  push:
+    branches:
+      - datasets/continuous-zero-inflated-verified-20261126
+    paths:
+      - .github/workflows/temp-verify-chile-lfs.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: false
+      - name: Verify fresh Git LFS checkout restored actual 216MB CSV
+        shell: bash
+        run: |
+          set -euo pipefail
+          git lfs ls-files
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          folder=Path("data/zero_inflated_papers/hybrid_nhmm_copula/raw")
+          target=folder/"mapa_estaciones_precipitaciones_clean.csv"
+          metadata=json.loads((folder/"extraction_verified.json").read_text())
+          assert target.stat().st_size==216657356,(target,target.stat().st_size)
+          h=hashlib.sha256()
+          rows=0
+          with target.open("rb") as f:
+              assert f.readline().startswith(b'"year"'),"CSV header is missing"
+              while v:=f.read(2**20):
+                  h.update(v)
+          with target.open("rb") as f:
+              for line in f:
+                  rows+=1
+          actual_hash=hashlib.sha256(target.read_bytes()).hexdigest()
+          assert actual_hash==metadata["uncompressed_sha256"],(actual_hash,metadata)
+          assert rows==2432941,rows
+          assert not (folder/"mapa_estaciones_precipitaciones_clean.csv.zip").exists()
+          print("LFS_FULL_CSV_CONFIRMED",target.stat().st_size,actual_hash,"rows including header",rows)
+          PY
