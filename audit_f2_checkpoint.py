@@ -12,6 +12,8 @@ python -u audit_f2_checkpoint.py --checkpoint /path/to/F2/l1_pems-bay_SOFTS_seed
 """
 import argparse
 import json
+import io
+import contextlib
 import os
 import random
 import sys
@@ -88,9 +90,10 @@ def verify_unchanged(model, saved_params):
 
 def main():
     args = parse_args()
+    # Resolve user paths BEFORE switching to the repository directory.
+    args.checkpoint = args.checkpoint.expanduser().resolve()
+    args.output = args.output.expanduser().resolve()
     os.chdir(ROOT)
-    args.checkpoint = args.checkpoint.resolve()
-    args.output = args.output.resolve()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.save_dir = args.output.parent
     args.device = torch.device(
@@ -176,9 +179,11 @@ def main():
           "target_set", "three-day-support-only",
           "training_updates", 0, flush=True)
 
-    # STRep emits one JSON diagnostic record for each source city.
-    # Capture stdout externally; parse to compact JSONL afterward.
-    for iteration in range(args.probe_batches):
+    # Save machine-readable diagnostics directly, while also preserving
+    # the original verbose stdout for troubleshooting.
+    record_count = 0
+    with args.output.open("w", encoding="utf-8") as output_stream:
+      for iteration in range(args.probe_batches):
         data, matrices = source_target_batch(
             source_dataset, target_dataset, n_sources=3
         )
@@ -186,14 +191,39 @@ def main():
               "checkpoint_training_epoch", checkpoint_epoch,
               "virtual_trigger_epoch", args.daepoch + iteration,
               flush=True)
-        model.meta_train_revise(
-            data, matrices, epoch=args.daepoch + iteration
-        )
+        collected_stdout = io.StringIO()
+        with contextlib.redirect_stdout(collected_stdout):
+            model.meta_train_revise(
+                data, matrices, epoch=args.daepoch + iteration
+            )
+        verbose_text = collected_stdout.getvalue()
+        sys.stdout.write(verbose_text)
+        sys.stdout.flush()
+        records_this_batch = 0
+        for line in verbose_text.splitlines():
+            prefix = "f2_d1d2_audit_json "
+            if line.startswith(prefix):
+                item = json.loads(line[len(prefix):])
+                item["probe_batch_index"] = iteration
+                item["checkpoint_training_epoch"] = checkpoint_epoch
+                item["training_updates"] = 0
+                output_stream.write(
+                    json.dumps(item, sort_keys=True, allow_nan=False) + "\n"
+                )
+                records_this_batch += 1
+        output_stream.flush()
+        if records_this_batch != 3:
+            raise RuntimeError(
+                "Expected exactly 3 audited source cities, got %d" %
+                records_this_batch
+            )
+        record_count += records_this_batch
         with torch.no_grad():
             for name, b in model.named_buffers():
                 b.copy_(saved_buffers[name])
         verify_unchanged(model, saved_params)
     print("F2_DIAGNOSTIC_FINISHED",
+          "records", record_count, "jsonl", args.output,
           "probe_batches", args.probe_batches,
           "checkpoint_training_epoch", checkpoint_epoch,
           "training_updates", 0, flush=True)
