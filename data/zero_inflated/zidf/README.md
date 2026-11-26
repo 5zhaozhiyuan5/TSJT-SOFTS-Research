@@ -57,3 +57,37 @@ python data/zero_inflated/scripts/manage_datasets.py zidf-noaa --start-year 1948
 - `example_data/zidf_synthetic_10000_zero70_seed42.csv`：10,000 条真实生成并已上传的零膨胀合成记录；字段为 `periodic,linear,random1,random2,random3,target`，实际零值占比 69.52%。
 - `example_data/metadata.json`：生成参数和来源标记。
 - `example_data/README.md`：逐文件说明。可用于测试数据加载，但不能代替 1948–2014 年南澳大利亚真实降水数据。
+
+
+## 2026-11-26: 一键下载 NOAA 真实南澳大利亚区域数据（新脚本）
+
+推荐使用新脚本 \`../scripts/download_zidf_noaa.py\`，默认优先通过 NOAA THREDDS **NCSS 区域裁剪服务**，只请求南澳大利亚附近网格，避免拉取每年的全球原始大文件。变量映射依据 NOAA THREDDS 官方 annual 数据目录：
+
+- \`prate\` → \`surface_gauss/prate.sfc.gauss.YYYY.nc\`
+- \`air\` → \`surface/air.sig995.YYYY.nc\`
+- \`uwnd\` → \`surface/uwnd.sig995.YYYY.nc\`
+- \`vwnd\` → \`surface/vwnd.sig995.YYYY.nc\`
+- \`rhum\` → \`surface/rhum.sig995.YYYY.nc\`
+- \`pres\` → \`surface_gauss/pres.sfc.gauss.YYYY.nc\`
+
+\`\`\`bash
+# 先测试 1948 年六个变量是否能获取
+python data/zero_inflated/scripts/download_zidf_noaa.py download --start-year 1948 --end-year 1948
+
+# 完整 1948–2014，共 67 年 × 6 变量 = 402 个 NetCDF
+python data/zero_inflated/scripts/download_zidf_noaa.py download --start-year 1948 --end-year 2014
+
+# 检查是否每个年份每个变量都拿到了 NetCDF
+python data/zero_inflated/scripts/download_zidf_noaa.py verify --start-year 1948 --end-year 2014
+
+# 若需要将区域均值重新整理为可训练 CSV / NPZ：
+pip install numpy pandas xarray netCDF4
+python data/zero_inflated/scripts/download_zidf_noaa.py prepare --start-year 1948 --end-year 2014
+\`\`\`
+
+- 下载的真实 NOAA 文件放于 \`zidf/raw/noaa_sa/subset/YEAR/\`，不加入 Git 历史；每个文件都有 NetCDF 文件头检查（不等于全内容校验）。
+- 输出 \`zidf/raw/noaa_sa/download_manifest_subset.jsonl\` 用于记录具体文件、请求 URL、状态、字节数。
+- 按文件粒度跳过已经检查通过的 NetCDF，失败后重运行相同命令即可补齐缺失文件。
+- 如果 NCSS 区域裁剪服务发生错误，可添加 \`--mode global\` 直接下载年度完整全球网格 NetCDF。
+- \`prepare\` 输出至 \`zidf/processed/\`，按各变量独立区域均值、每日对齐， \`prate\` 检测单位后转换为 mm/day，最后保存 \`csv/npz/json\`。**这是我们独立实现的区域聚合方法，不保证与 ZIDF 论文数据加工完全相同；区域均值可能降低或改变精确零值比例。**
+- 当前助手所在环境的 DNS 解析失败，没有在这里成功下载 NOAA 原始文件；请在能够访问 NOAA 的 Windows/Linux 主机执行。不能将只有脚本的目录当作完整数据集。
