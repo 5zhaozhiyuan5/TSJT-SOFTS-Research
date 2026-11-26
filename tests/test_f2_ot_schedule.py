@@ -71,6 +71,17 @@ class TestF2OtSchedule(unittest.TestCase):
             k:a[k] for k in ("daepoch","decay_start","decay_end")
         }),"tail")
 
+    def test_legacy_constant_f2_does_not_fail_late_daepoch(self):
+        old={**self.args,"daepoch":50000}
+        self.assertEqual(
+            effective_ot_scale(1000,mode="t0",**old),0.0
+        )
+        self.assertEqual(
+            effective_ot_scale(50000,mode="t0",**old),0.01
+        )
+        with self.assertRaises(ValueError):
+            effective_ot_scale(50000,mode="t1",**old)
+
     def test_invalid_ranges_and_fractions(self):
         with self.assertRaises(ValueError):
             validate_schedule("t3",**self.args)
