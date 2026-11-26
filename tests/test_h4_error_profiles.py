@@ -11,7 +11,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from model.Meta_Models.h4_error_profile_counterfactual import (
-    GROUP_NAMES,error_profile_groups,downweight_group,shadow_profile_audit
+    GROUP_NAMES,error_profile_groups,downweight_group,matched_placebo_mask,
+    shadow_profile_audit
 )
 
 
@@ -76,6 +77,20 @@ class ProfileGroupsTest(unittest.TestCase):
             downweight_group(a,torch.zeros_like(masks["inaccurate"]))
         with self.assertRaises(ValueError):
             downweight_group(a,masks["accurate"],keep_fraction=0)
+
+    def test_reproducible_placebo_independent_of_target_probe(self):
+        torch.manual_seed(5)
+        alpha=torch.softmax(torch.randn(40),dim=0)
+        mask=torch.zeros(40,dtype=torch.bool)
+        mask[:10]=True
+        placebo_a,info_a=matched_placebo_mask(alpha,mask,seed=51)
+        placebo_b,info_b=matched_placebo_mask(alpha,mask,seed=51)
+        self.assertTrue(torch.equal(placebo_a,placebo_b))
+        self.assertEqual(info_a,info_b)
+        self.assertEqual(int(placebo_a.sum().item()),10)
+        self.assertEqual(info_a["count"],10)
+        self.assertGreaterEqual(info_a["relative_mass_mismatch"],0)
+        self.assertFalse(torch.equal(placebo_a,mask))
 
 
 class DummyModel(nn.Module):
