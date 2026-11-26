@@ -33,6 +33,22 @@
         "J340": 0.80612,
         "ZIMM": 0.84936,
         "P095": 0.94711
+      },
+      "verified": {
+        "github_actions_run": "https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/45774096530",
+        "target": "gpm_precip_sum_1h",
+        "j340": {
+          "valid": 59160,
+          "zeros": 47690
+        },
+        "zimm": {
+          "valid": 59160,
+          "zeros": 50248
+        },
+        "p095": {
+          "valid": 59160,
+          "zeros": 56031
+        }
       }
     },
     "hybrid_nhmm_copula": {
@@ -45,7 +61,17 @@
       "original_zip": "hybrid_nhmm_copula/upstream/Data/mapa_estaciones_precipitaciones_clean.csv.zip",
       "upstream_zip_bytes": 33960384,
       "data_type": "daily precipitation zero-inflated continuous with spatial structure",
-      "note": "Linked to author via git submodule; NOT rehosted because derived data redistribution rights are not conclusively granted"
+      "note": "Linked to author via git submodule; NOT rehosted because derived data redistribution rights are not conclusively granted",
+      "verified": {
+        "github_actions_run": "https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/45774197445",
+        "zip_crc": "passed",
+        "csv_uncompressed_bytes": 216657356,
+        "valid_precipitation": 2432940,
+        "exact_zeros": 793844,
+        "zero_ratio": 0.32629000304158756,
+        "positive_values": 1639096,
+        "positive_noninteger_values": 1638991
+      }
     }
   }
 }
