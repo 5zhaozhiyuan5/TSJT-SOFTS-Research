@@ -25,6 +25,7 @@ from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
 from transfer_utility import VARIANTS, compute_weights
+from f2_four_extensions import METHODS as F2_METHODS, compute_f2_extension
 from feedback_utility import (
     blend_source_weights, evaluate_feedback_candidates, select_feedback_policy
 )
@@ -265,6 +266,17 @@ class STRep(nn.Module):
             raise ValueError("Invalid PMME_PAIR_* or PMME_P4_* setting")
         self.p4_assignment_ema = {}
         self.p4_assignment_counts = {}
+        # These methods change only the F2 alpha/beta marginals, not the OT cost.
+        self.f2_method = os.environ.get("PMME_F2_METHOD", "original").strip().lower()
+        if self.f2_method not in F2_METHODS:
+            raise ValueError("PMME_F2_METHOD must be one of " + str(F2_METHODS))
+        if self.f2_method != "original" and (
+            self.transfer_variant != "gradient" or self.pair_variant != "f2"
+            or self.feedback_mode != "g0"
+        ):
+            raise ValueError("F2 extensions need gradient F2, no P1-P4, feedback g0")
+        self.f2_state = {}
+        print("PMME_F2_METHOD", self.f2_method)
         print("PMME_PAIR_VARIANT", self.pair_variant,
               "strength", self.pair_strength,
               "anchors", self.pair_anchor_count,
@@ -525,6 +537,21 @@ class STRep(nn.Module):
                     temperature=self.transfer_temperature,
                     min_ess_fraction=self.transfer_min_ess
                 )
+                if self.f2_method != "original":
+                    alpha, beta, extended_stats = compute_f2_extension(
+                        source_features.detach(), source_deltas,
+                        target_feature_groups[target_group],
+                        target_delta_groups[target_group],
+                        alpha, beta, self.f2_method,
+                        state=self.f2_state,
+                        state_key=target_group,
+                        temperature=self.transfer_temperature
+                    )
+                    if epoch % 25 == 0:
+                        print("f2_extension", "epoch", epoch,
+                              "city", str(data[index + 1].data_name),
+                              "target_group", target_group,
+                              extended_stats, flush=True)
                 if epoch % 25 == 0:
                     print("task_utility", self.transfer_variant, index, utility_stats)
 
