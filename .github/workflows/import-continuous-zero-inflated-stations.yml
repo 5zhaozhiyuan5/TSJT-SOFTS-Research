@@ -1,4 +1,4 @@
-name: Import four real RainfallBench station CSVs (verified)
+name: Import three verified zero-inflated RainfallBench station CSVs (verified)
 on:
   push:
     branches:
@@ -19,7 +19,7 @@ jobs:
         with:
           persist-credentials: true
           submodules: false
-      - name: Download four original RainfallBench CSVs and verify Git blob hashes
+      - name: Download three original RainfallBench CSVs and verify Git blob hashes
         shell: bash
         run: |
           set -euo pipefail
@@ -33,7 +33,6 @@ jobs:
               ("dataset/gnss/Asia/J340_data.csv", "J340_data.csv", 4652001, "e18bf3ff1125621d824c0f41bde9907610f9feaa"),
               ("dataset/gnss/Europe/ZIMM_data.csv", "ZIMM_data.csv", 4680618, "125f068f4f8b9effa8016614e2d7543ebb01ff8d"),
               ("dataset/gnss/North_America/P095_data.csv", "P095_data.csv", 4536152, "40fdf4fec2f56ea7aab3b200e41fbb20301e0aee"),
-              ("dataset/Rain/JFNG_data_15min.csv", "JFNG_data_15min.csv", 9325353, "866000f353d6deda73600f40d204eb5909e3da83"),
           ]
           outdir = Path("data/zero_inflated_papers/rainfallbench/stations")
           for subpath, filename, size, sha in files:
@@ -70,5 +69,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/zero_inflated_papers/rainfallbench/stations/*.csv
           git add data/zero_inflated_papers/rainfallbench/verification.json
-          git commit -m "data: vendor four verified real RainfallBench station CSVs"
+          git commit -m "data: vendor three verified real RainfallBench station CSVs"
           git push origin HEAD:refs/heads/datasets/continuous-zero-inflated-verified-20261126
