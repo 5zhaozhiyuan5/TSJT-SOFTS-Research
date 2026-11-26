@@ -1,0 +1,89 @@
+[INFO] source dataset: ['chengdu_m', 'metr-la', 'shenzhen', 'pems-bay']
+dataset_name : chengdu_m
+chengdu_m : x shape : torch.Size([2854, 524, 288, 2]), y shape : torch.Size([2854, 524, 36])
+dataset_name : metr-la
+metr-la : x shape : torch.Size([2830, 207, 288, 2]), y shape : torch.Size([2830, 207, 36])
+dataset_name : shenzhen
+shenzhen : x shape : torch.Size([2854, 627, 288, 2]), y shape : torch.Size([2854, 627, 36])
+dataset_name : pems-bay
+pems-bay : x shape : torch.Size([46, 325, 288, 2]), y shape : torch.Size([46, 325, 36])
+[INFO] Dataset init finished!
+[INFO] target_maml dataset: ['pems-bay']
+dataset_name : pems-bay
+pems-bay : x shape : torch.Size([46, 325, 288, 2]), y shape : torch.Size([46, 325, 36])
+[INFO] Dataset init finished!
+forecasting_model.enc_embedding.value_embedding.weight : torch.Size([512, 288]), require_grads : True
+forecasting_model.enc_embedding.value_embedding.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.projection1.weight : torch.Size([128, 512]), require_grads : True
+forecasting_model.projection1.bias : torch.Size([128]), require_grads : True
+forecasting_model.projection2.weight : torch.Size([36, 128]), require_grads : True
+forecasting_model.projection2.bias : torch.Size([36]), require_grads : True
+model params: 5738660
+PMME_F2_DIAGNOSTIC off readonly False interval 100 source_budget 192 target_budget 96
+PMME_F2_METHOD original
+PMME_PAIR_VARIANT f2 strength 0.0 anchors 8 block 256
+PMME_STAGE1_TRANSFER_VARIANT gradient
+PMME_STAGE1_FEEDBACK g0 interval 200 subset 256 128
+PMME_STAGE1_TRANSFER_CONFIG ot_scale 0.01 temperature 8.0 min_ess 0.5
+PMME_F2_OT_SCHEDULE_CONFIG t0 base_scale 0.01 DAepoch 1500 decay_start 2000 decay_end 2999 tail_fraction 0.25
+PMME_F2_ACCURACY_CONFIG strength 0.0 mode f2 reference persistence_last_speed uses_labels source_training_only
+H5_META_JSON {"audit_version": "h5-v1", "candidate_change": "one source city alpha at a time", "checkpoint": "/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth", "checkpoint_epoch": 2899, "checkpoint_sha256": "f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf", "checkpoint_warning": "NO independent holdout; correlated support windows", "full_ot_geometry": false, "methods": ["f2", "prc", "demand_skill", "demand_gradient", "joint", "rotated_demand", "shuffled_skill", "identity"], "optimizer": "original all-parameter one-sided PCGrad + stateful AdamW shadow", "original_f2_beta_and_geometry": true, "ot_scale": 0.01, "probes": 8, "seed": 1, "source_points": 256, "stage2_runs": 0, "strength": 0.5, "target_fit_only_demand": true, "target_points": 128, "target_probe_label_use": "AFTER all candidate OT gradients and shadow updates only", "target_probe_seen_during_checkpoint_training": true, "target_support_only": true, "training_updates": 0}
+/home/zhaozhiyuan/experiment-pmme-h5-target-conditioned-skill-audit-20261126/source/model/Meta_Models/PMME.py:84: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  x, y, means, stds = torch.tensor(x).to(self.PatchFSL_cfg['device']), torch.tensor(y).to(self.PatchFSL_cfg['device']),torch.tensor(means).to(self.PatchFSL_cfg['device']),torch.tensor(stds).to(self.PatchFSL_cfg['device']) #,torch.tensor(A,dtype=torch.float32).to(self.PatchFSL_cfg['device'])
+H5_RECORD {"batch": 0, "candidates": 20, "gain_vs_f2": {"policy:chengdu_m:demand_gradient": -0.00039053, "policy:chengdu_m:demand_skill": -2.62e-06, "policy:chengdu_m:joint": -0.00038934, "policy:chengdu_m:prc": 6.44e-06, "policy:chengdu_m:rotated_demand": -4.29e-06, "policy:chengdu_m:shuffled_skill": -9.78e-06, "policy:metr-la:demand_gradient": -8.34e-06, "policy:metr-la:demand_skill": -3.1e-06, "policy:metr-la:identity": -2.4e-07, "policy:metr-la:joint": 2.38e-06, "policy:metr-la:prc": -0.00039482, "policy:metr-la:rotated_demand": -3.81e-06, "policy:metr-la:shuffled_skill": 6.44e-06, "policy:shenzhen:demand_gradient": 4.29e-06, "policy:shenzhen:demand_skill": 9.54e-06, "policy:shenzhen:joint": 1.168e-05, "policy:shenzhen:prc": 2.408e-05, "policy:shenzhen:rotated_demand": 1.55e-05, "policy:shenzhen:shuffled_skill": 4.8e-07}}
+H5_RECORD {"batch": 1, "candidates": 20, "gain_vs_f2": {"policy:chengdu_m:demand_gradient": -0.0003159, "policy:chengdu_m:demand_skill": 1.43e-06, "policy:chengdu_m:identity": 0.0, "policy:chengdu_m:joint": -4.77e-06, "policy:chengdu_m:prc": -9.5e-07, "policy:chengdu_m:rotated_demand": -6.91e-06, "policy:chengdu_m:shuffled_skill": -1.91e-06, "policy:metr-la:demand_gradient": -6.91e-06, "policy:metr-la:demand_skill": -4.8e-07, "policy:metr-la:joint": 0.0, "policy:metr-la:prc": 3.481e-05, "policy:metr-la:rotated_demand": -1.43e-06, "policy:metr-la:shuffled_skill": -4.53e-06, "policy:shenzhen:demand_gradient": -4.05e-06, "policy:shenzhen:demand_skill": 1.67e-06, "policy:shenzhen:joint": -1.91e-06, "policy:shenzhen:prc": 9.5e-07, "policy:shenzhen:rotated_demand": 4.05e-06, "policy:shenzhen:shuffled_skill": 9.5e-07}}
+H5_RECORD {"batch": 2, "candidates": 20, "gain_vs_f2": {"policy:chengdu_m:demand_gradient": -4.05e-06, "policy:chengdu_m:demand_skill": -7.2e-07, "policy:chengdu_m:joint": -1.91e-06, "policy:chengdu_m:prc": 4.29e-06, "policy:chengdu_m:rotated_demand": -4.53e-06, "policy:chengdu_m:shuffled_skill": -7.2e-07, "policy:metr-la:demand_gradient": 0.00016785, "policy:metr-la:demand_skill": -8.34e-06, "policy:metr-la:identity": 2.4e-07, "policy:metr-la:joint": 0.00017548, "policy:metr-la:prc": 0.0001781, "policy:metr-la:rotated_demand": 0.00017428, "policy:metr-la:shuffled_skill": 5.01e-06, "policy:shenzhen:demand_gradient": -1.19e-06, "policy:shenzhen:demand_skill": 0.0001812, "policy:shenzhen:joint": 0.00018191, "policy:shenzhen:prc": 7.15e-06, "policy:shenzhen:rotated_demand": 0.00018406, "policy:shenzhen:shuffled_skill": 0.00018454}}
+H5_RECORD {"batch": 3, "candidates": 20, "gain_vs_f2": {"policy:chengdu_m:demand_gradient": 2.62e-06, "policy:chengdu_m:demand_skill": -8.11e-06, "policy:chengdu_m:identity": -4.8e-07, "policy:chengdu_m:joint": 0.00030017, "policy:chengdu_m:prc": -6.44e-06, "policy:chengdu_m:rotated_demand": 0.0002954, "policy:chengdu_m:shuffled_skill": -5.96e-06, "policy:metr-la:demand_gradient": -2.098e-05, "policy:metr-la:demand_skill": -1.836e-05, "policy:metr-la:joint": 2.146e-05, "policy:metr-la:prc": 0.00085568, "policy:metr-la:rotated_demand": -1.645e-05, "policy:metr-la:shuffled_skill": -9.06e-06, "policy:shenzhen:demand_gradient": 1.001e-05, "policy:shenzhen:demand_skill": 0.00024772, "policy:shenzhen:joint": 0.0, "policy:shenzhen:prc": 0.00023818, "policy:shenzhen:rotated_demand": -8.34e-06, "policy:shenzhen:shuffled_skill": 1.669e-05}}
+H5_RECORD {"batch": 4, "candidates": 20, "gain_vs_f2": {"policy:chengdu_m:demand_gradient": 2.86e-06, "policy:chengdu_m:demand_skill": -1.836e-05, "policy:chengdu_m:joint": -1.836e-05, "policy:chengdu_m:prc": 9.37e-05, "policy:chengdu_m:rotated_demand": -2.027e-05, "policy:chengdu_m:shuffled_skill": 1.287e-05, "policy:metr-la:demand_gradient": -6.2e-06, "policy:metr-la:demand_skill": -1.86e-05, "policy:metr-la:identity": 7.2e-07, "policy:metr-la:joint": -1.216e-05, "policy:metr-la:prc": -1.383e-05, "policy:metr-la:rotated_demand": -1.645e-05, "policy:metr-la:shuffled_skill": -1.43e-06, "policy:shenzhen:demand_gradient": 1.764e-05, "policy:shenzhen:demand_skill": -7.2e-07, "policy:shenzhen:joint": 1.931e-05, "policy:shenzhen:prc": -1.144e-05, "policy:shenzhen:rotated_demand": 1.931e-05, "policy:shenzhen:shuffled_skill": 1.502e-05}}
+H5_RECORD {"batch": 5, "candidates": 20, "gain_vs_f2": {"policy:chengdu_m:demand_gradient": -7.892e-05, "policy:chengdu_m:demand_skill": -6.68e-06, "policy:chengdu_m:identity": 2.4e-07, "policy:chengdu_m:joint": -2.15e-06, "policy:chengdu_m:prc": -5.25e-06, "policy:chengdu_m:rotated_demand": -6.44e-06, "policy:chengdu_m:shuffled_skill": -8.798e-05, "policy:metr-la:demand_gradient": -8.202e-05, "policy:metr-la:demand_skill": 2.861e-05, "policy:metr-la:joint": 2.313e-05, "policy:metr-la:prc": 1.049e-05, "policy:metr-la:rotated_demand": 1.693e-05, "policy:metr-la:shuffled_skill": 1.454e-05, "policy:shenzhen:demand_gradient": -2.15e-06, "policy:shenzhen:demand_skill": -5.72e-06, "policy:shenzhen:joint": -6.44e-06, "policy:shenzhen:prc": -5.96e-06, "policy:shenzhen:rotated_demand": -2.86e-06, "policy:shenzhen:shuffled_skill": -9.54e-06}}
+H5_RECORD {"batch": 6, "candidates": 20, "gain_vs_f2": {"policy:chengdu_m:demand_gradient": 5.96e-06, "policy:chengdu_m:demand_skill": -1.025e-05, "policy:chengdu_m:identity": -4.8e-07, "policy:chengdu_m:joint": -9.06e-06, "policy:chengdu_m:prc": -5.25e-06, "policy:chengdu_m:rotated_demand": -5.72e-06, "policy:chengdu_m:shuffled_skill": -2.15e-06, "policy:metr-la:demand_gradient": -2.956e-05, "policy:metr-la:demand_skill": -0.00090718, "policy:metr-la:joint": -0.00087714, "policy:metr-la:prc": 4.649e-05, "policy:metr-la:rotated_demand": -0.00088358, "policy:metr-la:shuffled_skill": -1.86e-05, "policy:shenzhen:demand_gradient": 4.29e-06, "policy:shenzhen:demand_skill": -1.55e-05, "policy:shenzhen:joint": -1.812e-05, "policy:shenzhen:prc": -3.386e-05, "policy:shenzhen:rotated_demand": -1.383e-05, "policy:shenzhen:shuffled_skill": 7.2e-07}}
+H5_RECORD {"batch": 7, "candidates": 20, "gain_vs_f2": {"policy:chengdu_m:demand_gradient": -8.34e-06, "policy:chengdu_m:demand_skill": -8.58e-06, "policy:chengdu_m:joint": -1.55e-05, "policy:chengdu_m:prc": -2.384e-05, "policy:chengdu_m:rotated_demand": -1.287e-05, "policy:chengdu_m:shuffled_skill": -9.78e-06, "policy:metr-la:demand_gradient": -5.48e-06, "policy:metr-la:demand_skill": 1.121e-05, "policy:metr-la:joint": 2.62e-06, "policy:metr-la:prc": 1.478e-05, "policy:metr-la:rotated_demand": 1.049e-05, "policy:metr-la:shuffled_skill": -1.764e-05, "policy:shenzhen:demand_gradient": -9.78e-06, "policy:shenzhen:demand_skill": -5.96e-06, "policy:shenzhen:identity": 0.0, "policy:shenzhen:joint": -7.63e-06, "policy:shenzhen:prc": -1.192e-05, "policy:shenzhen:rotated_demand": 3.58e-06, "policy:shenzhen:shuffled_skill": 0.00105119}}
+H5_AUDIT_FINISHED 8 training_updates 0 output /home/zhaozhiyuan/experiment-pmme-h5-target-conditioned-skill-audit-20261126/runs/pilot_8/h5_results.jsonl

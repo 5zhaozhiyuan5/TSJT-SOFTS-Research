@@ -1,0 +1,13 @@
+branch=experiment/pmme-h5-target-conditioned-skill-audit-20261126
+commit=8df378dfbf57f0209daac6cdbeddf3e81f50a485
+checkpoint=/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth
+checkpoint_sha256=f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf
+seed=1
+probes=8
+source_points=256
+target_points=128
+strength=0.5
+ot_scale=0.01
+gpu=0
+training_updates=0
+stage2_runs=0

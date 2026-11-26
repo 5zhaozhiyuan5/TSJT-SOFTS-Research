@@ -1,0 +1,41 @@
+[START] H5 checkpoint-only 19-way shadow audit: 8 batches, 256/128 OT points
+[DONE] H5 no training. Results: /home/zhaozhiyuan/experiment-pmme-h5-target-conditioned-skill-audit-20261126/runs/pilot_8
+H5 target-conditioned counterfactual: positive gain means better than F2
+NO F2 TRAINING; NO independent validation; one-step support-only proxies
+Identity numerical noise max: 0.0000007153
+chengdu_m demand_gradient mean=-0.00009829 median=-0.00000620 positive=3/8 outlier_share=0.48
+chengdu_m demand_skill mean=-0.00000674 median=-0.00000739 positive=1/8 outlier_share=0.32
+chengdu_m joint mean=-0.00001761 median=-0.00000691 positive=1/8 outlier_share=0.53
+chengdu_m prc mean=+0.00000784 median=-0.00000310 positive=3/8 outlier_share=0.64
+chengdu_m rotated_demand mean=+0.00002930 median=-0.00000608 positive=1/8 outlier_share=0.83
+chengdu_m shuffled_skill mean=-0.00001317 median=-0.00000405 positive=1/8 outlier_share=0.67
+metr-la demand_gradient mean=+0.00000104 median=-0.00000763 positive=1/8 outlier_share=0.51
+metr-la demand_skill mean=-0.00011453 median=-0.00000572 positive=2/8 outlier_share=0.91
+metr-la joint mean=-0.00008303 median=+0.00000250 positive=5/8 outlier_share=0.79
+metr-la prc mean=+0.00009146 median=+0.00002480 positive=6/8 outlier_share=0.55
+metr-la rotated_demand mean=-0.00009000 median=-0.00000262 positive=3/8 outlier_share=0.79
+metr-la shuffled_skill mean=-0.00000316 median=-0.00000298 positive=3/8 outlier_share=0.24
+shenzhen demand_gradient mean=+0.00000238 median=+0.00000155 positive=4/8 outlier_share=0.33
+shenzhen demand_skill mean=+0.00005153 median=+0.00000048 positive=4/8 outlier_share=0.53
+shenzhen joint mean=+0.00002235 median=-0.00000095 positive=3/8 outlier_share=0.74
+shenzhen prc mean=+0.00002590 median=-0.00000250 positive=4/8 outlier_share=0.71
+shenzhen rotated_demand mean=+0.00002518 median=+0.00000381 positive=5/8 outlier_share=0.73
+shenzhen shuffled_skill mean=+0.00015751 median=+0.00000799 positive=7/8 outlier_share=0.82
+Paired contrasts: joint minus alternative (positive better)
+chengdu_m vs prc mean=-0.00002545 median=-0.00000381 positive=3/8
+chengdu_m vs demand_skill mean=-0.00001088 median=-0.00000060 positive=3/8
+chengdu_m vs demand_gradient mean=+0.00008067 median=+0.00000167 positive=5/8
+chengdu_m vs rotated_demand mean=-0.00004691 median=+0.00000203 positive=5/8
+chengdu_m vs shuffled_skill mean=-0.00000444 median=-0.00000429 positive=2/8
+metr-la vs prc mean=-0.00017449 median=-0.00000739 positive=3/8
+metr-la vs demand_skill mean=+0.00003150 median=+0.00000596 positive=6/8
+metr-la vs demand_gradient mean=-0.00008407 median=+0.00000787 positive=6/8
+metr-la vs rotated_demand mean=+0.00000697 median=+0.00000525 positive=7/8
+metr-la vs shuffled_skill mean=-0.00007987 median=+0.00000656 positive=5/8
+shenzhen vs prc mean=-0.00000355 median=+0.00000191 positive=4/8
+shenzhen vs demand_skill mean=-0.00002918 median=-0.00000119 positive=3/8
+shenzhen vs demand_gradient mean=+0.00001997 median=+0.00000191 positive=5/8
+shenzhen vs rotated_demand mean=-0.00000283 median=-0.00000370 positive=1/8
+shenzhen vs shuffled_skill mean=-0.00013515 median=-0.00000274 positive=3/8
+Interpret only after comparing first four vs last four probes,
+and never claim statistical significance across correlated support windows.

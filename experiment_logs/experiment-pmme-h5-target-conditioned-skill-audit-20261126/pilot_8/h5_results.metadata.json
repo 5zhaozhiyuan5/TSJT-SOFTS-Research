@@ -1,0 +1,33 @@
+{
+  "audit_version": "h5-v1",
+  "candidate_change": "one source city alpha at a time",
+  "checkpoint": "/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth",
+  "checkpoint_epoch": 2899,
+  "checkpoint_sha256": "f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf",
+  "checkpoint_warning": "NO independent holdout; correlated support windows",
+  "full_ot_geometry": false,
+  "methods": [
+    "f2",
+    "prc",
+    "demand_skill",
+    "demand_gradient",
+    "joint",
+    "rotated_demand",
+    "shuffled_skill",
+    "identity"
+  ],
+  "optimizer": "original all-parameter one-sided PCGrad + stateful AdamW shadow",
+  "original_f2_beta_and_geometry": true,
+  "ot_scale": 0.01,
+  "probes": 8,
+  "seed": 1,
+  "source_points": 256,
+  "stage2_runs": 0,
+  "strength": 0.5,
+  "target_fit_only_demand": true,
+  "target_points": 128,
+  "target_probe_label_use": "AFTER all candidate OT gradients and shadow updates only",
+  "target_probe_seen_during_checkpoint_training": true,
+  "target_support_only": true,
+  "training_updates": 0
+}

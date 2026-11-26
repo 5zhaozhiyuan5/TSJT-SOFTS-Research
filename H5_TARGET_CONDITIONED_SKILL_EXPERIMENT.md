@@ -190,3 +190,6 @@ If **any** serious negative-control failure, unstable sign, or source-specific a
 - We do not replace F2, do not edit official Stage-II or final inference path.
 - The three-way score is an experiment-specific test, **not established superior novelty**.
 - Do not compare shadow probe MAE directly against paper Table 2 or Stage-II 36-horizon test MAE as if they were the same evaluation.
+## 7. Completed 8-batch capped audit (2026-11-26)
+
+Using the original F2 Stage-I checkpoint (epoch 2899), H5 completed 8 capped probes (256 source / 128 target points), with `training_updates=0` and `stage2_runs=0`. The Joint candidate did not meet the preregistered consistency gate in any source city; its gains were outlier-dominated and it did not consistently beat the negative controls. Therefore the optional full-OT stage and all new training were stopped. Detailed results and successful logs are in `experiment_logs/experiment-pmme-h5-target-conditioned-skill-audit-20261126/`. This remains a same-checkpoint support-shadow audit, not independent validation or final test accuracy.
