@@ -35,9 +35,16 @@
       "github": "https://github.com/Wentao-Gao/ZIDF-from-noise-to-precision",
       "noaa": "https://psl.noaa.gov/data/gridded/data.ncep.reanalysis.html",
       "author_config": "https://github.com/Wentao-Gao/ZIDF-from-noise-to-precision/blob/main/configs/sa_precip.yaml",
-      "status": "DOWNLOAD_AND_GENERATION_SCRIPTS_NO_ORIGINAL_NC_COMMITTED",
+      "status": "SYNTHETIC_CSV_SAMPLE_COMMITTED_NO_NOAA_REAL_DATA",
       "real_data_region": "South Australia",
-      "synthetic_distribution": "Bernoulli masked Gamma continuous positives"
+      "synthetic_distribution": "Bernoulli masked Gamma continuous positives",
+      "synthetic_example": {
+        "path": "zidf/example_data/zidf_synthetic_10000_zero70_seed42.csv",
+        "records": 10000,
+        "observed_zero_ratio": 0.6952,
+        "original_data": false,
+        "source_algorithm": "author's generate_synthetic_data"
+      }
     },
     "saeczi": {
       "paper": "Small area estimation of forest biomass via a two-stage model for continuous zero-inflated data",
