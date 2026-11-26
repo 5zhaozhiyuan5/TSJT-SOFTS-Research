@@ -28,7 +28,7 @@ NOAA = {
     "uwnd": ("surface", "uwnd.sig995"),
     "vwnd": ("surface", "vwnd.sig995"),
     "rhum": ("surface", "rhum.sig995"),
-    "pres": ("surface", "pres.sfc"),
+    "pres": ("surface_gauss", "pres.sfc.gauss"),
 }
 NOAA_ROOT = "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.dailyavgs"
 
