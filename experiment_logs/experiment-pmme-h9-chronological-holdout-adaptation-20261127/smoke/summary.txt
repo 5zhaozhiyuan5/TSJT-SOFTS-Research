@@ -1,0 +1,15 @@
+H9 chronological DEVELOPMENT. This is NOT official PMME test.
+No F2 retraining, no Stage-II; these are clone updates.
+step 0
+  f2 devMAE=2.0506764 devRMSE=4.2548513 vsF2=+0.0000000 vsHalf=+0.0000000 vsSameNorm=+0.0000000
+  global_half devMAE=2.0506764 devRMSE=4.2548513 vsF2=+0.0000000 vsHalf=+0.0000000 vsSameNorm=+0.0000000
+  projected_half devMAE=2.0506764 devRMSE=4.2548513 vsF2=+0.0000000 vsHalf=+0.0000000 vsSameNorm=+0.0000000
+  norm_matched_raw devMAE=2.0506764 devRMSE=4.2548513 vsF2=+0.0000000 vsHalf=+0.0000000 vsSameNorm=+0.0000000
+  all_off devMAE=2.0506764 devRMSE=4.2548513 vsF2=+0.0000000 vsHalf=+0.0000000 vsSameNorm=+0.0000000
+step 1
+  f2 devMAE=2.0825672 devRMSE=4.3061151 vsF2=+0.0000000 vsHalf=+0.0000100 vsSameNorm=+0.0000145
+  global_half devMAE=2.0825772 devRMSE=4.3061637 vsF2=-0.0000100 vsHalf=+0.0000000 vsSameNorm=+0.0000045
+  projected_half devMAE=2.0825472 devRMSE=4.3061272 vsF2=+0.0000200 vsHalf=+0.0000300 vsSameNorm=+0.0000345
+  norm_matched_raw devMAE=2.0825817 devRMSE=4.3061712 vsF2=-0.0000145 vsHalf=-0.0000045 vsSameNorm=+0.0000000
+  all_off devMAE=2.0825951 devRMSE=4.3062089 vsF2=-0.0000280 vsHalf=-0.0000179 vsSameNorm=-0.0000134
+H9_DECISION {"audit_version": "h9-v1", "development_not_paper_test": true, "future_after_dev_reserved": true, "max_adaptation_steps": 1, "no_development_labels_in_adaptation": true, "normalization_warning": "Original F2 full-series scaler; this is not a strictly train-only-normalized experiment", "original_f2_updates": 0, "policy_selection_warning": "After comparing H9 development results, this early post-support time is DEVELOPMENT, not a future independent benchmark test", "recommendation_rule": "Do NOT start formal Stage-II if projected_half fails to improve vs global_half and same-norm raw on chronologically disjoint development at steps 1 and 5; confirm later time blocks before finalizing", "stage2_runs": 0, "stepwise_development_contrasts": {"1": {"gain_projected_vs_half": 3.001420925841103e-05, "gain_projected_vs_same_norm": 3.452281666627144e-05}}, "whole_dev_mae_contrasts_at_last_step": {"versus_f2": 1.9979578817164168e-05, "versus_global_half": 3.001420925841103e-05, "versus_norm_matched_raw": 3.452281666627144e-05}}

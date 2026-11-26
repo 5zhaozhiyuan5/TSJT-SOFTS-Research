@@ -1,0 +1,23 @@
+{
+  "audit_version": "h9-v1",
+  "development_not_paper_test": true,
+  "future_after_dev_reserved": true,
+  "max_adaptation_steps": 1,
+  "no_development_labels_in_adaptation": true,
+  "normalization_warning": "Original F2 full-series scaler; this is not a strictly train-only-normalized experiment",
+  "original_f2_updates": 0,
+  "policy_selection_warning": "After comparing H9 development results, this early post-support time is DEVELOPMENT, not a future independent benchmark test",
+  "recommendation_rule": "Do NOT start formal Stage-II if projected_half fails to improve vs global_half and same-norm raw on chronologically disjoint development at steps 1 and 5; confirm later time blocks before finalizing",
+  "stage2_runs": 0,
+  "stepwise_development_contrasts": {
+    "1": {
+      "gain_projected_vs_half": 4.059868417805035e-05,
+      "gain_projected_vs_same_norm": 4.215694842013562e-05
+    }
+  },
+  "whole_dev_mae_contrasts_at_last_step": {
+    "versus_f2": -3.834739563934875e-05,
+    "versus_global_half": 4.059868417805035e-05,
+    "versus_norm_matched_raw": 4.215694842013562e-05
+  }
+}

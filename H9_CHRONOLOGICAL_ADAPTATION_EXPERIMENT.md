@@ -168,4 +168,4 @@ MAE_dev(global_half)      - MAE_dev(projected_half) > 0?
 6. `tests/test_h9_chronological.py`
 7. `H9_CHRONOLOGICAL_ADAPTATION_EXPERIMENT.md`
 
-**Current status: implementation only; no H9 GPU results claimed.**
+**Run status (2026-11-27):** smoke, full-OT one-step, and capped-OT five-step pilot completed. The projected policy lost to F2 and both relevant controls at step 5; per the preregistered stop rule, the 20-step run and Stage II were not launched. See [H9_RUN_REPORT.md](H9_RUN_REPORT.md).

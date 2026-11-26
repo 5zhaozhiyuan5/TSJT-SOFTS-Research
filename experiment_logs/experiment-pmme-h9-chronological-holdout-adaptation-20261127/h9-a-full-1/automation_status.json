@@ -1,0 +1,9 @@
+{
+  "branch": "experiment/pmme-h9-chronological-holdout-adaptation-20261127",
+  "exit_code": 0,
+  "finished_utc": "2026-11-26T17:29:58.186888+00:00",
+  "pid": 3905473,
+  "runner": "run_h9_chronological.sh",
+  "started_utc": "2026-11-26T17:29:44.792750+00:00",
+  "status": "completed"
+}
