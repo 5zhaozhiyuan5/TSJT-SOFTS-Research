@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-26",
+  "scope": "continuous-zero-inflated research datasets, not PMME/TSJT training data",
+  "datasets": {
+    "demm": {
+      "paper": "Beyond Point Prediction: Capturing Zero-Inflated & Heavy-Tailed Spatiotemporal Data with Deep Extreme Mixture Models",
+      "venue": "KDD 2022",
+      "github": "https://github.com/ampersandmcd/DeepExtremeMixtureModel",
+      "data_description": "https://github.com/ampersandmcd/DeepExtremeMixtureModel/blob/main/data/README.md",
+      "data_download": "https://drive.google.com/file/d/1vy9h3uiarpwrFCGFgr9Ex81q2_1v0f34/view?usp=sharing",
+      "status": "AUTHOR_DOWNLOAD_LINK_ONLY_NOT_COMMITTED",
+      "expected_files": [
+        "processed_data.pickle",
+        "rand_thresholds.pickle"
+      ],
+      "expected_dimensions": {
+        "X": [
+          939,
+          11,
+          7,
+          29,
+          59
+        ],
+        "Y": [
+          939,
+          1,
+          29,
+          59
+        ]
+      }
+    },
+    "zidf": {
+      "paper": "From Noise to Precision: A Diffusion-Driven Approach to Zero-Inflated Precipitation Prediction",
+      "venue": "ECAI 2025",
+      "github": "https://github.com/Wentao-Gao/ZIDF-from-noise-to-precision",
+      "noaa": "https://psl.noaa.gov/data/gridded/data.ncep.reanalysis.html",
+      "author_config": "https://github.com/Wentao-Gao/ZIDF-from-noise-to-precision/blob/main/configs/sa_precip.yaml",
+      "status": "DOWNLOAD_AND_GENERATION_SCRIPTS_NO_ORIGINAL_NC_COMMITTED",
+      "real_data_region": "South Australia",
+      "synthetic_distribution": "Bernoulli masked Gamma continuous positives"
+    },
+    "saeczi": {
+      "paper": "Small area estimation of forest biomass via a two-stage model for continuous zero-inflated data",
+      "venue": "Canadian Journal of Forest Research 2025",
+      "doi": "https://doi.org/10.1139/cjfr-2024-0149",
+      "github": "https://github.com/harvard-ufds/saeczi",
+      "status": "AUTHOR_OREGON_EXAMPLE_FILES_COMMITTED",
+      "note": "These files are package example data and are not the paper's full Nevada study dataset",
+      "files": [
+        {
+          "path": "saeczi/raw/samp.rda",
+          "bytes": 27899,
+          "git_blob_sha1": "6df7eb79d82f62777e2fe2f4fa02a18d7bf76bd3"
+        },
+        {
+          "path": "saeczi/raw/pop.rda",
+          "bytes": 124974,
+          "git_blob_sha1": "e42b6a1ac2484069f0d2fadeca5ddd1b58cf74df"
+        }
+      ]
+    }
+  }
+}

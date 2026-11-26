@@ -1,0 +1,12 @@
+# Large/derived research data: keep Git lightweight
+/demm/raw/
+/zidf/raw/
+/zidf/synthetic/
+/zidf/processed/
+/saeczi/exported/
+*.zip
+*.nc
+*.npz
+*.csv
+*.pickle
+__pycache__/
