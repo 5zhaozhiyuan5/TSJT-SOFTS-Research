@@ -88,7 +88,7 @@ def _fixed_pool(scores, max_source: int):
 
 
 @torch.no_grad()
-def _selected_weights(cosine, conflict, labels, sign_lambda: float):
+def _selected_weights(cosine, conflict, sign_lambda: float, temperature: float):
     """Six candidate distributions, same source/target sample support."""
     if not 0 <= sign_lambda <= 100:
         raise ValueError("Invalid sign_lambda")
@@ -98,17 +98,28 @@ def _selected_weights(cosine, conflict, labels, sign_lambda: float):
     k = max(1, n // 4)
     top = cosine.topk(k).indices
     bottom = cosine.topk(k, largest=False).indices
-    mid = (cosine - cosine.median()).abs().topk(max(2*k, 2), largest=False).indices
-    mid_order = mid[conflict[mid].argsort()]
-    low_sign, high_sign = mid_order[:k], mid_order[-k:]
+    # D2 cosine-stratified comparison: within each cosine quartile
+    # select equally many low/high-conflict samples. This suppresses
+    # confounding by the original F2 cosine score (not an exact match).
+    cosine_bins = torch.tensor_split(cosine.argsort(), 4)
+    low_parts, high_parts = [], []
+    for bin_ids in cosine_bins:
+        if len(bin_ids) < 2:
+            continue
+        rank = bin_ids[conflict[bin_ids].argsort()]
+        m = max(1, len(rank) // 4)
+        low_parts.append(rank[:m])
+        high_parts.append(rank[-m:])
+    low_sign = torch.cat(low_parts)
+    high_sign = torch.cat(high_parts)
 
     def subset(indices):
         vec = torch.zeros(n, device=cosine.device, dtype=cosine.dtype)
         vec[indices] = 1 / len(indices)
         return vec
 
-    f2 = torch.softmax(8.0 * cosine, dim=0)
-    sign = torch.softmax(8.0 * cosine - sign_lambda * conflict, dim=0)
+    f2 = torch.softmax(temperature * cosine, dim=0)
+    sign = torch.softmax(temperature * cosine - sign_lambda * conflict, dim=0)
     output = {
         "uniform": torch.full_like(cosine, 1 / n),
         "f2": f2,
@@ -199,7 +210,7 @@ def audit_f2_source_utility(*, source_rep, source_future, source_features,
         ).round().long().unique(sorted=True)
         cos = cos_all[source_ids]
         conflict = conflict_all[source_ids]
-        weights, sets = _selected_weights(cos, conflict, None, sign_lambda)
+        weights, sets = _selected_weights(cos, conflict, sign_lambda, temperature)
         report = {
             "audit_version": "d1d2-v1",
             "epoch": int(epoch),
@@ -216,6 +227,8 @@ def audit_f2_source_utility(*, source_rep, source_future, source_features,
             "cos_conflict_pearson": _pearson(cos, conflict),
             "candidate_groups": {},
             "candidate_OT": {},
+            "f2_temperature": float(temperature),
+            "d2_conflict_lambda": float(sign_lambda),
         }
         for key, inds in sets.items():
             report["candidate_groups"][key] = {
