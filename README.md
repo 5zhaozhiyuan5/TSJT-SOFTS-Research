@@ -1,66 +1,62 @@
-# 连续域零膨胀论文数据集 — 专用分支
+# 连续域零膨胀研究数据集 — 数据专用分支
 
-本分支**只包含三组论文数据及相关说明、校验文件**，没有 PMME、TSJT 或其他工程代码。智利数据 ZIP 已直接放入本分支（不是子模块），而 RainfallBench 的完整大规模作者仓库继续采用子模块引用。
+这个分支只保留三组正式发表论文的真实数据、相关来源说明与校验脚本。**智利降水数据已经解压成完整 CSV，不再需要 ZIP 或智利作者子模块。**
 
-## 三组数据
-
-| 数据 | 论文及发表信息 | 官方源码仓库 | 本分支的真实数据 |
+| 数据集 | 正式论文 | 源码 | 已存放的数据 |
 |---|---|---|---|
-| **SAECZI** | *Small area estimation of forest biomass via a two-stage model for continuous zero-inflated data* — Canadian Journal of Forest Research (2025), [DOI](https://doi.org/10.1139/cjfr-2024-0149) | https://github.com/harvard-ufds/saeczi | [samp.rda](data/zero_inflated_papers/saeczi/raw/samp.rda)、[pop.rda](data/zero_inflated_papers/saeczi/raw/pop.rda)，俄勒冈州示例 |
-| **RainfallBench** | *How Effective Are Time-Series Models for Precipitation Nowcasting?* — IEEE TGRS (2026), [DOI](https://doi.org/10.1109/TGRS.2026.3671768) | https://github.com/yfangZhang/RainfallBench | [三个真实站点 CSV](data/zero_inflated_papers/rainfallbench/stations)，完整作者公开数据另可在 `rainfallbench/upstream` 子模块获取 |
-| **Hybrid nHMM–Copula** | *Characterizing Climate-Driven Shifts in Chilean Rainfall Regimes with a Hybrid Hidden Markov–Copula Framework* — Hydrology and Earth System Sciences (2026), [DOI](https://doi.org/10.5194/hess-30-6531-2026) | https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework | **[原作者 33.96 MB ZIP 已直接上传本分支](data/zero_inflated_papers/hybrid_nhmm_copula/raw/mapa_estaciones_precipitaciones_clean.csv.zip)**，解压后为 216.66 MB CSV |
+| **SAECZI**（森林生物量） | *Small area estimation of forest biomass via a two-stage model for continuous zero-inflated data*，Canadian Journal of Forest Research (2025)，[DOI](https://doi.org/10.1139/cjfr-2024-0149) | https://github.com/harvard-ufds/saeczi | `data/zero_inflated_papers/saeczi/raw/samp.rda`、`pop.rda`，俄勒冈州示例 |
+| **RainfallBench**（多气象站降雨） | *How Effective Are Time-Series Models for Precipitation Nowcasting?*，IEEE TGRS (2026)，[DOI](https://doi.org/10.1109/TGRS.2026.3671768) | https://github.com/yfangZhang/RainfallBench | `data/zero_inflated_papers/rainfallbench/stations/` 里三个真实、严格零膨胀 CSV；其他原始公开站点在 `upstream` 子模块 |
+| **Hybrid nHMM–Copula**（智利多站点降雨） | *Characterizing Climate-Driven Shifts in Chilean Rainfall Regimes*，Hydrology and Earth System Sciences (2026)，[DOI](https://doi.org/10.5194/hess-30-6531-2026) | https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework | **`data/zero_inflated_papers/hybrid_nhmm_copula/raw/mapa_estaciones_precipitaciones_clean.csv`（216,657,356 字节，已解压）** |
 
-## 目录结构
+## 数据集目录
 
 ```text
 README.md
-.gitmodules                                      # 仅 RainfallBench 作者原始仓库
+.gitattributes                 # 仅对智利大 CSV 开启 Git LFS
+.gitmodules                    # 仅保留 RainfallBench 作者源码及完整数据
 data/zero_inflated_papers/
-  README.md                                     # 三个数据集概述
-  sources.json                                  # 论文、源码、数据文件与验证元信息
-  verify_datasets.py                            # Git blob SHA、大小、ZIP CRC 检验
+  README.md
+  sources.json
+  verify_datasets.py
   saeczi/
     README.md
-    raw/
-      samp.rda                                   # 27,899 B
-      pop.rda                                    # 124,974 B
+    raw/samp.rda
+    raw/pop.rda
   rainfallbench/
     README.md
+    stations/J340_data.csv
+    stations/ZIMM_data.csv
+    stations/P095_data.csv
+    upstream/                  # 需要时可初始化的作者仓库子模块
     verification.json
-    stations/
-      J340_data.csv                             # 零值 80.612%
-      ZIMM_data.csv                             # 零值 84.936%
-      P095_data.csv                             # 零值 94.711%
-    upstream/                                    # 唯一仍保留的 Git 子模块
   hybrid_nhmm_copula/
     README.md
-    DATA_RIGHTS_NOTICE.md                       # 原作者数据来源与使用条件提醒
+    DATA_RIGHTS_NOTICE.md
     raw/
-      mapa_estaciones_precipitaciones_clean.csv.zip # 33,960,384 B
-      download_verified.json                    # 来源哈希和压缩包 CRC
+      mapa_estaciones_precipitaciones_clean.csv  # 216.66 MB（Git LFS）
+      extraction_verified.json                   # SHA-256 和作者原文件信息
 ```
 
-## 下载 / 校验
+## 怎样直接下载完整 CSV？
 
-普通克隆即可得到**智利 ZIP、SAECZI 数据和三个 RainfallBench CSV**，不需要初始化子模块：
+GitHub 普通 Git 文件超过 **100 MB** 会被拒绝，因此智利 CSV 通过 **Git LFS** 存储。GitHub 网页可能显示一个很小的指针文件，**不能将指针当作真实 CSV 下载**。需要在已安装 [Git LFS](https://git-lfs.com/) 的电脑上运行：
 
 ```bash
+git lfs install
 git clone --branch datasets/continuous-zero-inflated-verified-20261126 https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research.git
 cd TSJT-SOFTS-Research
+git lfs pull
 python data/zero_inflated_papers/verify_datasets.py
 ```
 
-仅当你需要 RainfallBench **全部公开站点与完整基准源码**时，再运行：
+克隆后 `data/zero_inflated_papers/hybrid_nhmm_copula/raw/mapa_estaciones_precipitaciones_clean.csv` 就是真正的 **216,657,356 字节** CSV，Python Pandas/R 可以直接读取。**已在 GitHub Actions 全新 LFS 检出中验证文件大小、SHA-256 和 2,432,940 条记录**：[验证记录](https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/45777509526)。
 
-```bash
-git submodule update --init --recursive
-```
+如果还需 RainfallBench 全部原始公开数据，可额外运行 `git submodule update --init --recursive`。
 
-## 实测零膨胀程度
+## 严格零膨胀数据的实测结果
 
-- 智利 `precipitation`：2,432,940 条有效记录，其中 793,844 条精确零值（**32.629%**），1,639,096 条连续正值。
-- RainfallBench `gpm_precip_sum_1h`：日本 J340 **80.612%**、瑞士 ZIMM **84.936%**、美国 P095 **94.711%** 精确零值。
-- SAECZI：森林生物量的连续零膨胀样例，实际 RData 在仓库内。
-- 不包含 JFNG 文件作为严格零膨胀样本，因为其公开的 `tp` 列没有精确零值。
+- **智利**：`precipitation` 2,432,940 条有效记录，793,844 条为零（**32.629%**），其余为连续正值。
+- **RainfallBench**：`gpm_precip_sum_1h` 列，J340 为 **80.612%**，ZIMM 为 **84.936%**，P095 为 **94.711%** 精确零值。
+- **SAECZI**：俄勒冈州森林生物量研究样例。具体响应变量见其 README。
 
-**版权/来源提醒**：智利数据 ZIP 是从[作者的 GitHub 原始发布文件](https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework/blob/c09e5c46c6c5c237c86a3d214768febfc9e0dbac/Data/mapa_estaciones_precipitaciones_clean.csv.zip)直接复制、字节哈希一致，并非本仓库原创。作者 `LICENSES.md` 提醒，CR2MET 及其他上游衍生数据的**再分发权限还需要核实**；本次拷贝不代表已得到额外许可，公开分享前请检查相关条款并保留原作者引用。
+**使用权限提醒**：智利 CSV 属于作者公开发布的加工数据。原作者 `LICENSES.md` 提醒，上游 CR2MET 及其他来源的再分发权限尚需核实，不能把本次镜像上传视为获得进一步授权；详见 `DATA_RIGHTS_NOTICE.md`。

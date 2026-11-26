@@ -58,10 +58,9 @@
       "doi": "https://doi.org/10.5194/hess-30-6531-2026",
       "source_code": "https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework",
       "upstream_commit": "c09e5c46c6c5c237c86a3d214768febfc9e0dbac",
-      "original_zip": "hybrid_nhmm_copula/raw/mapa_estaciones_precipitaciones_clean.csv.zip",
       "upstream_zip_bytes": 33960384,
       "data_type": "daily precipitation zero-inflated continuous with spatial structure",
-      "note": "Dataset bytes are directly uploaded to this branch; attribution retained. Author LICENSES.md asks redistributors to verify upstream data rights; permission has not been independently established.",
+      "note": "Uncompressed full 216MB CSV stored in GitHub LFS. GitHub file page may show a 134-byte pointer, but git lfs pull obtains the complete CSV. Upstream processed-data redistribution rights still require review.",
       "verified": {
         "github_actions_run": "https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/45774197445",
         "zip_crc": "passed",
@@ -75,7 +74,13 @@
       "directly_committed": true,
       "status": "Real author ZIP directly committed into this Git branch and exact Git blob SHA verified",
       "original_git_blob_sha1": "0d007e8f179c4602ca5d44a294cf5c2defda623f",
-      "original_source_url": "https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework/blob/c09e5c46c6c5c237c86a3d214768febfc9e0dbac/Data/mapa_estaciones_precipitaciones_clean.csv.zip"
+      "original_source_url": "https://github.com/mauricio-herrera/hybrid-nhmm-copula-precipitation-framework/blob/c09e5c46c6c5c237c86a3d214768febfc9e0dbac/Data/mapa_estaciones_precipitaciones_clean.csv.zip",
+      "uncompressed_csv": "hybrid_nhmm_copula/raw/mapa_estaciones_precipitaciones_clean.csv",
+      "uncompressed_csv_size_bytes": 216657356,
+      "uncompressed_sha256": "93609b0eacd2809f0d7bd86fa44ab0d54034faf7d306180fc02108307502d92a",
+      "storage": "Git LFS (uncompressed original CSV; full data uploaded and re-downloaded via fresh checkout successfully)",
+      "lfs_confirmation_run": "https://github.com/5zhaozhiyuan5/TSJT-SOFTS-Research/actions/runs/45777509526",
+      "original_archive": "original ZIP no longer on branch head; its source Git hash is recorded in extraction_verified.json"
     }
   }
 }
