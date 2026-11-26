@@ -7,7 +7,7 @@
 | 目录 | 论文及发表场所 | 数据 / 研究任务 | 数据获取及当前存放方式 |
 |---|---|---|---|
 | `saeczi/` | *Small area estimation of forest biomass via a two-stage model for continuous zero-inflated data*（Canadian Journal of Forest Research, 2025） | 美国俄勒冈州森林生物量，零值 + 连续正生物量；空间统计 | **两份真实 R 数据已直接提交**：`saeczi/raw/samp.rda`、`saeczi/raw/pop.rda`（俄勒冈示例，不是论文所有内华达研究数据） |
-| `rainfallbench/` | *How Effective Are Time-Series Models for Precipitation Nowcasting? A Comprehensive Benchmark for GNSS-Based Precipitation Nowcasting*（IEEE TGRS, 2026） | GNSS/气象站降雨预测；连续降水量 `tp`、大量零值 | **完整作者仓库以固定 Git 子模块引用**于 `rainfallbench/upstream/`（含各大洲公开 CSV）；另尝试直接入库 4 个代表站点到 `rainfallbench/stations/`，实际结果以文件清单/校验报告为准 |
+| `rainfallbench/` | *How Effective Are Time-Series Models for Precipitation Nowcasting? A Comprehensive Benchmark for GNSS-Based Precipitation Nowcasting*（IEEE TGRS, 2026） | GNSS/气象站降雨预测；连续降水量 `tp`、大量零值 | **完整作者仓库以固定 Git 子模块引用**于 `rainfallbench/upstream/`（含各大洲公开 CSV）；另已直接入库 3 个严格零膨胀代表站点到 `rainfallbench/stations/`，实际结果以文件清单/校验报告为准 |
 | `hybrid_nhmm_copula/` | *Characterizing Climate-Driven Shifts in Chilean Rainfall Regimes with a Hybrid Hidden Markov–Copula Framework*（Hydrology and Earth System Sciences, 2026） | 智利多站点日降水；零值质量、正值边缘分布与极端值 | **作者仓库以固定 Git 子模块引用**于 `hybrid_nhmm_copula/upstream/`，其中 `Data/mapa_estaciones_precipitaciones_clean.csv.zip` 为约 34 MB 真正的加工数据；因衍生数据的再分发许可不确定，不另行复制该压缩包 |
 
 **重要区别**：Git 子模块是对作者原始仓库指定提交的正式引用。GitHub 页面上会显示子模块入口，`git clone --recurse-submodules` 或 `git submodule update --init --recursive` 后，**全部原始文件将真实出现在本地目录**。这与仅在 README 中放一个下载链接不同；但数据字节并非重新上传到本仓库 Git 对象库。这里绝不把子模块说成“已重新上传的文件”。
@@ -46,12 +46,12 @@ data/zero_inflated_papers/hybrid_nhmm_copula/upstream/Data/
   mapa_estaciones_precipitaciones_clean.csv.zip
 ```
 
-如直接入库的 RainfallBench `stations/` 完成，会有上述四个 CSV 的本地副本；**直接复制成功与否以 `rainfallbench/stations/` 真实文件、Git 提交及 `verification.json` 为准**。
+RainfallBench `stations/` 已提交 J340 / ZIMM / P095 三个真实 CSV，并经原作者 Git blob SHA 校验。**JFNG 虽来自该论文，但真实 `tp` 列 171,069 条记录中精确零值数为 0，因此不纳入严格零膨胀子集，仍可在完整 `upstream/dataset/Rain/` 查阅。**
 
 ## 为什么不把三篇的“完整论文训练数据”一概称为已复现？
 
 - SAECZI 公开 `samp/pop` 是俄勒冈示例，而正式论文还包含美国内华达州应用，部分保密清查字段未公开。
-- RainfallBench 包含作者发布的更多站点和模型脚本。四个代表站点仅是便于快速分析的子集，完整公开数据请从 `upstream/dataset` 读取。
+- RainfallBench 包含作者发布的更多站点和模型脚本。三个已经核实含大量精确零值的代表站点仅是便于快速分析的子集，完整公开数据请从 `upstream/dataset` 读取。
 - 智利项目作者明确指出压缩 CSV 中有上游派生内容，尚未全面确认再分发授权；本仓库通过 Git 子模块引入作者原始发布文件，不擅自再次发布数据。
 - 所有“零值占比”须以真实 CSV / RData 的实测值为准，不得用论文总体零值比例代替某个具体站点的实测结果。
 - 这些数据属于**连续域零膨胀**，不是离散计数型 ZIP 数据；但均非传统图神经网络模型数据，不能直接假设已有道路拓扑图。
