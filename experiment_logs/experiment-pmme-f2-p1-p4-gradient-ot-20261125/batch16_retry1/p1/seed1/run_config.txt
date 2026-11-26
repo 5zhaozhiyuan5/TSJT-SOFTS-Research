@@ -1,0 +1,14 @@
+branch=experiment/pmme-f2-p1-p4-gradient-ot-20261125
+git_commit=1f6fc5f53d73c296079c858a66312601ce2c6001
+seed=1
+pair_variant=p1
+pair_strength=0.02
+ot_scale=0.01
+stage2_epochs=6000
+stage1_epochs=3000
+daepoch=1500
+anchors=8
+block_size=256
+p4_momentum=0.8
+p4_repeat=0.08
+local_patch=geoloss-symmetric-cost-v1-6312734f4adeb30a

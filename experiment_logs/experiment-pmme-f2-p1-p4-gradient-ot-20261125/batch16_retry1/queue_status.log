@@ -1,0 +1,12 @@
+2026-11-26 10:38:50 CST DIRECT batch_size=16 launch requested; source_patched original config; no GPU-memory threshold/automatic stop; variants p2 p4 p1 p3 seed1.
+torch 2.5.1+cu121 geomloss available
+2026-11-26 10:38:50 CST DIRECT batch_size=16 run requested; no free-memory threshold and no automatic GPU-memory stop. branch=experiment/pmme-f2-p1-p4-gradient-ot-20261125 commit=1f6fc5f53d73c296079c858a66312601ce2c6001 patch=geoloss-symmetric-cost-v1-6312734f4adeb30a; variants=p2 p4 p1 p3 seed1; Stage-I=3000 Stage-II=6000.
+2026-11-26 10:38:50 CST Starting variant=p2 seed=1 batch_size=16 directly; no automatic stop monitor.
+2026-11-26 11:22:29 CST Completed variant=p2 seed=1; Stage-I and Stage-II markers verified.
+2026-11-26 11:22:29 CST Starting variant=p4 seed=1 batch_size=16 directly; no automatic stop monitor.
+2026-11-26 11:47:14 CST Completed variant=p4 seed=1; Stage-I and Stage-II markers verified.
+2026-11-26 11:47:14 CST Starting variant=p1 seed=1 batch_size=16 directly; no automatic stop monitor.
+2026-11-26 12:23:41 CST Completed variant=p1 seed=1; Stage-I and Stage-II markers verified.
+2026-11-26 12:23:41 CST Starting variant=p3 seed=1 batch_size=16 directly; no automatic stop monitor.
+2026-11-26 12:49:24 CST Completed variant=p3 seed=1; Stage-I and Stage-II markers verified.
+2026-11-26 12:49:24 CST All requested batch_size=16 seed1 variants completed: p2 p4 p1 p3.

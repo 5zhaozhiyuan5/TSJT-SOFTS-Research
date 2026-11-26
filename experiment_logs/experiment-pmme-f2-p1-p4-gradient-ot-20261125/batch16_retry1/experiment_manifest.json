@@ -1,0 +1,23 @@
+{
+  "experiment": "PMME F2/P1-P4 gradient OT",
+  "branch": "experiment/pmme-f2-p1-p4-gradient-ot-20261125",
+  "code_commit": "1f6fc5f53d73c296079c858a66312601ce2c6001",
+  "config_source": "server source_patched (original batch size 16)",
+  "batch_size": 16,
+  "dataset": "PEMS-BAY",
+  "variants": [
+    "p2",
+    "p4",
+    "p1",
+    "p3"
+  ],
+  "seeds": [
+    1
+  ],
+  "stage1_epochs": 3000,
+  "stage2_epochs": 6000,
+  "completed": true,
+  "completion_time_local": "2026-11-26 12:49 CST",
+  "source_patch": "geoloss-symmetric-cost-v1-6312734f4adeb30a",
+  "logs_compressed": "gzip; decompress .gz files to recover exact logs"
+}
