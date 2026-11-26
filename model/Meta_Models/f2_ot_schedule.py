@@ -21,8 +21,12 @@ def validate_schedule(mode, base_scale, daepoch, decay_start, decay_end,
         raise ValueError("OT activation epoch must be a nonnegative integer")
     if not isinstance(decay_start, int) or not isinstance(decay_end, int):
         raise ValueError("Decay epochs must be integers")
-    if not daepoch <= decay_start < decay_end:
-        raise ValueError("Require daepoch <= decay_start < decay_end")
+    if not 0 <= decay_start < decay_end:
+        raise ValueError("Require 0 <= decay_start < decay_end")
+    # T0 is the untouched fixed-F2 baseline. It must also remain valid for
+    # unrelated legacy workflows where DAepoch can be larger than 2999.
+    if mode != "t0" and daepoch > decay_start:
+        raise ValueError("For T1/T2, OT activation must precede decay start")
     if not math.isfinite(tail_fraction) or not 0.0 <= tail_fraction <= 1.0:
         raise ValueError("T2 tail fraction must be in [0,1]")
 
