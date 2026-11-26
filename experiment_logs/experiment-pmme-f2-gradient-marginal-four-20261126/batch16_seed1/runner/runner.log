@@ -1,1 +1,6 @@
 [START] method=mag seed=1
+[DONE] /home/zhaozhiyuan/experiment-pmme-f2-gradient-marginal-four-20261126/results_batch16_seed1/mag/seed1
+[START] method=sign seed=1
+[DONE] /home/zhaozhiyuan/experiment-pmme-f2-gradient-marginal-four-20261126/results_batch16_seed1/sign/seed1
+[START] method=ema seed=1
+
