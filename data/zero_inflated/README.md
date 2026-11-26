@@ -67,3 +67,16 @@ Rscript data/zero_inflated/scripts/export_saeczi.R
 - `zidf/example_data/zidf_synthetic_10000_zero70_seed42.csv`：可下载的 10,000 条连续零膨胀合成数据（约 653 KB），5 个输入特征加 `target`，实际零值比例 69.52%。
 - `zidf/example_data/metadata.json`：随机种子、生成规则及数据类型。
 - **DEMM 实验数据和 ZIDF NOAA 真实降雨数据仍未成功下载到仓库**；不可将合成样例描述为原论文的真实实验数据。
+
+
+## 真实 NOAA 下载器（最新）
+
+\`scripts/download_zidf_noaa.py\` 是 NOAA 的独立区域裁剪下载程序（1948–2014 年、六个气象变量、失败重试、文件头校验、日志、CSV/NPZ 转换），优先于旧的 \`scripts/manage_datasets.py zidf-noaa\` 全局网格下载方式。
+
+\`\`\`bash
+python data/zero_inflated/scripts/download_zidf_noaa.py download --start-year 1948 --end-year 1948
+python data/zero_inflated/scripts/download_zidf_noaa.py download --start-year 1948 --end-year 2014
+python data/zero_inflated/scripts/download_zidf_noaa.py verify
+\`\`\`
+
+也创建了 \`.github/workflows/zidf-noaa-1948-smoke.yml\` 以尝试在 GitHub Actions 下载一个年份的真实 NetCDF 并生成 artifact；只有工作流确实运行且上传成功后才能认为 GitHub 上有对应数据。当前**没有已验证的 NOAA 下载结果**。
