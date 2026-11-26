@@ -1,0 +1,14 @@
+branch=experiment/pmme-f2-error-profile-target-benefit-audit-20261126
+commit=a1f44425249d81c755c63323f6d2e6b63921142a
+checkpoint=/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth
+checkpoint_sha256=f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf
+seed=1
+probe_batches=8
+source_points=256
+target_points=128
+groups=accurate,inaccurate,short_weak,mid_weak,long_weak,balanced
+keep_fraction=0.5
+min_group=12
+min_mass=0.02
+gpu=0
+training_updates=0

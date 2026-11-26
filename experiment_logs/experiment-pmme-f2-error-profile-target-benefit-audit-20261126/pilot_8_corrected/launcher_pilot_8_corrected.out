@@ -1,0 +1,23 @@
+[START] H4 support-only read-only error-profile audit: probes=8 source_points=256 target_points=128
+[DONE] H4, TRAINING_UPDATES=0, output=/home/zhaozhiyuan/experiment-pmme-f2-error-profile-target-benefit-audit-20261126/runs/pilot_8_corrected
+H4: source profile group suppression; positive means suppressing the group improved one-step target support-probe MAE
+chengdu_m accurate     N=8 mean=+0.00009719 sign+=0.50 short/mid/long=-0.00000344/+0.00008348/+0.00021157 mass=0.1842
+chengdu_m inaccurate   N=8 mean=+0.00004584 sign+=0.12 short/mid/long=+0.00004521/-0.00013953/+0.00023183 mass=0.3161
+chengdu_m long_weak    N=8 mean=+0.00002569 sign+=0.50 short/mid/long=+0.00001378/+0.00003842/+0.00002486 mass=0.1990
+chengdu_m mid_weak     N=8 mean=+0.00015754 sign+=0.75 short/mid/long=+0.00005288/+0.00020188/+0.00021777 mass=0.1779
+chengdu_m placebo_accurate N=8 mean=+0.00010148 sign+=0.25 short/mid/long=-0.00000229/+0.00008431/+0.00022221 mass=0.1854
+chengdu_m short_weak   N=8 mean=-0.00005573 sign+=0.38 short/mid/long=+0.00005762/-0.00022528/+0.00000048 mass=0.1034
+metr-la accurate     N=8 mean=+0.00001395 sign+=0.38 short/mid/long=+0.00000708/+0.00002724/+0.00000784 mass=0.1902
+metr-la inaccurate   N=8 mean=-0.00005111 sign+=0.50 short/mid/long=+0.00005749/-0.00022230/+0.00001171 mass=0.2219
+metr-la long_weak    N=8 mean=-0.00000155 sign+=0.38 short/mid/long=+0.00000326/-0.00000226/-0.00000572 mass=0.1898
+metr-la mid_weak     N=8 mean=-0.00000119 sign+=0.38 short/mid/long=+0.00000294/-0.00000200/-0.00000438 mass=0.1908
+metr-la placebo_accurate N=7 mean=+0.00001904 sign+=0.29 short/mid/long=+0.00003598/+0.00008297/-0.00006192 mass=0.2057
+metr-la short_weak   N=8 mean=-0.00001565 sign+=0.12 short/mid/long=-0.00000797/-0.00001630/-0.00002280 mass=0.1809
+shenzhen accurate     N=8 mean=+0.00003570 sign+=0.38 short/mid/long=+0.00003432/+0.00008255/-0.00000983 mass=0.1362
+shenzhen inaccurate   N=8 mean=+0.00002605 sign+=0.62 short/mid/long=+0.00003137/+0.00007585/-0.00002915 mass=0.3514
+shenzhen long_weak    N=8 mean=+0.00005537 sign+=0.38 short/mid/long=+0.00005405/-0.00013116/+0.00024319 mass=0.1625
+shenzhen mid_weak     N=8 mean=+0.00002983 sign+=0.50 short/mid/long=+0.00002991/+0.00007728/-0.00001734 mass=0.2009
+shenzhen placebo_accurate N=8 mean=+0.00001585 sign+=0.88 short/mid/long=+0.00001185/+0.00002745/+0.00000840 mass=0.1507
+shenzhen short_weak   N=8 mean=+0.00000742 sign+=0.50 short/mid/long=+0.00010596/-0.00010270/+0.00001934 mass=0.1323
+These are correlated, checkpoint-in-support ONE-STEP diagnostics; no independent test accuracy or final training improvement.
+Saved /home/zhaozhiyuan/experiment-pmme-f2-error-profile-target-benefit-audit-20261126/runs/pilot_8_corrected/h4_summary.csv

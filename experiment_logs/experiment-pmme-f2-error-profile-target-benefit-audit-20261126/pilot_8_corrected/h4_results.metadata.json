@@ -1,0 +1,38 @@
+{
+  "audit_version": "h4-v1",
+  "checkpoint_epoch": 2899,
+  "checkpoint_sha256": "f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf",
+  "data_list": "chengdu_shenzhen_metr",
+  "full_ot_geometry": false,
+  "groups": [
+    "accurate",
+    "inaccurate",
+    "short_weak",
+    "mid_weak",
+    "long_weak",
+    "balanced"
+  ],
+  "keep_fraction": 0.5,
+  "label_leakage_guard": "No probe future in OT alpha/beta, target-fit gradient or virtual optimizer update; shadow target.y forced zero",
+  "min_alpha_mass": 0.02,
+  "min_group_points": 12,
+  "ot_cost": "Original F2 GeomLoss(p=1,blur=.001,debias=False), concat(SOFTS_rep,10*RevIN_future)",
+  "ot_scale": 0.01,
+  "placebo": "count-matched pseudorandom accurate-group replacement, pre-probe alpha mass nearest of 24 attempts; skipped if relative mismatch over 50 percent",
+  "replay": "all-parameter one-sided PCGrad + checkpoint AdamW state",
+  "seed": 1,
+  "source_checkpoint": "/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth",
+  "source_cities": [
+    "chengdu_m",
+    "metr-la",
+    "shenzhen",
+    "pems-bay",
+    "pems-bay"
+  ],
+  "source_points": 256,
+  "source_profiles": "physical-speed source TRAIN forecasting errors normalized by source-city std, 3x12-step bands",
+  "target_city": "pems-bay",
+  "target_points": 128,
+  "target_split": "3-day SUPPORT already used by checkpoint; modulo-5 fit/probe; in-support exploration ONLY",
+  "training_updates": 0
+}

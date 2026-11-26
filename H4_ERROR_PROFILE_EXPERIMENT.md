@@ -147,3 +147,6 @@ PMME_H4_PROBES=8 PMME_H4_SOURCE_POINTS=256 PMME_H4_TARGET_POINTS=128 \\
 - \`summary.txt\` 易读汇总；\`train.out\` 控制台原始明细；\`COMPLETED\` / \`FAILED\` 校验标志。
 
 **H4 只设计和实现诊断，不修改 F2/官方 Stage-II、不训练新的 F2、不宣称新机制已经成立。** 若 H4 真有可信证据，再设计一个独立且足够轻量的 TGRC 控制器，仅加在 F2 的 OT alpha 上，并和 CrossTReS、CMSVC、TAROT、Meta-Weight-Net、先前 G2/G3/H2/H3 明确区分。
+## 9. Completed capped pilot (2026-11-26)
+
+On the existing original F2 Stage-I checkpoint (epoch 2899), the 8-batch capped audit completed with `training_updates=0` and `full_ot_geometry=false`. The strongest localized pattern was Chengdu `mid_weak`: mean suppression gain +0.00015754, positive in 6/8 probes, with positive short/mid/long band means. The sign pattern varied across cities; the accurate-group placebo was similar or more directionally consistent in some cities. Since all probes reused one checkpoint and correlated support windows, this is exploratory, not independent validation or statistical evidence. The optional full-OT stage and new model training were not run. Successful artifacts and the detailed interpretation are in `experiment_logs/experiment-pmme-f2-error-profile-target-benefit-audit-20261126/`.
