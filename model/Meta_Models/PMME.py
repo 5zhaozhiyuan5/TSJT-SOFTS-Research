@@ -547,7 +547,7 @@ class STRep(nn.Module):
                         state_key=target_group,
                         temperature=self.transfer_temperature
                     )
-                    if epoch % 25 == 0:
+                    if epoch % 25 == 0 or epoch == self.DAepoch_args:
                         print("f2_extension", "epoch", epoch,
                               "city", str(data[index + 1].data_name),
                               "target_group", target_group,
