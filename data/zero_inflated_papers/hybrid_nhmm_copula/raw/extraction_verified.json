@@ -1,0 +1,9 @@
+{
+  "source": "mauricio-herrera/hybrid-nhmm-copula-precipitation-framework",
+  "source_commit": "c09e5c46c6c5c237c86a3d214768febfc9e0dbac",
+  "source_git_blob_sha1": "0d007e8f179c4602ca5d44a294cf5c2defda623f",
+  "uncompressed_csv": "mapa_estaciones_precipitaciones_clean.csv",
+  "uncompressed_bytes": 216657356,
+  "uncompressed_sha256": "93609b0eacd2809f0d7bd86fa44ab0d54034faf7d306180fc02108307502d92a",
+  "zip_crc": "passed"
+}
