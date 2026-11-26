@@ -186,15 +186,36 @@ def original_f2_gradient_bank(
         loss_ot=sinkhorn(alpha,source_geometry,beta,target_geometry).sum()*ot_scale
         g_ot=_grads(loss_ot,params)
         entries.append({"city":str(source_city),"f2":g_ot})
-        ot_summaries.append({
-            "source_city":str(source_city),
-            "source_ot_points":int(len(sids)),
-            "target_fit_ot_points":int(len(tids)),
-            "source_alpha_ess":float(1/alpha.detach().square().sum()),
-            "target_beta_ess":float(1/beta.detach().square().sum()),
-            "ot_loss":float(loss_ot.detach()),
-            "raw_gradient_norm":gradient_norm(g_ot),
-        })
+        with torch.no_grad():
+            a=alpha.detach()
+            b=beta.detach()
+            top,loc=torch.topk(a,min(24,a.numel()))
+            ot_summaries.append({
+                "source_city":str(source_city),
+                "target_group":j,
+                "source_ot_points":int(len(sids)),
+                "target_fit_ot_points":int(len(tids)),
+                "source_point_ids_sha256":hashlib.sha256(
+                    sids.detach().cpu().numpy().tobytes()
+                ).hexdigest(),
+                "target_point_ids_sha256":hashlib.sha256(
+                    tids.detach().cpu().numpy().tobytes()
+                ).hexdigest(),
+                "source_alpha_sum":float(a.sum()),
+                "source_alpha_ess":float(1/a.square().sum()),
+                "source_alpha_min":float(a.min()),
+                "source_alpha_max":float(a.max()),
+                "source_alpha_top24_values":top.cpu().tolist(),
+                "source_alpha_top24_flat_indices":
+                    sids.index_select(0,loc).cpu().tolist(),
+                "target_beta_sum":float(b.sum()),
+                "target_beta_ess":float(1/b.square().sum()),
+                "target_beta_uniform":bool(torch.allclose(
+                    b,torch.full_like(b,1.0/len(b)),atol=1e-6
+                )),
+                "ot_loss":float(loss_ot.detach()),
+                "raw_gradient_norm":gradient_norm(g_ot),
+            })
         del loss_ot,source_geometry,target_geometry
     if len({e["city"] for e in entries})!=3:
         raise RuntimeError("Duplicate source-city OT gradient")
@@ -236,6 +257,10 @@ def apply_original_pcgrad_adamw(model,optimizer,bank,policy):
         "raw_target_cos":stats["raw_target_gradient_cos"],
         "projection_triggered":stats["projection_triggered"],
         "actual_policy_ot_norm":gradient_norm(g[policy]),
+        "target_fit_gradient_norm":gradient_norm(bank["target_fit_gradient"]),
+        "source_forecast_gradient_norm":gradient_norm(bank["source_gradient"]),
+        "pcgrad_update_norm":gradient_norm(direction),
+        "optimizer_lr":float(optimizer.param_groups[0]["lr"]),
     }
 
 
