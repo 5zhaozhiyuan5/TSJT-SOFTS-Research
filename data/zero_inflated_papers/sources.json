@@ -26,9 +26,14 @@
       "source_code": "https://github.com/yfangZhang/RainfallBench",
       "upstream_commit": "b3f2eac38ddaa3ffab86b98d2afe816099201b4a",
       "full_original_data": "rainfallbench/upstream/dataset",
-      "sampled_original_data": "rainfallbench/stations",
+      "sampled_original_data": "rainfallbench/stations (three strictly zero-inflated GPM target CSVs)",
       "data_type": "real precipitation nonnegative continuous measurements, many zeros",
-      "note": "All publicly available station data in pinned upstream submodule; directly vendored four station examples only if verified and added by workflow"
+      "note": "Three stations copied and blob verified; JFNG tp is NOT strictly zero-inflated (0/171069 exact zeros) and remains only in upstream submodule",
+      "verified_zero_ratios_gpm": {
+        "J340": 0.80612,
+        "ZIMM": 0.84936,
+        "P095": 0.94711
+      }
     },
     "hybrid_nhmm_copula": {
       "paper": "Characterizing Climate-Driven Shifts in Chilean Rainfall Regimes with a Hybrid Hidden Markov–Copula Framework",
