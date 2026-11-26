@@ -9,6 +9,7 @@ from copy import deepcopy
 from torch.nn.utils import weight_norm
 import math
 import os
+import json
 
 import sys
 from pathlib import Path
@@ -26,6 +27,7 @@ from iTransformer.iTransformer_new import Model as iTransformer
 from DA_tools import *
 from transfer_utility import VARIANTS, compute_weights
 from f2_four_extensions import METHODS as F2_METHODS, compute_f2_extension
+from f2_gradient_utility_audit import (probe_window_masks, audit_f2_source_utility)
 from feedback_utility import (
     blend_source_weights, evaluate_feedback_candidates, select_feedback_policy
 )
@@ -276,6 +278,33 @@ class STRep(nn.Module):
         ):
             raise ValueError("F2 extensions need gradient F2, no P1-P4, feedback g0")
         self.f2_state = {}
+        # D1/D2 are DIAGNOSTIC ONLY. Actual F2 marginals and optimizer
+        # updates remain unchanged; probe labels never enter audit OT.
+        self.f2_audit = os.environ.get("PMME_F2_DIAGNOSTIC", "off").lower().strip()
+        self.f2_audit_interval = int(os.environ.get("PMME_F2_DIAG_INTERVAL", "100"))
+        self.f2_audit_source_budget = int(os.environ.get(
+            "PMME_F2_DIAG_SOURCE_BUDGET", "192"))
+        self.f2_audit_target_budget = int(os.environ.get(
+            "PMME_F2_DIAG_TARGET_BUDGET", "96"))
+        if self.f2_audit not in ("off", "d1d2"):
+            raise ValueError("PMME_F2_DIAGNOSTIC must be off/d1d2")
+        if (self.f2_audit_interval < 1 or self.f2_audit_source_budget < 8 or
+                self.f2_audit_target_budget < 2):
+            raise ValueError("Invalid F2 diagnostic interval/subset budgets")
+        if self.f2_audit != "off" and (
+            self.transfer_variant != "gradient" or
+            self.f2_method != "original" or
+            self.pair_variant != "f2" or
+            self.feedback_mode != "g0" or
+            self.DA != "OT" or self.projection_args != 1
+        ):
+            raise ValueError(
+                "D1/D2 require original F2, unmodified OT cost, "
+                "no feedback policy and original one-sided PCGrad")
+        print("PMME_F2_DIAGNOSTIC", self.f2_audit,
+              "interval", self.f2_audit_interval,
+              "source_budget", self.f2_audit_source_budget,
+              "target_budget", self.f2_audit_target_budget)
         print("PMME_F2_METHOD", self.f2_method)
         print("PMME_PAIR_VARIANT", self.pair_variant,
               "strength", self.pair_strength,
@@ -309,6 +338,14 @@ class STRep(nn.Module):
         )
         self._transfer_records = []
         self._capture_transfer = need_transfer
+        diagnostic_active = (
+            need_transfer and self.f2_audit == "d1d2" and (
+                epoch == self.DAepoch_args or
+                (epoch - self.DAepoch_args) % self.f2_audit_interval == 0
+            )
+        )
+        diagnostic_target_prediction = None
+        diagnostic_target_truth = None
         # Do not capture another full set of encoder inputs at every step.
         need_feedback = (
             need_transfer and self.feedback_mode != "g0" and
@@ -369,6 +406,9 @@ class STRep(nn.Module):
                 loss = self.loss_criterion(out, y)
 
                 target_task_loss = loss
+                if diagnostic_active:
+                    diagnostic_target_prediction = out
+                    diagnostic_target_truth = y
                 if need_feedback and not h2_active:
                     # Internal decision-only split: probe labels must not
                     # enter the local proxy's target alignment weights or
@@ -448,6 +488,37 @@ class STRep(nn.Module):
             target_delta_groups = torch.split(
                 target_deltas, target_split, dim=0
             )
+        if diagnostic_active:
+            fit_mask, probe_mask = probe_window_masks(
+                target_features.shape[0], window_stride=5,
+                device=target_features.device
+            )
+            diagnostic_fit_loss = self.loss_criterion(
+                diagnostic_target_prediction[fit_mask],
+                diagnostic_target_truth[fit_mask]
+            )
+            diagnostic_probe_loss = self.loss_criterion(
+                diagnostic_target_prediction[probe_mask],
+                diagnostic_target_truth[probe_mask]
+            )
+            target_fit_deltas = torch.autograd.grad(
+                diagnostic_fit_loss, target_head_output,
+                retain_graph=True, create_graph=False
+            )[0].detach()
+            diagnostic_probe_grad = torch.autograd.grad(
+                diagnostic_probe_loss,
+                self.model.forecasting_model.projection1.weight,
+                retain_graph=True, create_graph=False
+            )[0].detach()
+            target_fit_delta_groups = torch.split(
+                target_fit_deltas, target_split, dim=0
+            )
+            diagnostic_fit_windows = torch.split(
+                fit_mask, target_split, dim=0
+            )
+            diagnostic_probe_windows = probe_mask.nonzero(
+                as_tuple=False
+            ).flatten().detach().cpu().tolist()
 
         # P4: balanced, task-aware source-city to target-window assignment.
         p4_target_assignment = list(range(len(rep_source)))
@@ -554,6 +625,44 @@ class STRep(nn.Module):
                               extended_stats, flush=True)
                 if epoch % 25 == 0:
                     print("task_utility", self.transfer_variant, index, utility_stats)
+
+                if diagnostic_active:
+                    fit_windows_for_group = diagnostic_fit_windows[target_group]
+                    report = audit_f2_source_utility(
+                        source_rep=x1,
+                        source_future=y1,
+                        source_features=source_features,
+                        source_delta=source_deltas,
+                        target_fit_rep=rep_target[target_group][
+                            fit_windows_for_group
+                        ].reshape(-1, x2.shape[-1]),
+                        target_fit_future=y_target[target_group][
+                            fit_windows_for_group
+                        ].reshape(-1, y2.shape[-1]),
+                        target_fit_features=target_feature_groups[target_group][
+                            fit_windows_for_group
+                        ],
+                        target_fit_delta=target_fit_delta_groups[target_group][
+                            fit_windows_for_group
+                        ],
+                        probe_gradient=diagnostic_probe_grad,
+                        shared_parameter=self.model.forecasting_model.projection1.weight,
+                        criterion=criterion,
+                        ot_scale=self.DAcoef_args * self.transfer_ot_scale,
+                        xy_scale=math.sqrt(self.xySquaredRatio_args),
+                        epoch=epoch,
+                        city=str(data[index + 1].data_name),
+                        target_group=target_group,
+                        source_budget=self.f2_audit_source_budget,
+                        target_budget=self.f2_audit_target_budget,
+                        temperature=self.transfer_temperature
+                    )
+                    report["probe_window_indices"] = diagnostic_probe_windows
+                    report["fit_window_indices"] = fit_mask.nonzero(
+                        as_tuple=False).flatten().detach().cpu().tolist()
+                    print("f2_d1d2_audit_json",
+                          json.dumps(report, sort_keys=True, allow_nan=False),
+                          flush=True)
 
                 if need_feedback and self.feedback_mode in ("g1", "g2", "g3"):
                     # Proxy OT and held-out within-batch probe use disjoint
