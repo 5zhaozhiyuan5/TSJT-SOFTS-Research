@@ -1,0 +1,16 @@
+H6 existing ORIGINAL F2 checkpoint only; training updates 0.
+All gains are one-step target SUPPORT-probe, NOT independent test metrics.
+Identical F2 shadow replay noise max: 0.0000000000
+all_off                    mean=+0.000406504 median=+0.000406504 positive=1/1 first=+0.000406504 last= max_abs_share=1.000
+city_half:chengdu_m        mean=+0.000113249 median=+0.000113249 positive=1/1 first=+0.000113249 last= max_abs_share=1.000
+city_half:metr-la          mean=+0.000046015 median=+0.000046015 positive=1/1 first=+0.000046015 last= max_abs_share=1.000
+city_half:shenzhen         mean=+0.000072241 median=+0.000072241 positive=1/1 first=+0.000072241 last= max_abs_share=1.000
+city_off:chengdu_m         mean=+0.000177383 median=+0.000177383 positive=1/1 first=+0.000177383 last= max_abs_share=1.000
+city_off:metr-la           mean=+0.000000000 median=+0.000000000 positive=0/1 first=+0.000000000 last= max_abs_share=0.000
+city_off:shenzhen          mean=+0.000142574 median=+0.000142574 positive=1/1 first=+0.000142574 last= max_abs_share=1.000
+f2                         mean=+0.000000000 median=+0.000000000 positive=0/1 first=+0.000000000 last= max_abs_share=0.000
+global_half                mean=+0.000190020 median=+0.000190020 positive=1/1 first=+0.000190020 last= max_abs_share=1.000
+global_quarter             mean=+0.000274420 median=+0.000274420 positive=1/1 first=+0.000274420 last= max_abs_share=1.000
+identity                   mean=+0.000000000 median=+0.000000000 positive=0/1 first=+0.000000000 last= max_abs_share=0.000
+Gradient/AdamW traces written to /home/zhaozhiyuan/experiment-pmme-h6-ot-gradient-effectiveness-20261126/runs/smoke/h6_optimizer_gradient_traces.csv and /home/zhaozhiyuan/experiment-pmme-h6-ot-gradient-effectiveness-20261126/runs/smoke/h6_city_gradient_traces.csv
+Smoke run: no conclusions should be drawn from a single probe.

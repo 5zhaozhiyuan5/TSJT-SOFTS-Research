@@ -1,0 +1,18 @@
+[START] H6 checkpoint-only real OT gradient audit, probes=8, source/target points=0/0
+[DONE] H6 read-only completed, training_updates=0: /home/zhaozhiyuan/experiment-pmme-h6-ot-gradient-effectiveness-20261126/runs/full_8
+H6 existing ORIGINAL F2 checkpoint only; training updates 0.
+All gains are one-step target SUPPORT-probe, NOT independent test metrics.
+Identical F2 shadow replay noise max: 0.0000000000
+all_off                    mean=+0.000404656 median=+0.000469089 positive=6/8 first=+0.000686586 last=0.0001227259635925293 max_abs_share=0.253
+city_half:chengdu_m        mean=-0.000142336 median=+0.000059366 positive=6/8 first=-0.000048816 last=-0.0002358555793762207 max_abs_share=0.570
+city_half:metr-la          mean=-0.000152349 median=+0.000015378 positive=5/8 first=+0.000051439 last=-0.000356137752532959 max_abs_share=0.796
+city_half:shenzhen         mean=+0.000049531 median=+0.000075459 positive=7/8 first=+0.000080764 last=1.8298625946044922e-05 max_abs_share=0.302
+city_off:chengdu_m         mean=+0.000033855 median=+0.000103831 positive=7/8 first=+0.000180483 last=-0.00011277198791503906 max_abs_share=0.429
+city_off:metr-la           mean=-0.000023007 median=+0.000088096 positive=7/8 first=+0.000136673 last=-0.00018268823623657227 max_abs_share=0.548
+city_off:shenzhen          mean=+0.000171036 median=+0.000178337 positive=7/8 first=+0.000177383 last=0.0001646876335144043 max_abs_share=0.237
+f2                         mean=+0.000000000 median=+0.000000000 positive=0/8 first=+0.000000000 last=0.0 max_abs_share=0.000
+global_half                mean=+0.000223964 median=+0.000209451 positive=8/8 first=+0.000242889 last=0.00020503997802734375 max_abs_share=0.184
+global_quarter             mean=+0.000206351 median=+0.000325799 positive=7/8 first=+0.000374019 last=3.8683414459228516e-05 max_abs_share=0.248
+identity                   mean=+0.000000000 median=+0.000000000 positive=0/8 first=+0.000000000 last=0.0 max_abs_share=0.000
+Gradient/AdamW traces written to /home/zhaozhiyuan/experiment-pmme-h6-ot-gradient-effectiveness-20261126/runs/full_8/h6_optimizer_gradient_traces.csv and /home/zhaozhiyuan/experiment-pmme-h6-ot-gradient-effectiveness-20261126/runs/full_8/h6_city_gradient_traces.csv
+Exploratory stop conditions: at least 6/8 direction-consistent, positive first/last-four means, median > max(5e-5,10x replay noise), and max_abs_share <= .5; no support-only result proves generalization.

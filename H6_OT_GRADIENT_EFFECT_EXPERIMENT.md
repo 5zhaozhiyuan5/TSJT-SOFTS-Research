@@ -151,4 +151,42 @@ New files only; original F2 code, training entrypoints, original `model/Meta_Mod
 - `run_h6_ot_gradient.sh`
 - `H6_OT_GRADIENT_EFFECT_EXPERIMENT.md`
 
-**Implementation is committed; test results, smoke and server logs are not claimed until executed on the project environment.**
+**Implementation was committed before execution. The server execution record below was added after the audit completed.**
+
+## 7. Server execution record (2026-11-26/27)
+
+The audit ran on branch commit `3749b2643d9a010071b103a0e90cf88cdd0dc833` using the existing PMME environment on the server. No packages or data were downloaded or installed. The pinned checkpoint was the original F2 Stage-I epoch 2899 checkpoint; SHA256 matched `f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf`.
+
+| Run | Probes | OT points | Status |
+| --- | ---: | --- | --- |
+| Smoke | 1 | capped 256 source / 128 target | `COMPLETED` |
+| Pilot | 8 | capped 256 source / 128 target | `COMPLETED` |
+| Full OT | 8 | uncapped (`0` means full geometry) | `COMPLETED` |
+
+All three run directories contain `COMPLETED`. The audit made **0 training updates** and ran **0 Stage-II evaluations**. The target is PEMS-BAY; source cities are Chengdu, METR-LA and Shenzhen. Probe results below are paired one-step shadow-update gains on correlated, previously seen target-support windows. They are not independent test metrics or paper-comparable Stage-II MAE.
+
+### Full-OT paired shadow gains
+
+Positive gain means the listed policy had lower support-probe MAE than the original F2 shadow update. The screening threshold for median gain is `max(0.00005, 10 × identity replay noise)`; observed identity noise was zero. “First/last 4” are the means of batches 0–3 / 4–7.
+
+| Policy | Mean gain | Median | Positive | First / last 4 mean | Max absolute share | Screen |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `all_off` | +0.000404656 | +0.000469089 | 6/8 | +0.000686586 / +0.000122726 | 0.253 | Pass |
+| `global_quarter` | +0.000206351 | +0.000325799 | 7/8 | +0.000374019 / +0.000038683 | 0.248 | Pass |
+| `global_half` | +0.000223964 | +0.000209451 | 8/8 | +0.000242889 / +0.000205040 | 0.184 | Pass |
+| `city_off:shenzhen` | +0.000171036 | +0.000178337 | 7/8 | +0.000177383 / +0.000164688 | 0.237 | Pass |
+| `city_half:shenzhen` | +0.000049531 | +0.000075459 | 7/8 | +0.000080764 / +0.000018299 | 0.302 | Pass; median clears threshold |
+| `city_off:chengdu_m` | +0.000033855 | +0.000103831 | 7/8 | +0.000180483 / −0.000112772 | 0.429 | Fail; last-half mean negative |
+| `city_off:metr-la` | −0.000023007 | +0.000088096 | 7/8 | +0.000136673 / −0.000182688 | 0.548 | Fail; last-half mean and share |
+| `city_half:chengdu_m` | −0.000142336 | +0.000059366 | 6/8 | −0.000048816 / −0.000235856 | 0.570 | Fail; sign persistence and share |
+| `city_half:metr-la` | −0.000152349 | +0.000015378 | 5/8 | +0.000051439 / −0.000356138 | 0.796 | Fail |
+
+### Gradient and optimizer trace
+
+Across the 8 full-OT probes, the original OT gradient’s cosine with target-fit gradient averaged `−0.3726` (range `−0.4498` to `−0.2970`). Its norm averaged `0.02913`, versus `5.12480` for the source forecasting gradient. One-sided PCGrad left the OT component norm effectively unchanged (mean post/pre ratio approximately 1.0). The AdamW parameter-step difference between F2 and no-OT had mean norm `0.002154`; its cosine with target-fit descent averaged `−0.02944` (all 8 were negative). This indicates a locally conflicting direction after the optimizer shadow update, but the direction effect is small and this probe does not establish multi-epoch utility.
+
+### Interpretation
+
+The full-OT screen supports a local one-step benefit for global OT removal/scaling and Shenzhen removal/scaling under the prespecified probe rule. Chengdu and METR-LA policies are inconsistent or fail the rule, so there is no evidence for a uniform city-level controller. This is mechanism-screening evidence only. It does **not** show that removing OT improves trained model performance; the separate Stage-II T0/T1/T2 results remain the relevant multi-epoch comparison.
+
+Successful raw run logs are stored under `experiment_logs/experiment-pmme-h6-ot-gradient-effectiveness-20261126/{smoke,pilot_8,full_8}`. Each folder includes the result JSONL, metadata, summary CSV, gradient traces, `train.out`, `log.txt`, run config and completion marker. No failed-run logs were included.

@@ -1,0 +1,89 @@
+[INFO] source dataset: ['chengdu_m', 'metr-la', 'shenzhen', 'pems-bay']
+dataset_name : chengdu_m
+chengdu_m : x shape : torch.Size([2854, 524, 288, 2]), y shape : torch.Size([2854, 524, 36])
+dataset_name : metr-la
+metr-la : x shape : torch.Size([2830, 207, 288, 2]), y shape : torch.Size([2830, 207, 36])
+dataset_name : shenzhen
+shenzhen : x shape : torch.Size([2854, 627, 288, 2]), y shape : torch.Size([2854, 627, 36])
+dataset_name : pems-bay
+pems-bay : x shape : torch.Size([46, 325, 288, 2]), y shape : torch.Size([46, 325, 36])
+[INFO] Dataset init finished!
+[INFO] target_maml dataset: ['pems-bay']
+dataset_name : pems-bay
+pems-bay : x shape : torch.Size([46, 325, 288, 2]), y shape : torch.Size([46, 325, 36])
+[INFO] Dataset init finished!
+forecasting_model.enc_embedding.value_embedding.weight : torch.Size([512, 288]), require_grads : True
+forecasting_model.enc_embedding.value_embedding.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.projection1.weight : torch.Size([128, 512]), require_grads : True
+forecasting_model.projection1.bias : torch.Size([128]), require_grads : True
+forecasting_model.projection2.weight : torch.Size([36, 128]), require_grads : True
+forecasting_model.projection2.bias : torch.Size([36]), require_grads : True
+model params: 5738660
+PMME_F2_DIAGNOSTIC off readonly False interval 100 source_budget 192 target_budget 96
+PMME_F2_METHOD original
+PMME_PAIR_VARIANT f2 strength 0.0 anchors 8 block 256
+PMME_STAGE1_TRANSFER_VARIANT gradient
+PMME_STAGE1_FEEDBACK g0 interval 200 subset 256 128
+PMME_STAGE1_TRANSFER_CONFIG ot_scale 0.01 temperature 8.0 min_ess 0.5
+PMME_F2_OT_SCHEDULE_CONFIG t0 base_scale 0.01 DAepoch 1500 decay_start 2000 decay_end 2999 tail_fraction 0.25
+PMME_F2_ACCURACY_CONFIG strength 0.0 mode f2 reference persistence_last_speed uses_labels source_training_only
+H6_META_JSON {"audit_version": "h6-v1", "checkpoint": "/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth", "checkpoint_epoch": 2899, "checkpoint_sha256": "f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf", "full_ot_geometry": true, "optimizer": "all-parameter one-sided PCGrad, original AdamW state", "original_ot_scale": 0.01, "ot_cost": "original GeomLoss(p=1,blur=.001,debias=False); concat(SOFTS_rep,10*RevIN_true_future)", "policy_grid": {"city_factors": [0, 0.5, 1], "global_scales": [0, 0.25, 0.5, 1]}, "probe_batches": 8, "probe_for_policy_selection": false, "seed": 1, "source_cities": ["chengdu_m", "metr-la", "shenzhen", "pems-bay", "pems-bay"], "source_points": 0, "stage2_runs": 0, "target_city": "pems-bay", "target_points": 0, "target_probe_previously_seen_by_checkpoint": true, "target_support_only": true, "training_updates": 0, "transport_matrix_explicitly_materialized": false, "warning": "Support windows overlap in time; no independent test MAE"}
+/home/zhaozhiyuan/experiment-pmme-h6-ot-gradient-effectiveness-20261126/source/model/Meta_Models/PMME.py:84: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  x, y, means, stds = torch.tensor(x).to(self.PatchFSL_cfg['device']), torch.tensor(y).to(self.PatchFSL_cfg['device']),torch.tensor(means).to(self.PatchFSL_cfg['device']),torch.tensor(stds).to(self.PatchFSL_cfg['device']) #,torch.tensor(A,dtype=torch.float32).to(self.PatchFSL_cfg['device'])
+H6_RECORD {"batch": 0, "gain_vs_f2": {"all_off": 0.000488758, "city_half:chengdu_m": 0.000118017, "city_half:metr-la": -4.53e-05, "city_half:shenzhen": 8.9169e-05, "city_off:chengdu_m": 0.000264406, "city_off:metr-la": 3.5048e-05, "city_off:shenzhen": 0.000204563, "f2": 0.0, "global_half": 0.000232697, "global_quarter": 0.000358343, "identity": 0.0}, "pcgrad_effect_norm": 0.031463, "raw_ot_norm": 0.031463, "shadows": 11}
+H6_RECORD {"batch": 1, "gain_vs_f2": {"all_off": 0.000633478, "city_half:chengdu_m": 5.0068e-05, "city_half:metr-la": 0.000150204, "city_half:shenzhen": 0.000128031, "city_off:chengdu_m": 9.6083e-05, "city_off:metr-la": 0.000318527, "city_off:shenzhen": 0.000236034, "f2": 0.0, "global_half": 0.000329733, "global_quarter": 0.000486135, "identity": 0.0}, "pcgrad_effect_norm": 0.029148, "raw_ot_norm": 0.029148, "shadows": 11}
+H6_RECORD {"batch": 2, "gain_vs_f2": {"all_off": 0.001220942, "city_half:chengdu_m": -0.000416517, "city_half:metr-la": 7.153e-06, "city_half:shenzhen": 4.4107e-05, "city_off:chengdu_m": 0.000266552, "city_off:metr-la": 1.907e-06, "city_off:shenzhen": 0.000142574, "f2": 0.0, "global_half": 0.000213385, "global_quarter": 0.000353098, "identity": 0.0}, "pcgrad_effect_norm": 0.031463, "raw_ot_norm": 0.031463, "shadows": 11}
+H6_RECORD {"batch": 3, "gain_vs_f2": {"all_off": 0.000403166, "city_half:chengdu_m": 5.3167e-05, "city_half:metr-la": 9.3699e-05, "city_half:shenzhen": 6.175e-05, "city_off:chengdu_m": 9.4891e-05, "city_off:metr-la": 0.000191212, "city_off:shenzhen": 0.000126362, "f2": 0.0, "global_half": 0.000195742, "global_quarter": 0.0002985, "identity": 0.0}, "pcgrad_effect_norm": 0.028726, "raw_ot_norm": 0.028726, "shadows": 11}
+H6_RECORD {"batch": 4, "gain_vs_f2": {"all_off": 0.000839949, "city_half:chengdu_m": 0.000101328, "city_half:metr-la": -1.192e-06, "city_half:shenzhen": 0.000183582, "city_off:chengdu_m": 0.000206709, "city_off:metr-la": 1.3351e-05, "city_off:shenzhen": 0.000383377, "f2": 0.0, "global_half": 0.000287533, "global_quarter": 0.000429869, "identity": 0.0}, "pcgrad_effect_norm": 0.028583, "raw_ot_norm": 0.028583, "shadows": 11}
+H6_RECORD {"batch": 5, "gain_vs_f2": {"all_off": -0.000140905, "city_half:chengdu_m": 6.5565e-05, "city_half:metr-la": 2.3603e-05, "city_half:shenzhen": 6.0797e-05, "city_off:chengdu_m": 0.00011158, "city_off:metr-la": 0.000158072, "city_off:shenzhen": 0.000152111, "f2": 0.0, "global_half": 0.00015378, "global_quarter": 0.000255823, "identity": 0.0}, "pcgrad_effect_norm": 0.025575, "raw_ot_norm": 0.025575, "shadows": 11}
+H6_RECORD {"batch": 6, "gain_vs_f2": {"all_off": 0.000449419, "city_half:chengdu_m": -0.001242399, "city_half:metr-la": 6.6996e-05, "city_half:shenzhen": 0.000130415, "city_off:chengdu_m": 4.8876e-05, "city_off:metr-la": 0.000141144, "city_off:shenzhen": 0.000247478, "f2": 0.0, "global_half": 0.000205517, "global_quarter": 0.000280142, "identity": 0.0}, "pcgrad_effect_norm": 0.029204, "raw_ot_norm": 0.029204, "shadows": 11}
+H6_RECORD {"batch": 7, "gain_vs_f2": {"all_off": -0.000657558, "city_half:chengdu_m": 0.000132084, "city_half:metr-la": -0.001513958, "city_half:shenzhen": -0.0003016, "city_off:chengdu_m": -0.000818253, "city_off:metr-la": -0.00104332, "city_off:shenzhen": -0.000124216, "f2": 0.0, "global_half": 0.00017333, "global_quarter": -0.0008111, "identity": 0.0}, "pcgrad_effect_norm": 0.028907, "raw_ot_norm": 0.028907, "shadows": 11}
+H6_AUDIT_FINISHED 8 training_updates 0 stage2_runs 0 output /home/zhaozhiyuan/experiment-pmme-h6-ot-gradient-effectiveness-20261126/runs/full_8/h6_results.jsonl
