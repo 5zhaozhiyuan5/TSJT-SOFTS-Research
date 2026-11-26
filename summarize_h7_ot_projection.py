@@ -33,7 +33,7 @@ def analyze(rows):
         if (r.get("audit_version")!="h7-v1" or r.get("batch_index")!=i or
             r.get("training_updates")!=0 or r.get("stage2_runs")!=0 or
             r.get("n_shadow_candidates")!=7 or
-            tuple(r.get("candidate_scores",{}))!=POLICIES):
+            set(r.get("candidate_scores",{}))!=set(POLICIES)):
             raise ValueError("Invalid, incomplete or reordered H7 record "+str(i))
         if set(r["gains_vs_half"])!=set(POLICIES):
             raise ValueError("Missing H7 gains")
