@@ -215,7 +215,7 @@ def shadow_h7_audit(*,model,optimizer,source_task_loss,target_fit_task_loss,
                     shadow=simulate_adamw_step(named,optimizer,update_grad)
 
                 # Every candidate uses the exact same random pooling draw.
-                torch.manual_seed(727031+int(sample_index))
+                torch.manual_seed(681947+int(sample_index))
                 shadow_buffers={k:v.clone() for k,v in old_buffers.items()}
                 predictions,*_=functional_call(
                     model,(shadow,shadow_buffers),(blind,),{"stage":"train"}
