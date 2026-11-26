@@ -121,4 +121,6 @@ bash run_f2_prediction_reliability.sh
 
 **局限：** 一次源样本的训练误差不能证明迁移后目标会预测得更准；如果只偏好简单样本导致下降，就否决 PRC，而不是继续叠加复杂机制。
 
-本分支**只有代码和设计，没有在 GPU 服务器实际跑过，也没有宣称指标提升或论文新颖性已被证明**。
+## 7. Seed1 正式运行记录（2026-11-26）
+
+PRC strength=0.5 在服务器完成 Stage I 3000 轮、Stage II 6000 轮，目标 PEMS-BAY，SOFTS，seed1，batch size 16；训练完成标记和两阶段结束日志均存在。Stage II 支持集验证最佳 checkpoint 为 epoch 5199，36 步测试 MAE 为 2.39441。与历史 F2/T0 seed1 的 2.372713 相比高 0.021698；历史值来自不同提交/运行，不能当成严格配对对照。本次逐时段 MAE/RMSE 与论文 Table 2 的比较，以及成功日志，见 `experiment_logs/experiment-pmme-f2-prediction-reliability-20261126/`。本次仅一个 seed，不能据此判断统计显著性。

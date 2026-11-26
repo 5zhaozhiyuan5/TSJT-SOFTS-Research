@@ -1,0 +1,14 @@
+branch=experiment/pmme-f2-prediction-reliability-20261126
+git_commit=e27888bfff1d527b443a533d88fecd4e90148517
+seed=1
+mode=prc
+accuracy_strength=0.5
+transfer_variant=gradient
+f2_method=original
+pair_variant=f2
+feedback_mode=g0
+ot_schedule=t0
+ot_scale=0.01
+stage1_epochs=3000
+stage2_epochs=6000
+daepoch=1500

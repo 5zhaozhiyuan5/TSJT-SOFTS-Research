@@ -1,0 +1,7 @@
+[RUN] prc seed1 prediction-reliability-strength=0.5
+[DONE] prc seed1
+prc seed1 stage1 best=2899 36MAE=2.42995 36RMSE=5.32030 MAE10/60/120/180=1.44383/2.37015/2.73386/2.96574
+prc seed1 stage2 best=5199 36MAE=2.39441 36RMSE=5.28368 MAE10/60/120/180=1.38537/2.33070/2.69847/2.93745
+HISTORICAL_REFERENCE_ONLY F2/T0 seed1 Stage-II 36MAE=2.372713 PRC-minus-history=+0.021698 (different code commit; NOT a same-run paired comparison)
+Saved /home/zhaozhiyuan/experiment-pmme-f2-prediction-reliability-20261126/runs/formal/selected_checkpoint_metrics.csv
+[OK] PRC training and metrics finished; compare with existing historical F2/T0.
