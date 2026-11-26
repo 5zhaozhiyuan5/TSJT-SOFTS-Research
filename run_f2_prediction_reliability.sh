@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Only ONE new module: source prediction-reliability calibration of F2 alpha.
-# f2:  strength=0 (exact original F2)
+# Only PRC (F2+prediction reliability). Existing F2/T0 seed1 logs are reused.
 # prc: strength=0.5 (one pre-registered pilot, no parameter sweep)
 # Stage-I SOFTS / PEMS-BAY 3-day support; Stage-II official untouched.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_ROOT="${PMME_PR_RUN_ROOT:-$ROOT/experiments/f2-prediction-reliability}"
-read -r -a MODES <<< "${PMME_PR_MODES:-f2 prc}"
+read -r -a MODES <<< "${PMME_PR_MODES:-prc}"
 read -r -a SEEDS <<< "${PMME_PR_SEEDS:-1}"
 STAGE1="${PMME_PR_STAGE1_EPOCHS:-3000}"
 STAGE2="${PMME_PR_STAGE2_EPOCHS:-6000}"
@@ -23,22 +23,18 @@ import math,sys
 stage1,stage2,daepoch=map(int,sys.argv[1:4])
 strength=float(sys.argv[4])
 assert stage1>0 and stage2>=0 and 0<=daepoch<stage1
-assert math.isfinite(strength) and 0<=strength<=1
+assert math.isfinite(strength) and 0<strength<=1
 PY
 for mode in "${MODES[@]}"; do
-  case "$mode" in f2|prc) ;; *)
-    echo "[ERROR] PMME_PR_MODES must contain f2 and/or prc" >&2; exit 2 ;;
+  case "$mode" in prc) ;; *)
+    echo "[ERROR] Only prc is permitted; historical F2/T0 is already trained" >&2; exit 2 ;;
   esac
 done
 
 mkdir -p "$RUN_ROOT"
 for seed in "${SEEDS[@]}"; do
   for mode in "${MODES[@]}"; do
-    if [[ "$mode" == f2 ]]; then
-      CURRENT_STRENGTH=0
-    else
-      CURRENT_STRENGTH="$STRENGTH"
-    fi
+    CURRENT_STRENGTH="$STRENGTH"
     WORK="$RUN_ROOT/$mode/seed$seed"
     mkdir -p "$WORK"
     for folder in data configs model; do
@@ -114,4 +110,4 @@ for seed in "${SEEDS[@]}"; do
   done
 done
 python "$ROOT/summarize_f2_prediction_reliability.py" --run-root "$RUN_ROOT"
-echo "[OK] F2/PRC comparison finished."
+echo "[OK] PRC training and metrics finished; compare with existing historical F2/T0."
