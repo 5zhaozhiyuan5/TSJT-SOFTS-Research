@@ -5,4 +5,4 @@ torch 2.5.1+cu121 geomloss=ok cuda=available
 torch 2.5.1+cu121 geomloss=ok cuda=available
 2026-11-26 14:19:15 CST START branch=experiment/pmme-f2-gradient-marginal-four-20261126 commit=46b6c4c56ee73d79fbc54448823ee725add403de methods=mag,sign,ema,biot seeds=1 batch=16 stage1=3000 stage2=6000 GPU=0; existing PMME env; server downloads/installations=none; no GPU memory guard or auto-stop.
 2026-11-26 14:19:15 CST DATA /home/zhaozhiyuan/stage-1-mlcea-official-20261122/data; RUN_ROOT=/home/zhaozhiyuan/experiment-pmme-f2-gradient-marginal-four-20261126/results_batch16_seed1
-
+2026-11-26 16:00:37 CST ALL_COMPLETED: mag/sign/ema/biot seed1 Stage I + Stage II markers verified.

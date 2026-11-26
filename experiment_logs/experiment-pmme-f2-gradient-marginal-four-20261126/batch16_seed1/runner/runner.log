@@ -5,3 +5,5 @@
 [START] method=ema seed=1
 [DONE] /home/zhaozhiyuan/experiment-pmme-f2-gradient-marginal-four-20261126/results_batch16_seed1/ema/seed1
 [START] method=biot seed=1
+[DONE] /home/zhaozhiyuan/experiment-pmme-f2-gradient-marginal-four-20261126/results_batch16_seed1/biot/seed1
+Completed all requested F2 extension runs.
