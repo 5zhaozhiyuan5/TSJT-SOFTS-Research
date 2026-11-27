@@ -1,0 +1,29 @@
+name: F2-DPM pattern-attention OT CPU tests
+
+on:
+  push:
+    branches:
+      - experiment/pmme-f2-dpm-pattern-attention-ot-20261127
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dpm-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout experimental branch
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PyTorch CPU
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Test DPM bank, attention, pairwise OT cost and gradients
+        run: |
+          python -m unittest discover -s tests -p 'test_dpm_pattern_attention_ot.py' -v
