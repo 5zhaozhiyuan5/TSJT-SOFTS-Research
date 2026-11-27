@@ -1,0 +1,9 @@
+{
+  "branch": "experiment/pmme-f2-target-need-skill-matching-20261127",
+  "exit_code": 0,
+  "finished_utc": "2026-11-27T03:22:38.477931+00:00",
+  "pid": 3909960,
+  "runner": "run_f2_target_need_skill.sh",
+  "started_utc": "2026-11-27T03:22:23.237863+00:00",
+  "status": "completed"
+}

@@ -1,0 +1,7 @@
+[START] F2+TDSM actual training; target PEMS-BAY, seed1
+[DONE] F2+TDSM Stage-I and Stage-II; see /home/zhaozhiyuan/experiment-pmme-f2-target-need-skill-matching-20261127/runs/tdsm-formal-seed1/summary.txt
+TDSM seed 1 stage stage1 best_support_epoch 2199 mean_36_horizon_mae 2.4479019444444448 mean_36_horizon_rmse 5.3453872222222225 MAE 10/60/120/180 1.41854 2.3815 2.76128 2.98858
+TDSM seed 1 stage stage2 best_support_epoch 5099 mean_36_horizon_mae 2.395861111111111 mean_36_horizon_rmse 5.272317777777777 MAE 10/60/120/180 1.37295 2.31419 2.70377 2.95445
+Historical F2/T0 seed1 Stage-II 36-step MAE 2.372713 is a DIFFERENT-code historical reference only, NOT paired control.
+PRC-only seed1 Stage-II 36-step MAE 2.394411 was worse than historical F2; TDSM is a distinct target-conditioned mechanism.
+Selected-checkpoint results saved: /home/zhaozhiyuan/experiment-pmme-f2-target-need-skill-matching-20261127/runs/tdsm-formal-seed1/selected_checkpoint_metrics.csv

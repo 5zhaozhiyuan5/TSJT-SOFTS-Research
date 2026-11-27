@@ -1,0 +1,216 @@
+args.test_dataset pems-bay
+INFO: GPU : 0
+INFO: train on ['chengdu_m', 'metr-la', 'shenzhen']. test on pems-bay.
+[INFO] source dataset: ['chengdu_m', 'metr-la', 'shenzhen', 'pems-bay']
+dataset_name : chengdu_m
+chengdu_m : x shape : torch.Size([2854, 524, 288, 2]), y shape : torch.Size([2854, 524, 36])
+dataset_name : metr-la
+metr-la : x shape : torch.Size([2830, 207, 288, 2]), y shape : torch.Size([2830, 207, 36])
+dataset_name : shenzhen
+shenzhen : x shape : torch.Size([2854, 627, 288, 2]), y shape : torch.Size([2854, 627, 36])
+dataset_name : pems-bay
+pems-bay : x shape : torch.Size([46, 325, 288, 2]), y shape : torch.Size([46, 325, 36])
+[INFO] Dataset init finished!
+source dataset has chengdu_m. X : torch.Size([2854, 524, 288, 2]), y : torch.Size([2854, 524, 36])
+source dataset has metr-la. X : torch.Size([2830, 207, 288, 2]), y : torch.Size([2830, 207, 36])
+source dataset has shenzhen. X : torch.Size([2854, 627, 288, 2]), y : torch.Size([2854, 627, 36])
+source dataset has pems-bay. X : torch.Size([46, 325, 288, 2]), y : torch.Size([46, 325, 36])
+data_args {'data_keys': ['metr-la', 'pems-bay', 'shenzhen', 'chengdu_m'], 'metr-la': {'dataset_path': 'data/metr-la/dataset_expand.npy', 'adjacency_matrix_path': 'data/metr-la/matrix.npy', 'time_step': 34272, 'node_num': 207, 'speed_mean': 58.465786, 'speed_std': 12.905341}, 'pems-bay': {'dataset_path': 'data/pems-bay/dataset_expand.npy', 'adjacency_matrix_path': 'data/pems-bay/matrix.npy', 'time_step': 52116, 'node_num': 325, 'speed_mean': 62.621582859, 'speed_std': 9.58811369696}, 'chengdu_m': {'dataset_path': 'data/chengdu_m/dataset_expand.npy', 'adjacency_matrix_path': 'data/chengdu_m/matrix.npy', 'time_step': 17280, 'node_num': 524, 'speed_mean': 29.0982979559, 'speed_std': 9.75304346669}, 'shenzhen': {'dataset_path': 'data/shenzhen/dataset_expand.npy', 'adjacency_matrix_path': 'data/shenzhen/matrix.npy', 'time_step': 17280, 'node_num': 627, 'speed_mean': 30.5735608506, 'speed_std': 11.0922606598}}
+[INFO] target_maml dataset: ['pems-bay']
+dataset_name : pems-bay
+pems-bay : x shape : torch.Size([46, 325, 288, 2]), y shape : torch.Size([46, 325, 36])
+[INFO] Dataset init finished!
+[INFO] test dataset: ['pems-bay']
+dataset_name : pems-bay
+pems-bay : x shape : torch.Size([4245, 325, 288, 2]), y shape : torch.Size([4245, 325, 36])
+[INFO] Dataset init finished!
+data args : {'data_keys': ['metr-la', 'pems-bay', 'shenzhen', 'chengdu_m'], 'metr-la': {'dataset_path': 'data/metr-la/dataset_expand.npy', 'adjacency_matrix_path': 'data/metr-la/matrix.npy', 'time_step': 34272, 'node_num': 207, 'speed_mean': 58.465786, 'speed_std': 12.905341}, 'pems-bay': {'dataset_path': 'data/pems-bay/dataset_expand.npy', 'adjacency_matrix_path': 'data/pems-bay/matrix.npy', 'time_step': 52116, 'node_num': 325, 'speed_mean': 62.621582859, 'speed_std': 9.58811369696}, 'chengdu_m': {'dataset_path': 'data/chengdu_m/dataset_expand.npy', 'adjacency_matrix_path': 'data/chengdu_m/matrix.npy', 'time_step': 17280, 'node_num': 524, 'speed_mean': 29.0982979559, 'speed_std': 9.75304346669}, 'shenzhen': {'dataset_path': 'data/shenzhen/dataset_expand.npy', 'adjacency_matrix_path': 'data/shenzhen/matrix.npy', 'time_step': 17280, 'node_num': 627, 'speed_mean': 30.5735608506, 'speed_std': 11.0922606598}}
+task_args : {'source': {'his_num': 288, 'pred_num': 36, 'batch_size': 16, 'task_num': 2, 'add_target': True, 'train_epochs': 3, 'finetune_epochs': 0}, 'target_few_shot': {'add_target': True, 'batch_size': 46, 'his_num': 288, 'pred_num': 36, 'task_num': 2}}
+model_args : {'STnet': {'lr': 0.001}}
+PatchFSL_cfg : {'data_list': 'chengdu_shenzhen_metr', 'base_dir': PosixPath('/home/zhaozhiyuan/experiment-pmme-f2-target-need-skill-matching-20261127/source'), 'device': device(type='cuda', index=0)}
+STmodel : SOFTS
+forecasting_model.enc_embedding.value_embedding.weight : torch.Size([512, 288]), require_grads : True
+forecasting_model.enc_embedding.value_embedding.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.projection1.weight : torch.Size([128, 512]), require_grads : True
+forecasting_model.projection1.bias : torch.Size([128]), require_grads : True
+forecasting_model.projection2.weight : torch.Size([36, 128]), require_grads : True
+forecasting_model.projection2.bias : torch.Size([36]), require_grads : True
+model params: 5738660
+PMME_F2_DIAGNOSTIC off readonly False interval 100 source_budget 192 target_budget 96
+PMME_F2_METHOD original
+PMME_PAIR_VARIANT f2 strength 0.0 anchors 8 block 256
+PMME_STAGE1_TRANSFER_VARIANT gradient
+PMME_STAGE1_FEEDBACK g0 interval 200 subset 256 128
+PMME_STAGE1_TRANSFER_CONFIG ot_scale 0.01 temperature 8.0 min_ess 0.5
+PMME_F2_OT_SCHEDULE_CONFIG t0 base_scale 0.01 DAepoch 1 decay_start 2000 decay_end 2999 tail_fraction 0.25
+PMME_F2_ACCURACY_CONFIG strength 0.0 mode f2 reference persistence_last_speed uses_labels source_training_only
+PMME_F2_TDSM_CONFIG strength 0.35 prototypes 32 temperature 1.0 active True input training_source_and_target_support_forecasts
+{'config_filename': './configs/config.yaml', 'test_dataset': 'pems-bay', 'train_epochs': 3, 'finetune_epochs': 0, 'description': 'PMME', 'seed': 1, 'data_list': 'chengdu_shenzhen_metr', 'target_days': 3, 'gpu': 0, 'STmodel': 'SOFTS', 'his_num': 288, 'save_dir': PosixPath('logged_files/pems-bay/chengdu_shenzhen_metr/2026-11-27-11-22-25'), 'classifier': 0.5, 'xySquaredRatio': 100.0, 'DAcoef': 1.0, 'DAepoch': 1, 'MemSize': 10000, 'projection': 1.0, 'model_name': 'SOFTS', 'DA': 'OT', 'curr_time': '2026-11-27-11-22-25', 'new': 1, 'device': device(type='cuda', index=0), 'batch_size': 16}
+{'data': {'data_keys': ['metr-la', 'pems-bay', 'shenzhen', 'chengdu_m'], 'metr-la': {'dataset_path': 'data/metr-la/dataset_expand.npy', 'adjacency_matrix_path': 'data/metr-la/matrix.npy', 'time_step': 34272, 'node_num': 207, 'speed_mean': 58.465786, 'speed_std': 12.905341}, 'pems-bay': {'dataset_path': 'data/pems-bay/dataset_expand.npy', 'adjacency_matrix_path': 'data/pems-bay/matrix.npy', 'time_step': 52116, 'node_num': 325, 'speed_mean': 62.621582859, 'speed_std': 9.58811369696}, 'chengdu_m': {'dataset_path': 'data/chengdu_m/dataset_expand.npy', 'adjacency_matrix_path': 'data/chengdu_m/matrix.npy', 'time_step': 17280, 'node_num': 524, 'speed_mean': 29.0982979559, 'speed_std': 9.75304346669}, 'shenzhen': {'dataset_path': 'data/shenzhen/dataset_expand.npy', 'adjacency_matrix_path': 'data/shenzhen/matrix.npy', 'time_step': 17280, 'node_num': 627, 'speed_mean': 30.5735608506, 'speed_std': 11.0922606598}}, 'task': {'source': {'his_num': 288, 'pred_num': 36, 'batch_size': 16, 'task_num': 2, 'add_target': True, 'train_epochs': 3, 'finetune_epochs': 0}, 'target_few_shot': {'add_target': True, 'batch_size': 46, 'his_num': 288, 'pred_num': 36, 'task_num': 2}}, 'model': {'STnet': {'lr': 0.001}}}
+----------------------
+f2_ot_schedule epoch 0 policy t0 phase off_before_daepoch base_scale 0.01 effective_scale 0.0 DAcoef 1.0 effective_ot_coefficient 0.0
+/home/zhaozhiyuan/experiment-pmme-f2-target-need-skill-matching-20261127/runs/tdsm-smoke/tdsm/seed1/./model/Meta_Models/PMME.py:85: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  x, y, means, stds = torch.tensor(x).to(self.PatchFSL_cfg['device']), torch.tensor(y).to(self.PatchFSL_cfg['device']),torch.tensor(means).to(self.PatchFSL_cfg['device']),torch.tensor(stds).to(self.PatchFSL_cfg['device']) #,torch.tensor(A,dtype=torch.float32).to(self.PatchFSL_cfg['device'])
+torch.Size([46, 325, 36]) torch.Size([46, 325, 128])
+torch.Size([16, 207, 36]) torch.Size([16, 207, 128])
+MAPE tensor(0.2664, device='cuda:0', grad_fn=<MeanBackward0>)
+torch.Size([16, 524, 36]) torch.Size([16, 524, 128])
+MAPE tensor(0.2117, device='cuda:0', grad_fn=<MeanBackward0>)
+torch.Size([16, 627, 36]) torch.Size([16, 627, 128])
+MAPE tensor(0.1547, device='cuda:0', grad_fn=<MeanBackward0>)
+325
+[207, 524, 627]
+task_utility gradient 0 uniform or OT not active
+task_utility gradient 1 uniform or OT not active
+task_utility gradient 2 uniform or OT not active
+self.projection_args 1.0
+Epochs 0/3
+in meta-training   Unnormed MSE : 89.72504, RMSE : 8.89598, MAE : 6.21773, MAPE: 0.21092, reconstruction Loss : 18.65243.
+This epoch cost 1.21s.
+epoch: 0
+[INFO] Enter validation phase
+start,end 0 1
+<class 'datasets.traffic_dataset'>
+1
+Horizon 0 : Unnormed MSE : 53.53091, RMSE : 7.31648, MAE : 4.13214, MAPE: 0.09751
+Horizon 1 : Unnormed MSE : 46.48581, RMSE : 6.81805, MAE : 3.79607, MAPE: 0.09007
+Horizon 2 : Unnormed MSE : 75.67632, RMSE : 8.69921, MAE : 5.70969, MAPE: 0.10757
+Horizon 3 : Unnormed MSE : 51.37350, RMSE : 7.16753, MAE : 3.78683, MAPE: 0.09356
+Horizon 4 : Unnormed MSE : 52.03645, RMSE : 7.21363, MAE : 4.06969, MAPE: 0.09512
+Horizon 5 : Unnormed MSE : 48.42691, RMSE : 6.95894, MAE : 3.96753, MAPE: 0.09147
+Horizon 6 : Unnormed MSE : 52.84860, RMSE : 7.26970, MAE : 4.15307, MAPE: 0.09592
+Horizon 7 : Unnormed MSE : 60.63244, RMSE : 7.78668, MAE : 4.37284, MAPE: 0.10252
+Horizon 8 : Unnormed MSE : 63.91930, RMSE : 7.99495, MAE : 4.15262, MAPE: 0.10610
+Horizon 9 : Unnormed MSE : 69.31131, RMSE : 8.32534, MAE : 5.04293, MAPE: 0.11307
+Horizon 10 : Unnormed MSE : 62.15252, RMSE : 7.88369, MAE : 4.46197, MAPE: 0.10636
+Horizon 11 : Unnormed MSE : 69.63651, RMSE : 8.34485, MAE : 4.51252, MAPE: 0.11238
+Horizon 12 : Unnormed MSE : 64.01459, RMSE : 8.00091, MAE : 4.36236, MAPE: 0.10773
+Horizon 13 : Unnormed MSE : 66.86170, RMSE : 8.17690, MAE : 4.94823, MAPE: 0.11065
+Horizon 14 : Unnormed MSE : 68.67937, RMSE : 8.28730, MAE : 4.30027, MAPE: 0.10818
+Horizon 15 : Unnormed MSE : 64.62225, RMSE : 8.03880, MAE : 4.70513, MAPE: 0.10595
+Horizon 16 : Unnormed MSE : 71.89082, RMSE : 8.47885, MAE : 5.05240, MAPE: 0.11517
+Horizon 17 : Unnormed MSE : 75.29048, RMSE : 8.67701, MAE : 5.53373, MAPE: 0.11806
+Horizon 18 : Unnormed MSE : 60.09291, RMSE : 7.75196, MAE : 3.94632, MAPE: 0.09992
+Horizon 19 : Unnormed MSE : 68.70431, RMSE : 8.28881, MAE : 4.44208, MAPE: 0.10986
+Horizon 20 : Unnormed MSE : 59.72183, RMSE : 7.72799, MAE : 4.14096, MAPE: 0.10081
+Horizon 21 : Unnormed MSE : 66.16459, RMSE : 8.13416, MAE : 4.21092, MAPE: 0.10683
+Horizon 22 : Unnormed MSE : 105.57324, RMSE : 10.27488, MAE : 5.73279, MAPE: 0.14219
+Horizon 23 : Unnormed MSE : 76.99214, RMSE : 8.77452, MAE : 5.32879, MAPE: 0.12012
+Horizon 24 : Unnormed MSE : 80.55231, RMSE : 8.97509, MAE : 5.41906, MAPE: 0.12208
+Horizon 25 : Unnormed MSE : 86.04488, RMSE : 9.27604, MAE : 5.11492, MAPE: 0.12560
+Horizon 26 : Unnormed MSE : 66.48453, RMSE : 8.15380, MAE : 4.18794, MAPE: 0.10545
+Horizon 27 : Unnormed MSE : 67.64489, RMSE : 8.22465, MAE : 4.20211, MAPE: 0.10638
+Horizon 28 : Unnormed MSE : 72.94323, RMSE : 8.54068, MAE : 4.97644, MAPE: 0.11539
+Horizon 29 : Unnormed MSE : 82.79235, RMSE : 9.09903, MAE : 5.04421, MAPE: 0.12233
+Horizon 30 : Unnormed MSE : 66.33994, RMSE : 8.14493, MAE : 4.32830, MAPE: 0.10716
+Horizon 31 : Unnormed MSE : 71.08249, RMSE : 8.43104, MAE : 5.01039, MAPE: 0.11434
+Horizon 32 : Unnormed MSE : 82.98353, RMSE : 9.10953, MAE : 5.79422, MAPE: 0.12587
+Horizon 33 : Unnormed MSE : 76.28208, RMSE : 8.73396, MAE : 4.99396, MAPE: 0.11876
+Horizon 34 : Unnormed MSE : 84.79604, RMSE : 9.20848, MAE : 5.31425, MAPE: 0.12602
+Horizon 35 : Unnormed MSE : 73.05738, RMSE : 8.54736, MAE : 4.91667, MAPE: 0.11654
+[INFO] Enter test phase
+length 265
+start,end 0 266
+<class 'datasets.traffic_dataset'>
+265
+Horizon 0 : Unnormed MSE : 59.09585, RMSE : 7.68738, MAE : 4.68221, MAPE: 0.10819
+Horizon 1 : Unnormed MSE : 47.91085, RMSE : 6.92177, MAE : 4.16505, MAPE: 0.09687
+Horizon 2 : Unnormed MSE : 109.18918, RMSE : 10.44936, MAE : 7.19768, MAPE: 0.13175
+Horizon 3 : Unnormed MSE : 53.27950, RMSE : 7.29928, MAE : 4.02161, MAPE: 0.10173
+Horizon 4 : Unnormed MSE : 55.14781, RMSE : 7.42616, MAE : 4.44702, MAPE: 0.10304
+Horizon 5 : Unnormed MSE : 50.80229, RMSE : 7.12757, MAE : 4.36380, MAPE: 0.09803
+Horizon 6 : Unnormed MSE : 57.29334, RMSE : 7.56924, MAE : 4.67419, MAPE: 0.10421
+Horizon 7 : Unnormed MSE : 64.54082, RMSE : 8.03373, MAE : 4.75027, MAPE: 0.11171
+Horizon 8 : Unnormed MSE : 63.26256, RMSE : 7.95378, MAE : 4.36696, MAPE: 0.11351
+Horizon 9 : Unnormed MSE : 76.08556, RMSE : 8.72270, MAE : 5.62286, MAPE: 0.12328
+Horizon 10 : Unnormed MSE : 63.06120, RMSE : 7.94111, MAE : 4.85646, MAPE: 0.11206
+Horizon 11 : Unnormed MSE : 69.03259, RMSE : 8.30859, MAE : 4.66415, MAPE: 0.11761
+Horizon 12 : Unnormed MSE : 60.80808, RMSE : 7.79795, MAE : 4.59511, MAPE: 0.11181
+Horizon 13 : Unnormed MSE : 75.22427, RMSE : 8.67319, MAE : 5.64676, MAPE: 0.11789
+Horizon 14 : Unnormed MSE : 67.40698, RMSE : 8.21018, MAE : 4.43969, MAPE: 0.11452
+Horizon 15 : Unnormed MSE : 67.86279, RMSE : 8.23789, MAE : 5.11956, MAPE: 0.11427
+Horizon 16 : Unnormed MSE : 74.79563, RMSE : 8.64845, MAE : 5.56669, MAPE: 0.12031
+Horizon 17 : Unnormed MSE : 88.33655, RMSE : 9.39875, MAE : 6.39480, MAPE: 0.12817
+Horizon 18 : Unnormed MSE : 52.52997, RMSE : 7.24776, MAE : 3.91616, MAPE: 0.09827
+Horizon 19 : Unnormed MSE : 64.42052, RMSE : 8.02624, MAE : 4.68299, MAPE: 0.11256
+Horizon 20 : Unnormed MSE : 54.54651, RMSE : 7.38556, MAE : 4.21258, MAPE: 0.09985
+Horizon 21 : Unnormed MSE : 60.81953, RMSE : 7.79869, MAE : 4.31997, MAPE: 0.10653
+Horizon 22 : Unnormed MSE : 112.78130, RMSE : 10.61985, MAE : 6.35764, MAPE: 0.15282
+Horizon 23 : Unnormed MSE : 85.83344, RMSE : 9.26463, MAE : 6.02099, MAPE: 0.12561
+Horizon 24 : Unnormed MSE : 84.63914, RMSE : 9.19995, MAE : 5.80317, MAPE: 0.12754
+Horizon 25 : Unnormed MSE : 82.93658, RMSE : 9.10695, MAE : 5.38798, MAPE: 0.12984
+Horizon 26 : Unnormed MSE : 60.97760, RMSE : 7.80882, MAE : 4.36224, MAPE: 0.10857
+Horizon 27 : Unnormed MSE : 59.33638, RMSE : 7.70301, MAE : 4.18836, MAPE: 0.10636
+Horizon 28 : Unnormed MSE : 72.92702, RMSE : 8.53973, MAE : 5.34049, MAPE: 0.11829
+Horizon 29 : Unnormed MSE : 76.80051, RMSE : 8.76359, MAE : 5.21947, MAPE: 0.12123
+Horizon 30 : Unnormed MSE : 58.01723, RMSE : 7.61690, MAE : 4.28104, MAPE: 0.10509
+Horizon 31 : Unnormed MSE : 70.31977, RMSE : 8.38569, MAE : 5.35044, MAPE: 0.11578
+Horizon 32 : Unnormed MSE : 92.57037, RMSE : 9.62135, MAE : 6.50541, MAPE: 0.13335
+Horizon 33 : Unnormed MSE : 71.85671, RMSE : 8.47683, MAE : 5.20684, MAPE: 0.11726
+Horizon 34 : Unnormed MSE : 71.21800, RMSE : 8.43908, MAE : 5.14337, MAPE: 0.11755
+Horizon 35 : Unnormed MSE : 71.44203, RMSE : 8.45234, MAE : 5.12122, MAPE: 0.11722
+finetune_dataset[0][1].shape[1] 325
+sum(current_validation_score),sum(best_validation_score) 83.929855 300000.0
+epoch:0 best!
+f2_ot_schedule epoch 1 policy t0 phase fixed base_scale 0.01 effective_scale 0.01 DAcoef 1.0 effective_ot_coefficient 0.01
+325
+[207, 524, 627]
+f2_tdsm_matching epoch 1 city chengdu_m target_group 0 {'strength': 0.35, 'source_prototypes': 32, 'target_prototypes': 32, 'source_skill_mean': 0.18472181260585785, 'target_need_mean': 0.5599061250686646, 'source_matching_utility_mean': 0.02352912910282612, 'target_matching_utility_mean': 0.049172963947057724, 'source_l1_shift': 0.13133171200752258, 'target_l1_shift': 0.1345527619123459, 'source_ess_frac': 0.15316519141197205, 'target_ess_frac': 0.9730331301689148, 'source_relative_min': 0.6501734852790833, 'target_relative_min': 0.6502467393875122, 'source_top_ids': [6804, 6551, 2585, 6362, 6319, 6584, 6396, 6789], 'source_top_weights': [0.004253622610121965, 0.00424448074772954, 0.0034692396875470877, 0.0032775166910141706, 0.0031236358918249607, 0.003075710730627179, 0.003061799332499504, 0.002975923242047429], 'target_top_ids': [440, 407, 381, 404, 308, 19, 334, 357], 'target_top_weights': [0.00027753604808822274, 0.00027753604808822274, 0.00027753604808822274, 0.00027753604808822274, 0.00027753604808822274, 0.00027753604808822274, 0.00027753604808822274, 0.00027753604808822274], 'source_proto_flat_ids': [6804, 6551, 5027, 4761, 6396, 6666, 6362, 6319, 6413, 6584, 6569, 6785, 6789, 6526, 6683, 6677, 254, 508, 762, 1016, 1270, 1524, 1778, 2032, 2286, 2540, 2794, 3048, 3302, 3556, 3810, 4064], 'target_proto_flat_ids': [141, 79, 217, 235, 56, 182, 197, 127, 311, 9, 196, 135, 299, 281, 276, 201, 148, 295, 443, 591, 738, 886, 1034, 1182, 1329, 1477, 1625, 1772, 1920, 2068, 2215, 2363], 'support_labels_only': True}
+f2_tdsm_matching epoch 1 city metr-la target_group 1 {'strength': 0.35, 'source_prototypes': 32, 'target_prototypes': 32, 'source_skill_mean': 0.1679825782775879, 'target_need_mean': 0.5643556118011475, 'source_matching_utility_mean': 0.022618532180786133, 'target_matching_utility_mean': 0.041076116263866425, 'source_l1_shift': 0.22878402471542358, 'target_l1_shift': 0.14910373091697693, 'source_ess_frac': 0.25227779150009155, 'target_ess_frac': 0.9669824838638306, 'source_relative_min': 0.6499999761581421, 'target_relative_min': 0.6504750847816467, 'source_top_ids': [3076, 411, 3050, 1800, 240, 57, 1471, 298], 'source_top_weights': [0.004714022856205702, 0.004042386543005705, 0.0040144892409443855, 0.0037252658512443304, 0.0035178158432245255, 0.003342605195939541, 0.003244033781811595, 0.003222754690796137], 'target_top_ids': [56, 55, 31, 48, 9, 1, 17, 26], 'target_top_weights': [0.0002790619037114084, 0.0002790619037114084, 0.0002790619037114084, 0.0002790619037114084, 0.0002790619037114084, 0.0002790619037114084, 0.0002790619037114084, 0.0002790619037114084], 'source_proto_flat_ids': [1024, 3050, 3076, 3098, 1236, 2942, 844, 918, 1697, 1298, 133, 1860, 1213, 589, 1471, 240, 100, 201, 301, 401, 502, 602, 702, 803, 903, 1003, 1104, 1204, 1304, 1405, 1505, 1605], 'target_proto_flat_ids': [4559, 4671, 4606, 4785, 676, 2690, 4685, 4605, 274, 4632, 4659, 4567, 278, 275, 205, 317, 148, 295, 443, 591, 738, 886, 1034, 1182, 1329, 1477, 1625, 1772, 1920, 2068, 2215, 2363], 'support_labels_only': True}
+f2_tdsm_matching epoch 1 city shenzhen target_group 2 {'strength': 0.35, 'source_prototypes': 32, 'target_prototypes': 32, 'source_skill_mean': 0.19752098619937897, 'target_need_mean': 0.573714017868042, 'source_matching_utility_mean': 0.033219609409570694, 'target_matching_utility_mean': 0.04541746899485588, 'source_l1_shift': 0.1487351357936859, 'target_l1_shift': 0.11927059292793274, 'source_ess_frac': 0.19486962258815765, 'target_ess_frac': 0.9780590534210205, 'source_relative_min': 0.6500529050827026, 'target_relative_min': 0.6506968140602112, 'source_top_ids': [1876, 1768, 1453, 8878, 7763, 9207, 5113, 2310], 'source_top_weights': [0.004096205811947584, 0.003742863889783621, 0.0037397288251668215, 0.002682981314137578, 0.0023986261803656816, 0.0023793892469257116, 0.0023626203183084726, 0.0022120510693639517], 'target_top_ids': [256, 163, 90, 121, 26, 9, 79, 82], 'target_top_weights': [0.0002599696454126388, 0.0002599696454126388, 0.0002599696454126388, 0.0002599696454126388, 0.0002599696454126388, 0.0002599696454126388, 0.0002599696454126388, 0.0002599696454126388], 'source_proto_flat_ids': [1876, 1768, 1453, 8878, 7763, 8805, 9207, 8894, 2310, 5113, 3851, 7861, 5582, 5270, 8990, 9220, 304, 608, 912, 1216, 1520, 1824, 2128, 2432, 2736, 3040, 3344, 3648, 3952, 4256, 4560, 4864], 'target_proto_flat_ids': [676, 731, 3332, 3371, 705, 1704, 967, 3259, 3870, 651, 771, 867, 1642, 3561, 659, 645, 158, 315, 473, 630, 788, 945, 1103, 1260, 1418, 1575, 1733, 1891, 2048, 2206, 2363, 2521], 'support_labels_only': True}
+self.projection_args 1.0
+This epoch cost 0.39s.
+f2_ot_schedule epoch 2 policy t0 phase fixed base_scale 0.01 effective_scale 0.01 DAcoef 1.0 effective_ot_coefficient 0.01
+325
+[207, 524, 627]
+self.projection_args 1.0
+This epoch cost 0.396s.
+Source training Ending!!!
