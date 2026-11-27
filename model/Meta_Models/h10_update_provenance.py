@@ -72,10 +72,12 @@ def h10_direction(bank,policy):
         direction=target;mask=target_mask
     elif policy=="t4_source_pcgrad":
         direction=projected_directions(source,target,_zero(source))[0]
-        mask=source_mask
+        mask=[True]*len(source)
     elif policy=="t5_official_f2":
         direction=projected_directions(source,target,raw_ot)[1]
-        mask=union_mask
+        # Original projection=1 flatten_and_pad_grads + write_back_flat_grads
+        # sets a tensor grad on EVERY parameter, even if unused.
+        mask=[True]*len(source)
     elif policy=="t6_full_pcgrad":
         # Historical name retained as an ablation ID: this control REMOVES
         # PCGrad, unlike original checkpoint's projection=1.
@@ -85,7 +87,7 @@ def h10_direction(bank,policy):
         projected,_=project_conflicting_ot(raw_ot,target)
         half=gradient_tuple_scaled(projected,.5)
         direction=projected_directions(source,target,half)[1]
-        mask=union_mask
+        mask=[True]*len(source)
     else:
         raise ValueError(policy)
     if len(direction)!=len(mask) or any(not bool(
