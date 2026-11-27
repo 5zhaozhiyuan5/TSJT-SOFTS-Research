@@ -1,0 +1,33 @@
+name: F2 Robust Fisher CVaR CPU Tests
+
+on:
+  push:
+    branches:
+      - experiment/pmme-f2-robust-fisher-cvar-20261128
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  f2-robust-fisher-cvar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU PyTorch
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Syntax checks
+        run: |
+          python -m compileall -q model/Meta_Models/transfer_utility.py model/Meta_Models/f2_four_extensions.py model/Meta_Models/PMME.py
+          bash -n run_f2_robust_fisher_cvar.sh
+      - name: Existing F2 extension tests
+        run: |
+          python -m unittest discover -s tests -p 'test_f2_four_extensions.py' -v
+      - name: New robust/Fisher/CVaR tests
+        run: |
+          python -m unittest discover -s tests -p 'test_f2_robust_fisher_cvar.py' -v
