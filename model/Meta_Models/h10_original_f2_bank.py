@@ -18,6 +18,15 @@ except ImportError:
     from h6_ot_gradient_effect import gradient_norm
     from transfer_utility import compute_weights
 
+def _grad_with_presence(loss,parameters):
+    values=torch.autograd.grad(
+        loss,parameters,retain_graph=True,allow_unused=True
+    )
+    return ([torch.zeros_like(p) if x is None else x.detach()
+             for p,x in zip(parameters,values)],
+            [x is not None for x in values])
+
+
 def original_f2_full_support_bank(
     model, samples, *, loss_criterion, sinkhorn,source_points,target_points,
     ot_scale=.01,step=1
@@ -58,8 +67,9 @@ def original_f2_full_support_bank(
     s_losses=[
         loss_criterion(forecasts[i],truths[i]) for i in (1,2,3)
     ]
-    source_grad=_grads(sum(s_losses),params)
-    target_grad=_grads(t_loss,params)
+    source_grad,source_mask=_grad_with_presence(sum(s_losses),params)
+    target_grad,target_mask=_grad_with_presence(t_loss,params)
+    ot_mask=[False]*len(params)
     target_features,target_out=transfers[0]
     target_delta=torch.autograd.grad(t_loss,target_out,retain_graph=True)[0].detach()
     split_sizes=(15,15,n-30)
@@ -100,7 +110,8 @@ def original_f2_full_support_bank(
             ty.detach().index_select(0,tids)*10.,
         ),dim=-1)
         loss_ot=sinkhorn(alpha,source_geometry,beta,target_geometry).sum()*ot_scale
-        g_ot=_grads(loss_ot,params)
+        g_ot,city_mask=_grad_with_presence(loss_ot,params)
+        ot_mask=[x or y for x,y in zip(ot_mask,city_mask)]
         entries.append({"city":str(source_city),"f2":g_ot})
         with torch.no_grad():
             a=alpha.detach()
@@ -138,6 +149,9 @@ def original_f2_full_support_bank(
     return {
         "source_gradient":source_grad,
         "target_fit_gradient":target_grad,
+        "source_present_mask":source_mask,
+        "target_present_mask":target_mask,
+        "ot_present_mask":ot_mask,
         "city_entries":entries,
         "ot_metadata":ot_summaries,
         "target_fit_count":int(fit.sum()),
