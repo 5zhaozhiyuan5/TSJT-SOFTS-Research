@@ -544,6 +544,15 @@ def build_dynamic_pattern_attention_cost(
               (skill_mix*qs[:,:,None]+(1-skill_mix)*Q[None,:,:]) *
               R[None,:,:])
     tgt_keys=target_attention.sqrt()*dt[:,:,None]
+    # Absolute pattern reliability must survive the candidate-relative
+    # score normalization. Otherwise multiplying all R by a constant
+    # leaves sigmoid((B-theta)/spread) unchanged and R has no effect on OT.
+    source_absolute_trust = (
+        (source_attention *
+         (skill_mix*qs[:,:,None]+(1-skill_mix)*Q[None,:,:]) *
+         R[None,:,:]).sum((1,2)) / 3.0
+    ).clamp(0,1)
+    source_gate=(0.2+0.8*source_absolute_trust.sqrt()).clamp(0.2,1.0)
 
     def bonus_rows(start,stop,target_subset=None):
         targets=tgt_keys if target_subset is None else tgt_keys[target_subset]
@@ -595,7 +604,8 @@ def build_dynamic_pattern_attention_cost(
             ((b-thresholds[start:stop,None]) /
              spreads[start:stop,None]).clamp(-6,6)
         )
-        return strength*local_cost_margin[start:stop,None]*(1-p)
+        return (strength*local_cost_margin[start:stop,None] *
+                source_gate[start:stop,None]*(1-p))
 
     # Feedback is computed on a SMALL, fixed, coverage-oriented subset.
     # Q: source forecast accuracy weighted by source pattern attention.
@@ -659,6 +669,12 @@ def build_dynamic_pattern_attention_cost(
         "target_attention_top_mass_by_band":
             target_attention.amax(-1).mean(0).tolist(),
         "sample_bonus_mean":float(diag_bonus.mean()),
+        "absolute_source_trust_mean":float(source_gate.mean()),
+        "absolute_source_trust_p10_p50_p90":[
+            float(z) for z in torch.quantile(
+                source_gate,torch.tensor([.1,.5,.9],device=x.device)
+            )
+        ],
         "sample_bonus_std":float(diag_bonus.std(unbiased=False)),
         "sample_extra_mean":float(diag_extra.mean()),
         "sample_extra_std":float(diag_extra.std(unbiased=False)),
@@ -717,7 +733,8 @@ def build_dynamic_pattern_attention_cost(
             local_p=torch.sigmoid(
                 ((match-thresholds[ss,None])/spreads[ss,None]).clamp(-6,6)
             )
-            modified=base+strength*local_cost_margin[ss,None]*(1-local_p)
+            modified=(base+strength*local_cost_margin[ss,None] *
+                      source_gate[ss,None]*(1-local_p))
         epsilon=float((base.quantile(.75)-base.quantile(.25)).clamp_min(.5))*.20
         ta,da=_diagnostic_sinkhorn(
             alpha.detach()[ss],beta.detach()[tt],base,temperature=epsilon)
