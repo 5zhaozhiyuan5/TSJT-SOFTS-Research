@@ -448,3 +448,303 @@ def build_pattern_attention_cost(
         return torch.cat(chunks,dim=1)
 
     return cost, diagnostic
+
+
+@torch.no_grad()
+def _diagnostic_sinkhorn(alpha, beta, cost, temperature=None, iterations=180):
+    """Actual small-subset entropic transport PLAN, not a nearest neighbor.
+
+    Uses explicit diagnostic epsilon and its own subset-normalized marginals.
+    It MUST NOT be reported as the entire GeomLoss full-batch coupling.
+    """
+    if alpha.ndim != 1 or beta.ndim != 1 or cost.shape != (len(alpha),len(beta)):
+        raise ValueError("Sinkhorn diagnostic dimensions do not match")
+    a = (alpha.detach().float()/alpha.detach().float().sum()).clamp_min(1e-12)
+    b = (beta.detach().float()/beta.detach().float().sum()).clamp_min(1e-12)
+    c = cost.detach().float()
+    if temperature is None:
+        # Moderate epsilon gives stable diagnostics for widely varying costs.
+        temperature = float((c.quantile(.75)-c.quantile(.25)).clamp_min(0.5)) * 0.20
+    logK = -(c-c.min()) / temperature
+    la, lb = a.log(),b.log()
+    u=torch.zeros_like(la)
+    v=torch.zeros_like(lb)
+    for _ in range(iterations):
+        u=la-torch.logsumexp(logK+v[None,:],dim=1)
+        v=lb-torch.logsumexp(logK+u[:,None],dim=0)
+    transport=(u[:,None]+logK+v[None,:]).exp()
+    mass_error=max(
+        float((transport.sum(1)-a).abs().max()),
+        float((transport.sum(0)-b).abs().max())
+    )
+    return transport, {
+        "epsilon":float(temperature),
+        "iterations":iterations,
+        "max_marginal_error":mass_error,
+        "subset_source_count":len(alpha),
+        "subset_target_count":len(beta),
+    }
+
+
+@torch.no_grad()
+def build_dynamic_pattern_attention_cost(
+    x,y,source_response,source_skill,target_response,target_need,bank,
+    alpha=None,beta=None, strength=0.35,temperature=0.75,block_size=128,
+    mode="v2b", feedback_source=256, feedback_target=128, top_l=12,
+    skill_mix=0.5, rho_temperature=2.0, diagnostics=False,
+):
+    """DPM V2: original source pattern bank, online Q/R and attention->OT cost.
+
+    V2-A: dynamic Q/R-conditioned Attention, unchanged V1 global-cost form.
+    V2-B: SAME dynamic Attention, candidate-local sigmoid threshold and
+          per-source nearest-candidate distance scale. OT is still original
+          balanced GeomLoss, with EXACT original F2 source/target marginals.
+    This callback is READ ONLY. Return feedback sufficient for exactly one
+    post-optimizer bank.update_reliability, after aggregating all cities.
+
+    No full pairwise gradient is calculated. Complexity dominated by the
+    existing GeomLoss tensorized full cost. All new statistics are detached.
+    """
+    if (mode not in ("v2a","v2b") or not math.isfinite(strength)
+        or not (0 < strength <= 1) or not math.isfinite(temperature)
+        or temperature <= 0 or not isinstance(block_size,int) or block_size < 1
+        or min(feedback_source, feedback_target,top_l)<2
+        or not 0 <= skill_mix <= 1 or rho_temperature <= 0):
+        raise ValueError("Invalid DPM V2 settings")
+    ns, nt = len(x),len(y)
+    if not bank.fitted or bank.quality is None or bank.reliability is None:
+        raise RuntimeError("V2 requires fitted source-only bank with Q/R")
+    if (x.ndim != 2 or y.ndim != 2 or x.shape[-1] != y.shape[-1]
+        or ns<2 or nt<2
+        or source_response.shape!=(ns,3,3)
+        or target_response.shape!=(nt,3,3)
+        or source_skill.shape!=(ns,3) or target_need.shape!=(nt,3)):
+        raise ValueError("Incorrect DPM V2 input shapes")
+    if any(not bool(torch.isfinite(t).all()) for t in
+           (x.detach(),y.detach(),source_response,source_skill,
+            target_response,target_need)):
+        raise ValueError("Nonfinite DPM V2 input")
+    for t in (source_skill,target_need):
+        if bool(((t<0)|(t>1)).any()):
+            raise ValueError("Skill/need must lie in [0,1]")
+    source_attention=bank.attention(source_response,temperature)
+    target_attention=bank.attention(target_response,temperature)
+    Q=bank.quality.to(device=x.device,dtype=torch.float32).clone()
+    R=bank.reliability.to(device=x.device,dtype=torch.float32).clone()
+    qs=source_skill.detach().float()
+    dt=target_need.detach().float()
+    # Q historical pattern accuracy; q current source accuracy.
+    # R historical source/target pattern-distance compatibility.
+    # Avoid multiplying q and Q again; blend the two accuracy estimates.
+    src_keys=(source_attention.sqrt() *
+              (skill_mix*qs[:,:,None]+(1-skill_mix)*Q[None,:,:]) *
+              R[None,:,:])
+    tgt_keys=target_attention.sqrt()*dt[:,:,None]
+
+    def bonus_rows(start,stop,target_subset=None):
+        targets=tgt_keys if target_subset is None else tgt_keys[target_subset]
+        result=src_keys.new_zeros((stop-start,len(targets)))
+        for h in range(3):
+            result += (src_keys[start:stop,h,:]@targets[:,h,:].T)/3.0
+        return result.clamp(0,1)
+
+    # Reference for V2A original global distance scale, no new model update.
+    src_ref_ids=torch.linspace(0,ns-1,steps=min(48,ns),device=x.device).round().long()
+    tgt_ref_ids=torch.linspace(0,nt-1,steps=min(48,nt),device=y.device).round().long()
+    ref=float(torch.cdist(x.detach()[src_ref_ids].float(),
+                          y.detach()[tgt_ref_ids].float()).median().clamp_min(.001))
+    src_ids=torch.linspace(0,ns-1,steps=min(feedback_source,ns),
+                           device=x.device).round().long()
+    target_anchor_ids=torch.linspace(0,nt-1,steps=min(feedback_target,nt),
+                           device=y.device).round().long()
+    # Candidate-local thresholds depend on *detached* current OT feature cost.
+    # It is a source-specific comparison to nearby targets, not a global
+    # threshold; memory use O(Ns * n_target_anchors).
+    anchor_cost=torch.cdist(x.detach().float(),
+                            y.detach()[target_anchor_ids].float())
+    l=min(top_l,anchor_cost.shape[1])
+    nearest_cost, nearest_anchor_pos=anchor_cost.topk(l,largest=False,dim=1)
+    nearest_target_ids=target_anchor_ids[nearest_anchor_pos]
+    del anchor_cost
+    candidate_bonus=(src_keys[:,None,:,:] *
+                     tgt_keys[nearest_target_ids]).sum(dim=(2,3))/3.0
+    candidate_bonus=candidate_bonus.clamp(0,1)
+    sorted_b=candidate_bonus.sort(-1).values
+    mid=l//2
+    lo=max(0,int((l-1)*.25)); hi=max(lo+1,int((l-1)*.75))
+    thresholds=sorted_b[:,mid]
+    spreads=(sorted_b[:,hi]-sorted_b[:,lo]).clamp_min(.005)
+    c_sorted=nearest_cost.sort(-1).values
+    local_cost_margin=(c_sorted[:,hi]-c_sorted[:,lo]).clamp_min(0)
+    local_cost_margin=torch.minimum(local_cost_margin,
+                                    c_sorted[:,mid].clamp_min(0)*.20)
+    # If all nearby targets are identical, do not induce arbitrary pairing.
+    local_cost_margin=torch.where(
+        torch.isfinite(local_cost_margin),local_cost_margin,
+        torch.zeros_like(local_cost_margin)
+    )
+
+    def _penalty_from_bonus(b,start,stop):
+        if mode=="v2a":
+            return strength*ref*(1.0-b)
+        p=torch.sigmoid(
+            ((b-thresholds[start:stop,None]) /
+             spreads[start:stop,None]).clamp(-6,6)
+        )
+        return strength*local_cost_margin[start:stop,None]*(1-p)
+
+    # Feedback is computed on a SMALL, fixed, coverage-oriented subset.
+    # Q: source forecast accuracy weighted by source pattern attention.
+    # R: compatibility of source->nearby-target pairs from REAL descriptors.
+    # No destination validation/test label is consulted.
+    a_source=source_attention[src_ids].float()  # [S,3,K]
+    qn=(a_source*qs[src_ids,:,None]).sum(0)  # [3,K]
+    qd=a_source.sum(0)
+    ids=nearest_target_ids[src_ids]  # [S,L]
+    a_target=target_attention[ids].float()
+    membership=a_source[:,None,:,:]*a_target
+    scaled_source=(
+        (source_response.detach()[src_ids].float()-bank.location.to(x.device)[None,:,:]) /
+        bank.spread.to(x.device)[None,:,:]
+    ).clamp(-8,8)
+    scaled_target=(
+        (target_response.detach()[ids].float()-bank.location.to(y.device)[None,None,:,:]) /
+        bank.spread.to(y.device)[None,None,:,:]
+    ).clamp(-8,8)
+    sample_distance=(scaled_source[:,None,:,:]-scaled_target).norm(dim=-1)
+    rho=(-sample_distance/rho_temperature).exp()
+    rn=(membership*rho[:,:,:,None]).sum((0,1)) # [3,K]
+    rd=membership.sum((0,1))
+    feedback={
+        "q_num":qn.detach().cpu(),"q_den":qd.detach().cpu(),
+        "r_num":rn.detach().cpu(),"r_den":rd.detach().cpu(),
+        "summary":{
+            "source_selected":int(len(src_ids)),
+            "target_anchors":int(len(target_anchor_ids)),
+            "candidates_per_source":int(l),
+            "q_sample_mean":float(qs[src_ids].mean()),
+            "source_target_descriptor_distance_mean":float(sample_distance.mean()),
+            "source_target_descriptor_distance_p90":float(torch.quantile(sample_distance,.90)),
+            "source_target_rho_mean":float(rho.mean()),
+            "target_need_mean":float(dt.mean()),
+        },
+    }
+
+    # Only small 32x32 diagnostic cost matrix, never mislabelled full Pi.
+    sd=min(32,ns);td=min(32,nt)
+    diag_base=torch.cdist(x.detach()[:sd].float(),y.detach()[:td].float())
+    diag_bonus=bonus_rows(0,sd)[:,:td]
+    diag_extra=_penalty_from_bonus(diag_bonus,0,sd)
+    diag_new=diag_base+diag_extra
+    diag={
+        "mode":mode,"strength":float(strength),
+        "source_count":ns,"target_count":nt,"patterns":int(bank.patterns),
+        "bank_feedback_steps":int(bank.feedback_steps),
+        "f2_marginals_unchanged":True,
+        "cost_reference":ref,
+        "q_band_mean":Q.mean(-1).tolist(),
+        "q_band_min":Q.min(-1).values.tolist(),
+        "q_band_max":Q.max(-1).values.tolist(),
+        "r_band_mean":R.mean(-1).tolist(),
+        "r_band_min":R.min(-1).values.tolist(),
+        "r_band_max":R.max(-1).values.tolist(),
+        "source_skill_band_mean":qs.mean(0).tolist(),
+        "target_need_band_mean":dt.mean(0).tolist(),
+        "source_attention_top_mass_by_band":
+            source_attention.amax(-1).mean(0).tolist(),
+        "target_attention_top_mass_by_band":
+            target_attention.amax(-1).mean(0).tolist(),
+        "sample_bonus_mean":float(diag_bonus.mean()),
+        "sample_bonus_std":float(diag_bonus.std(unbiased=False)),
+        "sample_extra_mean":float(diag_extra.mean()),
+        "sample_extra_std":float(diag_extra.std(unbiased=False)),
+        "sample_cost_original_mean":float(diag_base.mean()),
+        "sample_cost_modified_mean":float(diag_new.mean()),
+        "sample_source_rank_change":float((diag_new.argmin(-1)!=diag_base.argmin(-1)).float().mean()),
+        "sample_target_rank_change":float((diag_new.argmin(0)!=diag_base.argmin(0)).float().mean()),
+        "candidate_bonus_median":float(thresholds.median()),
+        "candidate_bonus_iqr_median":float(spreads.median()),
+        "candidate_base_cost_iqr_median":float(local_cost_margin.median()),
+        "candidate_base_cost_iqr_p90":float(torch.quantile(local_cost_margin,.90)),
+        "candidate_nonzero_margin_fraction":float((local_cost_margin>0).float().mean()),
+        "feedback":feedback["summary"],
+    }
+    if diagnostics:
+        if alpha is None or beta is None or len(alpha)!=ns or len(beta)!=nt:
+            raise ValueError("True OT diagnostic requires F2 alpha and beta")
+        # Match coverage for the transported comparison; the same subset,
+        # same normalized F2 marginals and same explicit epsilon for BOTH.
+        di=min(64,ns);dj=min(64,nt)
+        ss=torch.linspace(0,ns-1,di,device=x.device).round().long()
+        tt=torch.linspace(0,nt-1,dj,device=y.device).round().long()
+        base=torch.cdist(x.detach()[ss].float(),y.detach()[tt].float())
+        bs=src_keys[ss]
+        bt=tgt_keys[tt]
+        match=base.new_zeros((di,dj))
+        for h in range(3):
+            match+=(bs[:,h,:]@bt[:,h,:].T)/3.0
+        if mode=="v2a":
+            modified=base+strength*ref*(1-match)
+        else:
+            local_p=torch.sigmoid(
+                ((match-thresholds[ss,None])/spreads[ss,None]).clamp(-6,6)
+            )
+            modified=base+strength*local_cost_margin[ss,None]*(1-local_p)
+        epsilon=float((base.quantile(.75)-base.quantile(.25)).clamp_min(.5))*.20
+        ta,da=_diagnostic_sinkhorn(
+            alpha.detach()[ss],beta.detach()[tt],base,temperature=epsilon)
+        tb,db=_diagnostic_sinkhorn(
+            alpha.detach()[ss],beta.detach()[tt],modified,temperature=epsilon)
+        diag["subset_sinkhorn"]={
+            "kind":"fixed_coverage_64x64_entropic_plan_not_full_GeomLoss",
+            "epsilon":epsilon,
+            "source_count":di,"target_count":dj,
+            "max_marginal_error":max(da["max_marginal_error"],db["max_marginal_error"]),
+            "transport_l1_change":float((ta-tb).abs().sum()),
+            "transport_linf_change":float((ta-tb).abs().max()),
+            "original_pair_bonus_mass":float((ta*match).sum()),
+            "v2_pair_bonus_mass":float((tb*match).sum()),
+            "original_pair_base_cost":float((ta*base).sum()),
+            "v2_pair_base_cost":float((tb*base).sum()),
+            "target_column_max_abs_change":float((ta.sum(0)-tb.sum(0)).abs().max()),
+            "source_row_max_abs_change":float((ta.sum(1)-tb.sum(1)).abs().max()),
+        }
+
+    def cost(xx,yy):
+        # Identical orientation behavior to the verified V1 callback.
+        if (xx.ndim!=3 or yy.ndim!=3 or xx.shape[0]!=1 or yy.shape[0]!=1
+            or xx.shape[-1]!=yy.shape[-1]):
+            raise ValueError("Unexpected GeomLoss V2 cost rank/batch/features")
+        sf=xx.shape[1]==ns and yy.shape[1]==nt
+        tf=xx.shape[1]==nt and yy.shape[1]==ns
+        if not sf and not tf:
+            raise ValueError("Unexpected GeomLoss V2 source/target dimensions")
+        if sf and tf:
+            if xx.data_ptr()==x.data_ptr():
+                sf=True
+            elif xx.data_ptr()==y.data_ptr():
+                sf=False
+            else:
+                raise ValueError("Ambiguous source/target OT cost orientation")
+        pieces=[]
+        if sf:
+            for start in range(0,ns,block_size):
+                stop=min(ns,start+block_size)
+                base=torch.cdist(xx[:,start:stop,:],yy,p=2)
+                add=_penalty_from_bonus(bonus_rows(start,stop),start,stop)
+                pieces.append(base+add.to(dtype=base.dtype)[None,:,:])
+        else:
+            # GeomLoss can request cost(target, source.detach()) for dual
+            # Sinkhorn. Return EXACT TRANSPOSE of source-first penalty.
+            for start in range(0,nt,block_size):
+                stop=min(nt,start+block_size)
+                base=torch.cdist(xx[:,start:stop,:],yy,p=2)
+                # [source,target_block], then transpose to [target_block,source]
+                b=src_keys.new_zeros((ns,stop-start))
+                for h in range(3):
+                    b+=(src_keys[:,h,:]@tgt_keys[start:stop,h,:].T)/3.0
+                add=_penalty_from_bonus(b.clamp(0,1),0,ns).T
+                pieces.append(base+add.to(dtype=base.dtype)[None,:,:])
+        return torch.cat(pieces,dim=1)
+
+    return cost, diag, feedback
