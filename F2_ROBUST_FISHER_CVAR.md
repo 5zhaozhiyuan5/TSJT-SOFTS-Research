@@ -18,8 +18,8 @@ source-side F2 marginal `alpha`; target `beta` is returned unchanged.
 ### 1. Geometric-median target reference (robust statistics)
 
 Pillutla, Kakade and Harchaoui, *Robust Aggregation for Federated Learning*,
-NeurIPS 2022 (original arXiv 2019), motivates replacing an arithmetic mean
-of potentially corrupted updates by an approximate geometric median.
+IEEE Transactions on Signal Processing, 2022, motivates replacing an arithmetic
+mean of potentially corrupted updates by an approximate geometric median.
 Zuo et al., *Byzantine-resilient Federated Learning With Adaptivity to Data
 Heterogeneity*, 2024, also applies geometric-median aggregation under
 heterogeneous data.
@@ -59,17 +59,29 @@ F_{hd}=\frac{1}{B_t}\sum_b (G_{b,hd}^t)^2,
 \qquad
 P_{hd}=\frac{1}{F_{hd}+\lambda_F\,\operatorname{mean}(F)+\epsilon}.
 ]
-Define the Fisher-metric cosine:
-[
-s_i^{IF}=\frac{\langle g_i^s,P\odot G_t\rangle_F}
-{\sqrt{\langle g_i^s,P\odot g_i^s\rangle_F
-\langle G_t,P\odot G_t\rangle_F}+\epsilon}.
-]
-This is an influence-inspired, diagonal-Fisher preconditioned compatibility
-score, **not an exact Hessian influence function** and not a claim of exact
-curvature. It requires no second derivatives and no extra autograd pass.
-The diagonal estimate is regularized by relative damping to avoid unstable
-near-zero coordinates.
+For a virtual preconditioned source step
+\[
+\theta_i'=\theta-\eta P\odot g_i^s,
+\]
+the first-order target-loss reduction is
+\[
+U_i^{IF}=\langle G_t,P\odot g_i^s\rangle_F,
+\qquad
+L_t(\theta)-L_t(\theta_i')\approx\eta U_i^{IF}.
+\]
+For stable marginal construction, robustly standardize these utilities across
+source samples:
+\[
+\widehat U_i^{IF}=
+\tanh\!\left(\operatorname{clip}\!\left(
+\frac{U_i^{IF}-\operatorname{median}(U^{IF})}
+{1.4826\operatorname{MAD}(U^{IF})+\epsilon},-4,4\right)\right).
+\]
+This is an influence-inspired, damped diagonal-Fisher first-order utility
+proxy, **not an exact Hessian influence function** or an exact Hessian inverse.
+It requires no second derivatives or extra autograd pass. The diagonal
+estimate is regularized by relative damping to avoid unstable near-zero
+coordinates.
 
 ### 3. Lower-tail CVaR across temporal support blocks (DRO/risk measures)
 
@@ -80,14 +92,16 @@ NeurIPS 2020, study CVaR as a coherent risk measure in learning.
 
 Preserve target-window order and split each source city's assigned target
 support group into (K) contiguous, balanced temporal blocks. For block (k),
-form its mean target readout gradient (G_k^t) and compute compatibility
-(s_{ik}=\cos(g_i^s,G_k^t)) (or its Fisher-metric version). The empirical
-lower-tail score is
-[
-\operatorname{CVaR}^{lower}_q(s_i)=
+form its mean target readout gradient \(G_k^t\), compute the Fisher-preconditioned
+utility \(U_{ik}^{IF}=\langle G_k^t,P\odot g_i^s\rangle_F\), and robustly
+standardize it across source samples to obtain \(\widehat U_{ik}^{IF}\).
+The empirical lower-tail score is
+\[
+\operatorname{CVaR}^{lower}_q(\widehat U_i)=
 \frac{1}{\lceil qK\rceil}
-\sum_{k\in\operatorname{Bottom}_{\lceil qK\rceil}(s_{ik})}s_{ik}.
-]
+\sum_{k\in\operatorname{Bottom}_{\lceil qK\rceil}(\widehat U_{ik}^{IF})}
+\widehat U_{ik}^{IF}.
+\]
 It rewards samples that remain compatible in the less favorable target
 temporal blocks, rather than samples that score highly only against the
 overall mean. It is a robustness criterion, not a guarantee that every
@@ -99,8 +113,8 @@ The combined score retains original F2 as an anchor and adds the three
 selected ideas:
 [
 s_i^{triple}=0.20s_i^{F2}
-+0.40s_i^{GM-Fisher}
-+0.40\operatorname{CVaR}^{lower}_q(s_i^{Fisher,block}).
++0.40\widehat U_i^{GM-IF}
++0.40\operatorname{CVaR}^{lower}_q(\widehat U_i^{IF,block}).
 ]
 Then:
 [
@@ -113,8 +127,8 @@ outperform any single component.
 ## Ablation methods
 
 - `geomed`: geometric-median target reference + ordinary cosine.
-- `influence`: diagonal-Fisher preconditioned compatibility using the mean
-  target reference (influence-inspired, not exact IF).
+- `influence`: diagonal-Fisher preconditioned first-order target-loss
+  improvement proxy using the mean target reference (not exact IF).
 - `cvar`: 50% original-F2 / 50% lower-tail block compatibility.
 - `triple`: all three ideas with the formula above.
 - `original`: original F2 control.
@@ -138,7 +152,7 @@ attribution rather than only comparing a large combined module with F2.
 Every method logs:
 - geometric-median shift from the mean and cosine to the mean;
 - diagonal-Fisher scale, p90 and preconditioner p90/p10;
-- original F2, geometric-median, Fisher and robust-Fisher score means;
+- original F2, geometric-median, Fisher-metric and influence-utility score means;
 - number of temporal blocks, lower-tail block count, CVaR mean/p10;
 - across-block score standard deviation;
 - final score mean/std, source ESS, source alpha L1 shift and target beta
