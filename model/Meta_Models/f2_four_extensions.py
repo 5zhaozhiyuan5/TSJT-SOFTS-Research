@@ -11,10 +11,11 @@ Inspirations, NOT exact reproductions:
   ema  : GradVac (ICLR 2021): historical target-gradient reference.
   biot : importance-weighted / unbalanced OT (ICML 2026): two-sided coupling.
 """
+import math
 import torch
 import torch.nn.functional as F
 
-METHODS = ("original", "mag", "sign", "ema", "biot")
+METHODS = ("original", "mag", "sign", "ema", "biot", "geomed", "influence", "cvar", "triple")
 
 
 @torch.no_grad()
@@ -34,6 +35,86 @@ def _rankone_cos(source_features, source_delta, target_grad, eps=1e-12):
                    source_features.float().norm(dim=-1) *
                    target_grad.float().norm() + eps)
     return (numerator / denominator).nan_to_num().clamp(-1, 1)
+
+
+@torch.no_grad()
+def _target_window_gradients(target_features, target_delta):
+    """One 36 x D shared-readout gradient per target time window.
+
+    Sensors are aggregated inside each window, so correlated sensors are not
+    incorrectly treated as independent target observations.
+    """
+    if (target_features.ndim != 3 or target_delta.ndim != 3 or
+            target_features.shape[:2] != target_delta.shape[:2] or
+            target_delta.shape[-1] != 36):
+        raise ValueError("Expected target features [B,N,D] and deltas [B,N,36]")
+    return torch.einsum(
+        "bnh,bnd->bhd", target_delta.detach().float(),
+        target_features.detach().float()
+    )
+
+
+@torch.no_grad()
+def _geometric_median(points, iterations=6, eps=1e-8):
+    """Weiszfeld approximation to the geometric median of window gradients."""
+    if points.ndim < 2 or points.shape[0] < 1:
+        raise ValueError("Geometric median needs at least one point")
+    flat = points.reshape(points.shape[0], -1).float()
+    center = flat.mean(dim=0)
+    for _ in range(int(iterations)):
+        distance = torch.linalg.vector_norm(flat - center, dim=1).clamp_min(eps)
+        weight = distance.reciprocal()
+        updated = (flat * weight[:, None]).sum(dim=0) / weight.sum().clamp_min(eps)
+        center = updated
+    return center.reshape(points.shape[1:])
+
+
+@torch.no_grad()
+def _diagonal_fisher_precision(window_gradients, damping=0.1, eps=1e-12):
+    """Damped inverse diagonal empirical-Fisher proxy from target windows."""
+    fisher_diag = window_gradients.float().square().mean(dim=0)
+    scale = fisher_diag.mean().clamp_min(eps)
+    precision = (fisher_diag + float(damping) * scale + eps).reciprocal()
+    return precision, fisher_diag
+
+
+@torch.no_grad()
+def _rankone_metric_cos(source_features, source_delta, target_grad,
+                        precision, eps=1e-12):
+    """Fisher-metric cosine without materializing dense per-source gradients."""
+    fs = source_features.float()
+    ds = source_delta.float()
+    target_grad = target_grad.float()
+    precision = precision.float()
+    dot = torch.einsum("nh,hd,nd->n", ds, precision * target_grad, fs)
+    source_norm_sq = torch.einsum(
+        "nh,hd,nd->n", ds.square(), precision, fs.square()
+    ).clamp_min(0)
+    target_norm_sq = (precision * target_grad.square()).sum().clamp_min(0)
+    denominator = (source_norm_sq * target_norm_sq).sqrt() + eps
+    return torch.nan_to_num(dot / denominator).clamp(-1.0, 1.0)
+
+
+@torch.no_grad()
+def _temporal_block_gradients(window_gradients, requested_blocks=5):
+    """Chronologically split target windows into contiguous, balanced blocks."""
+    n_windows = int(window_gradients.shape[0])
+    if n_windows < 2:
+        return window_gradients.mean(dim=0, keepdim=True)
+    # Keep at least five windows in a block where possible; the PMME target
+    # groups can be as small as 15 windows (three blocks of five).
+    n_blocks = min(int(requested_blocks), max(2, n_windows // 5), n_windows)
+    chunks = torch.tensor_split(window_gradients, n_blocks, dim=0)
+    return torch.stack([chunk.mean(dim=0) for chunk in chunks if chunk.shape[0]], dim=0)
+
+
+@torch.no_grad()
+def _lower_tail_mean(scores, tail_fraction=0.4):
+    """Empirical lower-tail CVaR of compatibility scores [blocks, samples]."""
+    if scores.ndim != 2 or scores.shape[0] < 1:
+        raise ValueError("CVaR expects [num_blocks, num_samples] scores")
+    tail_count = max(1, int(math.ceil(float(tail_fraction) * scores.shape[0])))
+    return scores.sort(dim=0).values[:tail_count].mean(dim=0), tail_count
 
 
 @torch.no_grad()
@@ -125,7 +206,9 @@ def compute_f2_extension(source_features, source_delta,
                          state=None, state_key=None,
                          mag_lambda=1.0, sign_lambda=1.5,
                          ema_momentum=0.85, ema_blend=0.40,
-                         temperature=8.0, biot_blend=0.40):
+                         temperature=8.0, biot_blend=0.40,
+                         geomed_iters=6, fisher_damping=0.1,
+                         cvar_blocks=5, cvar_tail_fraction=0.4):
     """Compute enhanced marginal weights under one mutually exclusive method.
 
     Source/target features: [B,N,128], output deltas: [B,N,36].
@@ -149,6 +232,12 @@ def compute_f2_extension(source_features, source_delta,
             0 <= biot_blend <= 1 and mag_lambda >= 0 and
             sign_lambda >= 0 and temperature > 0):
         raise ValueError("Invalid extension coefficient")
+    if (not isinstance(geomed_iters, int) or geomed_iters < 1 or
+            not math.isfinite(fisher_damping) or fisher_damping <= 0 or
+            not isinstance(cvar_blocks, int) or cvar_blocks < 2 or
+            not math.isfinite(cvar_tail_fraction) or
+            not 0 < cvar_tail_fraction <= 1):
+        raise ValueError("Invalid robust/Fisher/CVaR extension settings")
     a, b = a0, b0
     info = {"method": method}
     if method == "mag":
@@ -216,10 +305,125 @@ def compute_f2_extension(source_features, source_delta,
             fs, ds, ft, dt, a0, b0, blend=biot_blend
         )
         info.update(grouped)
+    elif method in ("geomed", "influence", "cvar", "triple"):
+        # Keep [target windows, sensors, ...] until after target-window
+        # gradients are formed; do not treat sensors as independent windows.
+        target_window_grad = _target_window_gradients(
+            target_features, target_delta
+        )
+        mean_target_grad = target_window_grad.mean(dim=0)
+        robust_target_grad = _geometric_median(
+            target_window_grad, iterations=geomed_iters
+        )
+        block_grads = _temporal_block_gradients(
+            target_window_grad, requested_blocks=cvar_blocks
+        )
+        precision, fisher_diag = _diagonal_fisher_precision(
+            target_window_grad, damping=fisher_damping
+        )
+
+        # Original F2 reference score (mean target gradient).
+        f2_score = _rankone_cos(fs, ds, mean_target_grad)
+        # Robust-statistics score: geometric median suppresses outlying
+        # target windows before measuring source/target compatibility.
+        geomed_score = _rankone_cos(fs, ds, robust_target_grad)
+        # Influence-inspired score: a damped diagonal empirical-Fisher
+        # inverse supplies a parameter-sensitive metric. This is NOT an
+        # exact Hessian influence function and needs no second derivatives.
+        fisher_score = _rankone_metric_cos(
+            fs, ds, mean_target_grad, precision
+        )
+        robust_fisher_score = _rankone_metric_cos(
+            fs, ds, robust_target_grad, precision
+        )
+
+        block_cos_scores = torch.stack([
+            _rankone_cos(fs, ds, block_grads[k])
+            for k in range(block_grads.shape[0])
+        ], dim=0)
+        block_fisher_scores = torch.stack([
+            _rankone_metric_cos(fs, ds, block_grads[k], precision)
+            for k in range(block_grads.shape[0])
+        ], dim=0)
+        cvar_score, tail_count = _lower_tail_mean(
+            block_cos_scores, tail_fraction=cvar_tail_fraction
+        )
+        fisher_cvar_score, _ = _lower_tail_mean(
+            block_fisher_scores, tail_fraction=cvar_tail_fraction
+        )
+
+        if method == "geomed":
+            final_score = geomed_score
+        elif method == "influence":
+            final_score = fisher_score
+        elif method == "cvar":
+            # Keep the original F2 score as an anchor and add a lower-tail
+            # compatibility term across contiguous target time blocks.
+            final_score = 0.5 * f2_score + 0.5 * cvar_score
+        else:
+            # Three-way mechanism: robust center + Fisher geometry +
+            # worst-block risk. Original F2 remains as a conservative anchor.
+            final_score = (
+                0.20 * f2_score +
+                0.40 * robust_fisher_score +
+                0.40 * fisher_cvar_score
+            )
+
+        a = torch.softmax(temperature * final_score, dim=0)
+        mean_grad_norm = mean_target_grad.norm().clamp_min(1e-12)
+        info.update({
+            "target_windows": int(target_window_grad.shape[0]),
+            "target_sensors_per_window": int(target_features.shape[1]),
+            "geomed_iterations": int(geomed_iters),
+            "geomed_shift_rel": float(
+                (robust_target_grad - mean_target_grad).norm() / mean_grad_norm
+            ),
+            "geomed_vs_mean_cos": float(F.cosine_similarity(
+                robust_target_grad.reshape(1, -1),
+                mean_target_grad.reshape(1, -1), dim=1
+            )[0]),
+            "fisher_damping": float(fisher_damping),
+            "fisher_diag_mean": float(fisher_diag.mean()),
+            "fisher_diag_p90": float(torch.quantile(
+                fisher_diag.reshape(-1),
+                torch.tensor(0.90, device=fisher_diag.device)
+            )),
+            "fisher_precision_p90_p10": float(
+                torch.quantile(precision.reshape(-1), torch.tensor(
+                    0.90, device=precision.device
+                )) /
+                torch.quantile(precision.reshape(-1), torch.tensor(
+                    0.10, device=precision.device
+                )).clamp_min(1e-12)
+            ),
+            "f2_score_mean": float(f2_score.mean()),
+            "geomed_score_mean": float(geomed_score.mean()),
+            "fisher_score_mean": float(fisher_score.mean()),
+            "robust_fisher_score_mean": float(robust_fisher_score.mean()),
+            "cvar_blocks": int(block_grads.shape[0]),
+            "cvar_tail_fraction": float(cvar_tail_fraction),
+            "cvar_tail_count": int(tail_count),
+            "cvar_score_mean": float(cvar_score.mean()),
+            "cvar_score_p10": float(torch.quantile(
+                cvar_score, torch.tensor(0.10, device=cvar_score.device)
+            )),
+            "fisher_cvar_score_mean": float(fisher_cvar_score.mean()),
+            "block_score_std_mean": float(
+                block_cos_scores.std(dim=0, unbiased=False).mean()
+            ),
+            "final_score_mean": float(final_score.mean()),
+            "final_score_std": float(final_score.std(unbiased=False)),
+            "prediction_horizon_split": False,
+            "target_marginal_unchanged": True,
+        })
     a = a.clamp_min(0)
     b = b.clamp_min(0)
     a /= a.sum().clamp_min(1e-15)
-    b /= b.sum().clamp_min(1e-15)
+    if method in ("geomed", "influence", "cvar", "triple"):
+        # These are source-only F2 refinements; preserve target beta exactly.
+        b = beta_prior.detach().float().reshape(-1)
+    else:
+        b /= b.sum().clamp_min(1e-15)
     if not (torch.isfinite(a).all() and torch.isfinite(b).all()):
         raise FloatingPointError("F2 extension produced nonfinite marginals")
     if a.min() < 0 or b.min() < 0:
