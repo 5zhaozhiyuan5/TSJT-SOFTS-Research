@@ -1,0 +1,32 @@
+name: F2 DPM-V2 dynamic reliability OT CPU validation
+
+on:
+  push:
+    branches:
+      - experiment/pmme-f2-dpm-v2-dynamic-reliability-ot-20261127
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dpm-v2-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU PyTorch and GeomLoss
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install geomloss numpy
+      - name: Syntax and runner validation
+        run: |
+          python -m compileall -q model/Meta_Models/PMME.py model/Meta_Models/dpm_pattern_attention_ot.py
+          bash -n run_f2_dpm_v2_ab.sh
+      - name: Original V1 and new V2 bank, attention, GeomLoss tests
+        run: |
+          python -m unittest discover -s tests -p 'test_dpm_pattern_attention_ot.py' -v
+          python -m unittest discover -s tests -p 'test_dpm_v2.py' -v
