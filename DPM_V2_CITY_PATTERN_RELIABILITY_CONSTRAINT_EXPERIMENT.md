@@ -199,9 +199,24 @@ It does not overwrite the paired V2-A/V2-B runs.
 5. Stage-I and Stage-II: check whether Stage-I matching gains survive official
    Stage-II adaptation.
 
-First run a short smoke test with a fresh run root and reduced epochs. Only
-after the code path, logs and checkpoints are verified should the full run be
-started. If seed 1 is promising, repeat with seeds 2 and 3.
+First run a short smoke test with a fresh run root and reduced epochs.
+The runner executes `py_compile` and the CPRC CPU unit tests before training.
+Example smoke command:
+
+```bash
+PMME_DPM_STAGE1_EPOCHS=3 \
+PMME_DPM_STAGE2_EPOCHS=1 \
+PMME_DPM_DAEPOCH=2 \
+PMME_DPM_INTERVAL=1 \
+PMME_DPM_V2_LOG_INTERVAL=1 \
+PMME_DPM_CPRC_RUN_ROOT="$PWD/experiments/dpm-v2-cprc-smoke" \
+PMME_DPM_CPRC_SKIP_SUMMARY=1 \
+bash run_f2_dpm_v2_city_pattern_constraint.sh
+```
+
+Only after the code path, logs and checkpoints are verified should the full
+3000/6000-epoch run be started. If seed 1 is promising, repeat with seeds 2
+and 3.
 
 ### Interpretation guardrails
 
