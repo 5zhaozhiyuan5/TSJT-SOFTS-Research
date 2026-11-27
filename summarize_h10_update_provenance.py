@@ -12,7 +12,7 @@ from pathlib import Path
 POLICIES=(
     "t0_no_update","t0f_train_forward_only","t1_zero_grad_adamw",
     "t2_source_only","t3_target_only","t4_source_pcgrad",
-    "t5_official_f2","t6_full_pcgrad","t7_project_ot_half"
+    "t5_official_f2","t6_no_pcgrad","t7_project_ot_half"
 )
 
 
@@ -66,7 +66,7 @@ def summarize(obj):
                 "vs_official_f2_mae":all_score["t5_official_f2"]["mae"]-x["mae"],
                 "vs_source_only_mae":all_score["t2_source_only"]["mae"]-x["mae"],
                 "vs_source_pcgrad_mae":all_score["t4_source_pcgrad"]["mae"]-x["mae"],
-                "vs_full_pcgrad_mae":all_score["t6_full_pcgrad"]["mae"]-x["mae"],
+                "vs_full_pcgrad_mae":all_score["t6_no_pcgrad"]["mae"]-x["mae"],
                 "short_mae":x["horizon_band_mae"]["short"],
                 "mid_mae":x["horizon_band_mae"]["mid"],
                 "long_mae":x["horizon_band_mae"]["long"],
@@ -108,7 +108,7 @@ def summarize(obj):
             first["t4_source_pcgrad"]["dev_mae"]-
             first["t5_official_f2"]["dev_mae"],
         "pcgrad_value_official_f2_vs_no_pcgrad":
-            first["t6_full_pcgrad"]["dev_mae"]-
+            first["t6_no_pcgrad"]["dev_mae"]-
             first["t5_official_f2"]["dev_mae"],
         "projected_ot_vs_official_f2":
             first["t5_official_f2"]["dev_mae"]-
