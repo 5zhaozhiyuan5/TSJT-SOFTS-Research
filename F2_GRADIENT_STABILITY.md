@@ -55,7 +55,7 @@ The per-sample target-reference sensitivity is
 \[
 \sigma_i=
 \sqrt{\frac{1}{K}\sum_{k=1}^{K}
-(s_i^{(k)}-\bar{s}_i)^2+\epsilon},
+(s_i^{(k)}-\bar{s}_i)^2},
 \qquad
 \bar{s}_i=\frac{1}{K}\sum_{k=1}^{K}s_i^{(k)}.
 \]
@@ -84,9 +84,12 @@ the source marginal. The target marginal remains F2's original uniform beta.
 
 The resampling unit is the target window (batch dimension B). All sensors within
 a selected window remain together to avoid treating spatially correlated
-sensor gradients as independent target samples. The gradients are obtained
-from already-computed projection2 output deltas and features; no additional
-autograd backward pass or trainable parameter is introduced.
+sensor gradients as independent target samples. Because sliding windows can
+overlap in time, sigma is interpreted as empirical support-perturbation
+sensitivity, not an unbiased variance estimate under an i.i.d. assumption.
+The gradients are obtained from already-computed projection2 output deltas
+and features; no additional autograd backward pass or trainable parameter is
+introduced.
 
 ## Diagnostics
 
