@@ -154,6 +154,11 @@ if (
     echo "[ERROR] Pattern bank or attention OT not active in real training" >&2
     touch "$WORK/FAILED"; tail -n 45 "$WORK/train.out" >&2; exit 1
   fi
+  if [[ "${PMME_DPM_CPRC_SKIP_SUMMARY:-0}" == "1" ]]; then
+    touch "$WORK/SMOKE_COMPLETED"
+    echo "[DONE] CPRC smoke run; training markers verified, summaries intentionally skipped."
+    exit 0
+  fi
   touch "$WORK/COMPLETED"
   if ! python "$ROOT/summarize_dpm_pattern_attention_ot.py" --run-root "$RUN_ROOT" \
        >"$RUN_ROOT/summary.txt" 2>"$RUN_ROOT/summary.err"; then
