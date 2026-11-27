@@ -331,7 +331,11 @@ def compute_f2_extension(source_features, source_delta,
     a = a.clamp_min(0)
     b = b.clamp_min(0)
     a /= a.sum().clamp_min(1e-15)
-    b /= b.sum().clamp_min(1e-15)
+    if method == "stability":
+        # F2-GS is source-only calibration: preserve F2's target beta exactly.
+        b = beta_prior.detach().float().reshape(-1)
+    else:
+        b /= b.sum().clamp_min(1e-15)
     if not (torch.isfinite(a).all() and torch.isfinite(b).all()):
         raise FloatingPointError("F2 extension produced nonfinite marginals")
     if a.min() < 0 or b.min() < 0:
