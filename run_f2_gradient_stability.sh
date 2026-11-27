@@ -12,6 +12,7 @@ fi
 
 RUN_ROOT="${PMME_F2_RUN_ROOT:-$ROOT/experiments/f2-gradient-stability-20261128}"
 SEEDS_TEXT="${PMME_F2_SEEDS:-1}"
+METHOD="${PMME_F2_METHOD:-stability}"
 GPU="${PMME_GPU:-0}"
 THREADS="${PMME_THREADS:-4}"
 SCALE="${PMME_F2_OT_SCALE:-0.01}"
@@ -23,6 +24,7 @@ SUBSAMPLES="${PMME_F2_STABILITY_SUBSAMPLES:-6}"
 RATIO="${PMME_F2_STABILITY_SAMPLE_RATIO:-0.8}"
 COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
 read -r -a SEEDS <<< "$SEEDS_TEXT"
+[[ "$METHOD" == "original" || "$METHOD" == "stability" ]] || { echo "[ERROR] PMME_F2_METHOD must be original or stability" >&2; exit 2; }
 
 python - "$SCALE" "$STAGE1" "$STAGE2" "$DAEPOCH" "$LAMBDA" "$SUBSAMPLES" "$RATIO" "${SEEDS[@]}" <<'PY'
 import math, sys
@@ -43,8 +45,8 @@ for seed in "${SEEDS[@]}"; do
   for folder in data configs model; do
     [[ -e "$WORK/$folder" ]] || ln -s "$ROOT/$folder" "$WORK/$folder"
   done
-  EXPECTED="$(printf 'branch=%s\ngit_commit=%s\nseed=%s\nf2_method=stability\ntransfer_variant=gradient\npair_variant=f2\nfeedback_mode=g0\not_scale=%s\nstage1_epochs=%s\nstage2_epochs=%s\ndaepoch=%s\nlambda=%s\nsubsamples=%s\nsample_ratio=%s\n' \
-    "$EXPECTED_BRANCH" "$COMMIT" "$seed" "$SCALE" "$STAGE1" "$STAGE2" "$DAEPOCH" "$LAMBDA" "$SUBSAMPLES" "$RATIO")"
+  EXPECTED="$(printf 'branch=%s\ngit_commit=%s\nseed=%s\nf2_method=%s\ntransfer_variant=gradient\npair_variant=f2\nfeedback_mode=g0\not_scale=%s\nstage1_epochs=%s\nstage2_epochs=%s\ndaepoch=%s\nlambda=%s\nsubsamples=%s\nsample_ratio=%s\n' \
+    "$EXPECTED_BRANCH" "$COMMIT" "$seed" "$METHOD" "$SCALE" "$STAGE1" "$STAGE2" "$DAEPOCH" "$LAMBDA" "$SUBSAMPLES" "$RATIO")"
   if [[ -f "$WORK/run_config.txt" ]]; then
     [[ "$(cat "$WORK/run_config.txt")" == "$EXPECTED" ]] || {
       echo "[ERROR] Output directory belongs to different code/settings: $WORK" >&2
@@ -55,7 +57,7 @@ for seed in "${SEEDS[@]}"; do
   fi
   [[ -f "$WORK/COMPLETED" ]] && { echo "[SKIP] $WORK"; continue; }
   rm -f "$WORK/FAILED"
-  echo "[START] F2-gradient-stability seed=$seed"
+  echo "[START] F2 method=$METHOD seed=$seed"
   if (
     cd "$WORK"
     export CUDA_VISIBLE_DEVICES="$GPU"
@@ -65,7 +67,7 @@ for seed in "${SEEDS[@]}"; do
     export PMME_PAIR_VARIANT=f2
     export PMME_PAIR_STRENGTH=0
     export PMME_TRANSFER_OT_SCALE="$SCALE"
-    export PMME_F2_METHOD=stability
+    export PMME_F2_METHOD="$METHOD"
     export PMME_F2_STABILITY_LAMBDA="$LAMBDA"
     export PMME_F2_STABILITY_SUBSAMPLES="$SUBSAMPLES"
     export PMME_F2_STABILITY_SAMPLE_RATIO="$RATIO"
@@ -96,10 +98,12 @@ for seed in "${SEEDS[@]}"; do
         touch "$WORK/FAILED"; exit 1
       }
     fi
-    grep -q "f2_extension.*'method': 'stability'" "$WORK/train.out" || {
-      echo "[ERROR] Gradient-stability mechanism did not activate" >&2
-      touch "$WORK/FAILED"; exit 1
-    }
+    if [[ "$METHOD" == "stability" ]]; then
+      grep -q "f2_extension.*'method': 'stability'" "$WORK/train.out" || {
+        echo "[ERROR] Gradient-stability mechanism did not activate" >&2
+        touch "$WORK/FAILED"; exit 1
+      }
+    fi
     touch "$WORK/COMPLETED"
     echo "[DONE] $WORK"
   else
