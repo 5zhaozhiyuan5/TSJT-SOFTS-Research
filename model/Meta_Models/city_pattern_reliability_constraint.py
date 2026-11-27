@@ -130,20 +130,32 @@ class CityPatternReliabilityConstraint:
         score_values = torch.tensor(list(scores.values()), dtype=torch.float64)
         mean_score = float(score_values.mean().clamp_min(1e-8))
         raw = {
-            city: min(
-                self.city_weight_max,
-                max(self.city_weight_min,
-                    (score / mean_score) ** self.city_power)
-            )
+            city: max(1e-8, score / mean_score) ** self.city_power
             for city, score in scores.items()
         }
-        # Mean-one weights preserve the overall Stage-I OT scale when all
-        # source cities have similar predictive reliability.
-        mean_raw = sum(raw.values()) / max(1, len(raw))
+        # Project to bounded mean-one city weights. A bisection scale factor
+        # keeps every weight inside [min,max] while preserving the total
+        # multi-source OT contribution of the original equal-city setting.
+        low, high = 0.0, 100.0
+        for _ in range(60):
+            scale = 0.5 * (low + high)
+            mean_scaled = sum(
+                min(self.city_weight_max,
+                    max(self.city_weight_min, value * scale))
+                for value in raw.values()
+            ) / max(1, len(raw))
+            if mean_scaled < 1.0:
+                low = scale
+            else:
+                high = scale
+        scale = 0.5 * (low + high)
         self.city_scores = scores
         self.city_weights = {
-            city: float(weight / max(mean_raw, 1e-8))
-            for city, weight in raw.items()
+            city: float(min(
+                self.city_weight_max,
+                max(self.city_weight_min, value * scale)
+            ))
+            for city, value in raw.items()
         }
 
     @torch.no_grad()
