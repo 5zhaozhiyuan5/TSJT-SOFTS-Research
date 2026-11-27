@@ -134,8 +134,16 @@ if (
     echo "[ERROR] Checkpoint-selected metrics summary failed" >&2
     tail -n 45 "$RUN_ROOT/summary.err" >&2; exit 1
   fi
+  if ! python "$ROOT/summarize_dpm_v2_diagnostics.py" --run-root "$RUN_ROOT" \
+       >"$RUN_ROOT/dpm_v2_analysis.txt" 2>"$RUN_ROOT/dpm_v2_analysis.err"; then
+    rm -f "$WORK/COMPLETED"; touch "$WORK/FAILED"
+    echo "[ERROR] V2 Q/R and Pi diagnostics summary failed" >&2
+    tail -n 45 "$RUN_ROOT/dpm_v2_analysis.err" >&2
+    exit 1
+  fi
   echo "[DONE] F2 + DPM V2 $MODE dynamic Q/R + local OT; official Stage-II unchanged."
   cat "$RUN_ROOT/summary.txt"
+  cat "$RUN_ROOT/dpm_v2_analysis.txt"
 else
   touch "$WORK/FAILED"
   echo "[ERROR] Training failed; see $WORK/train.out" >&2
