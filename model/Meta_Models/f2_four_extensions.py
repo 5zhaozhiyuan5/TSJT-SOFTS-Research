@@ -1,4 +1,4 @@
-"""Four independent F2 marginal estimators (no PFR, gradient surgery or OT-cost edits).
+"""F2 marginal estimators (no PFR, gradient surgery or OT-cost edits).
 
 All sample gradients are the per-node outer products of the original SOFTS
 projection2 output loss gradients and its 128-D input representation.
