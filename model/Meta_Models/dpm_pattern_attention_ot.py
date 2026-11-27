@@ -280,19 +280,53 @@ def build_pattern_attention_cost(
 
     def cost(xx, yy):
         if (xx.ndim!=3 or yy.ndim!=3 or xx.shape[0]!=1 or yy.shape[0]!=1 or
-                xx.shape[1]!=len(x) or yy.shape[1]!=len(y) or
                 xx.shape[-1]!=yy.shape[-1]):
-            raise ValueError("Unexpected GeomLoss tensorized OT cost shapes")
-        chunks=[]
-        for start in range(0,len(x),block_size):
-            stop=min(len(x),start+block_size)
-            base=torch.cdist(xx[:,start:stop,:],yy,p=2)
-            # Precomputed, detached utility: affects the TRANSPORT PLAN
-            # via C, without leaking target labels into backbone gradients.
-            extra=(1.0-pair_bonus(start,stop)/4.0).to(
-                device=base.device,dtype=base.dtype
+            raise ValueError(
+                "Unexpected GeomLoss tensorized OT cost ranks/batch/features: "
+                f"xx={tuple(xx.shape)}, yy={tuple(yy.shape)}"
             )
-            chunks.append(base + coefficient * extra.unsqueeze(0))
+        # GeomLoss's tensorized Sinkhorn backend requests cost(y, x.detach())
+        # as well as cost(x, y.detach()). Accept either orientation and return
+        # the same pairwise DPM penalty transposed for the reverse request.
+        source_first = xx.shape[1]==len(x) and yy.shape[1]==len(y)
+        target_first = xx.shape[1]==len(y) and yy.shape[1]==len(x)
+        if not source_first and not target_first:
+            raise ValueError(
+                "Unexpected GeomLoss tensorized OT sample counts: "
+                f"xx={tuple(xx.shape)}, yy={tuple(yy.shape)}, "
+                f"source={len(x)}, target={len(y)}"
+            )
+        if source_first and target_first:
+            # Equal source/target counts make dimensions ambiguous. GeomLoss
+            # preserves storage for its x/y inputs, including detach().
+            if xx.data_ptr()==x.data_ptr():
+                source_first=True
+            elif xx.data_ptr()==y.data_ptr():
+                source_first=False
+            else:
+                raise ValueError("Cannot identify GeomLoss OT cost orientation")
+        chunks=[]
+        if source_first:
+            for start in range(0,len(x),block_size):
+                stop=min(len(x),start+block_size)
+                base=torch.cdist(xx[:,start:stop,:],yy,p=2)
+                # Detached utility changes the transport plan; the base cost
+                # remains differentiable with respect to the SOFTS features.
+                extra=(1.0-pair_bonus(start,stop)/4.0).to(
+                    device=base.device,dtype=base.dtype
+                )
+                chunks.append(base + coefficient * extra.unsqueeze(0))
+        else:
+            for start in range(0,len(y),block_size):
+                stop=min(len(y),start+block_size)
+                base=torch.cdist(xx[:,start:stop,:],yy,p=2)
+                bonus=target_keys.new_zeros((stop-start,len(x)))
+                for h in range(3):
+                    bonus += target_keys[start:stop,h,:] @ source_keys[:,h,:].T / 3.0
+                extra=(1.0-bonus.clamp(0,4)/4.0).to(
+                    device=base.device,dtype=base.dtype
+                )
+                chunks.append(base + coefficient * extra.unsqueeze(0))
         return torch.cat(chunks,dim=1)
 
     return cost, diagnostic
