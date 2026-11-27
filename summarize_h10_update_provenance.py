@@ -66,7 +66,7 @@ def summarize(obj):
                 "vs_official_f2_mae":all_score["t5_official_f2"]["mae"]-x["mae"],
                 "vs_source_only_mae":all_score["t2_source_only"]["mae"]-x["mae"],
                 "vs_source_pcgrad_mae":all_score["t4_source_pcgrad"]["mae"]-x["mae"],
-                "vs_full_pcgrad_mae":all_score["t6_no_pcgrad"]["mae"]-x["mae"],
+                "vs_no_pcgrad_mae":all_score["t6_no_pcgrad"]["mae"]-x["mae"],
                 "short_mae":x["horizon_band_mae"]["short"],
                 "mid_mae":x["horizon_band_mae"]["mid"],
                 "long_mae":x["horizon_band_mae"]["long"],
