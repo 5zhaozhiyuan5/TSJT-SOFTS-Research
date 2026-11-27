@@ -259,6 +259,10 @@ class SourceEvolutionPatternBank:
             "r_min": float(self.reliability.min()), "r_max": float(self.reliability.max()),
             "q_active_prototypes": int((q_den>0).sum()),
             "r_active_prototypes": int((r_den>0).sum()),
+            "q_by_band_pattern": self.quality.tolist(),
+            "r_by_band_pattern": self.reliability.tolist(),
+            "q_feedback_mass_by_band_pattern": q_den.tolist(),
+            "r_feedback_mass_by_band_pattern": r_den.tolist(),
             "city_summaries": city_summaries,
         }
 
@@ -661,6 +665,12 @@ def build_dynamic_pattern_attention_cost(
         "sample_cost_original_mean":float(diag_base.mean()),
         "sample_cost_modified_mean":float(diag_new.mean()),
         "sample_source_rank_change":float((diag_new.argmin(-1)!=diag_base.argmin(-1)).float().mean()),
+        "sample_local_delta_p05_p50_p95": [
+            float(z) for z in torch.quantile(
+                diag_extra.detach().reshape(-1),
+                torch.tensor([.05,.5,.95],device=x.device)
+            )
+        ],
         "sample_target_rank_change":float((diag_new.argmin(0)!=diag_base.argmin(0)).float().mean()),
         "candidate_bonus_median":float(thresholds.median()),
         "candidate_bonus_iqr_median":float(spreads.median()),
@@ -670,6 +680,24 @@ def build_dynamic_pattern_attention_cost(
         "feedback":feedback["summary"],
     }
     if diagnostics:
+        # Record top attention matches and their original/new costs; these
+        # are indices of flattened node-window samples, NOT pattern IDs.
+        top_count=min(8,diag_bonus.numel())
+        high=diag_bonus.flatten().topk(top_count).indices
+        src_top=(high//td).tolist()
+        tgt_top=(high%td).tolist()
+        diag["sample_best_pattern_pairs"]=[
+            {
+                "source_flat_id":int(si),"target_flat_id":int(tj),
+                "pattern_benefit":float(diag_bonus[si,tj]),
+                "original_cost":float(diag_base[si,tj]),
+                "new_cost":float(diag_new[si,tj]),
+                "src_top_pattern_by_band":source_attention[si].argmax(-1).tolist(),
+                "tgt_top_pattern_by_band":target_attention[tj].argmax(-1).tolist(),
+                "source_skill_by_band":qs[si].tolist(),
+                "target_need_by_band":dt[tj].tolist(),
+            } for si,tj in zip(src_top,tgt_top)
+        ]
         if alpha is None or beta is None or len(alpha)!=ns or len(beta)!=nt:
             raise ValueError("True OT diagnostic requires F2 alpha and beta")
         # Match coverage for the transported comparison; the same subset,
@@ -695,7 +723,20 @@ def build_dynamic_pattern_attention_cost(
             alpha.detach()[ss],beta.detach()[tt],base,temperature=epsilon)
         tb,db=_diagnostic_sinkhorn(
             alpha.detach()[ss],beta.detach()[tt],modified,temperature=epsilon)
+        diff=(tb-ta).flatten()
+        largest=diff.abs().topk(min(6,diff.numel())).indices
+        changed_pairs=[
+            {
+                "source_flat_id":int(ss[k//dj]),
+                "target_flat_id":int(tt[k%dj]),
+                "pi_f2":float(ta.flatten()[k]),
+                "pi_v2":float(tb.flatten()[k]),
+                "delta_pi":float(diff[k]),
+                "pattern_benefit":float(match.flatten()[k]),
+            } for k in largest.tolist()
+        ]
         diag["subset_sinkhorn"]={
+            "largest_transport_changes":changed_pairs,
             "kind":"fixed_coverage_64x64_entropic_plan_not_full_GeomLoss",
             "epsilon":epsilon,
             "source_count":di,"target_count":dj,
