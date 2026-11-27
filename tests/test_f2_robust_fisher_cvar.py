@@ -99,6 +99,8 @@ class RobustF2Tests(unittest.TestCase):
         self.assertLess(float(utility[1]), 0.0)
         standardized = _robust_tanh_standardize(utility)
         self.assertTrue(torch.isfinite(standardized).all())
+        self.assertGreater(float(standardized[0]), 0.0)
+        self.assertLess(float(standardized[1]), 0.0)
         self.assertTrue(bool((standardized.abs() <= 1.0).all()))
 
     def test_cvar_uses_lower_tail_not_mean(self):
