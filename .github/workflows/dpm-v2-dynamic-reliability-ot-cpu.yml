@@ -24,10 +24,12 @@ jobs:
           python -m pip install geomloss numpy
       - name: Syntax and runner validation
         run: |
-          python -m compileall -q model/Meta_Models/PMME.py model/Meta_Models/dpm_pattern_attention_ot.py
+          python -m compileall -q model/Meta_Models/PMME.py model/Meta_Models/dpm_pattern_attention_ot.py model/Meta_Models/city_pattern_reliability_constraint.py
           bash -n run_f2_dpm_v2_ab.sh
+          bash -n run_f2_dpm_v2_city_pattern_constraint.sh
       - name: Original V1 and new V2 bank, attention, GeomLoss tests
         run: |
           python -m unittest discover -s tests -p 'test_dpm_pattern_attention_ot.py' -v
+          python -m unittest discover -s tests -p 'test_city_pattern_reliability_constraint.py' -v
           python -m unittest discover -s tests -p 'test_dpm_v2.py' -v
           python -m unittest discover -s tests -p 'test_dpm_v2_analyzer.py' -v
