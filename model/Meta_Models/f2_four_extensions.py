@@ -11,10 +11,11 @@ Inspirations, NOT exact reproductions:
   ema  : GradVac (ICLR 2021): historical target-gradient reference.
   biot : importance-weighted / unbalanced OT (ICML 2026): two-sided coupling.
 """
+import math
 import torch
 import torch.nn.functional as F
 
-METHODS = ("original", "mag", "sign", "ema", "biot")
+METHODS = ("original", "mag", "sign", "ema", "biot", "stability")
 
 
 @torch.no_grad()
@@ -34,6 +35,71 @@ def _rankone_cos(source_features, source_delta, target_grad, eps=1e-12):
                    source_features.float().norm(dim=-1) *
                    target_grad.float().norm() + eps)
     return (numerator / denominator).nan_to_num().clamp(-1, 1)
+
+
+@torch.no_grad()
+def _target_subsample_cosine_dispersion(
+    source_features, source_delta, target_features, target_delta,
+    n_subsamples=6, sample_ratio=0.8, seed=0,
+):
+    """Estimate per-source cosine uncertainty by resampling target windows.
+
+    The resampling unit is the target support window (dimension B), not an
+    individual sensor/node and not a prediction horizon. Every sampled window
+    retains all of its sensors, preserving within-window spatial dependence.
+    Gradients are measured on the same full prediction-head dimensions as F2.
+    """
+    if (target_features.ndim != 3 or target_delta.ndim != 3 or
+            target_features.shape[:2] != target_delta.shape[:2] or
+            target_features.shape[-1] != source_features.shape[-1] or
+            target_delta.shape[-1] != source_delta.shape[-1]):
+        raise ValueError("Target window feature/delta shapes do not match source head")
+    if not isinstance(n_subsamples, int) or n_subsamples < 2:
+        raise ValueError("n_subsamples must be >= 2")
+    if not (0.5 <= sample_ratio <= 1.0):
+        raise ValueError("sample_ratio must be in [0.5, 1.0]")
+
+    n_windows = target_features.shape[0]
+    if n_windows < 3:
+        zeros = source_features.new_zeros(
+            source_features.shape[0], dtype=torch.float32
+        )
+        return zeros, {
+            "bootstrap_active": False,
+            "bootstrap_reason": "fewer_than_3_target_windows",
+            "bootstrap_windows": int(n_windows),
+            "bootstrap_subset_windows": int(n_windows),
+            "bootstrap_subsamples": 0,
+        }
+
+    subset_windows = max(
+        2, min(n_windows, int(math.ceil(sample_ratio * n_windows)))
+    )
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(int(seed) % (2**31 - 1))
+    scores = []
+    for _ in range(n_subsamples):
+        # Repeated random subsampling without replacement.
+        ids = torch.randperm(n_windows, generator=generator)[:subset_windows]
+        ids = ids.to(device=target_features.device)
+        f_sub = target_features.index_select(0, ids).reshape(
+            -1, target_features.shape[-1]
+        ).float()
+        d_sub = target_delta.index_select(0, ids).reshape(
+            -1, target_delta.shape[-1]
+        ).float()
+        g_target_sub = _target_gradient(f_sub, d_sub)
+        scores.append(_rankone_cos(source_features, source_delta, g_target_sub))
+
+    score_matrix = torch.stack(scores, dim=0)
+    return score_matrix.mean(dim=0), score_matrix.std(dim=0, unbiased=False), {
+        "bootstrap_active": True,
+        "bootstrap_windows": int(n_windows),
+        "bootstrap_subset_windows": int(subset_windows),
+        "bootstrap_subsamples": int(n_subsamples),
+        "bootstrap_sample_ratio": float(sample_ratio),
+        "bootstrap_seed": int(seed),
+    }
 
 
 @torch.no_grad()
@@ -125,7 +191,9 @@ def compute_f2_extension(source_features, source_delta,
                          state=None, state_key=None,
                          mag_lambda=1.0, sign_lambda=1.5,
                          ema_momentum=0.85, ema_blend=0.40,
-                         temperature=8.0, biot_blend=0.40):
+                         temperature=8.0, biot_blend=0.40,
+                         stability_lambda=0.5, stability_subsamples=6,
+                         stability_sample_ratio=0.8, stability_seed=0):
     """Compute enhanced marginal weights under one mutually exclusive method.
 
     Source/target features: [B,N,128], output deltas: [B,N,36].
@@ -216,6 +284,50 @@ def compute_f2_extension(source_features, source_delta,
             fs, ds, ft, dt, a0, b0, blend=biot_blend
         )
         info.update(grouped)
+    elif method == "stability":
+        if (not math.isfinite(stability_lambda) or stability_lambda < 0 or
+                not isinstance(stability_subsamples, int) or
+                stability_subsamples < 2 or
+                not 0.5 <= stability_sample_ratio <= 1.0):
+            raise ValueError("Invalid F2 gradient-stability settings")
+        full_target_gradient = _target_gradient(ft, dt)
+        full_cosine = _rankone_cos(fs, ds, full_target_gradient)
+        _, cosine_std, sampling = _target_subsample_cosine_dispersion(
+            fs, ds,
+            target_features.detach().float(),
+            target_delta.detach().float(),
+            n_subsamples=stability_subsamples,
+            sample_ratio=stability_sample_ratio,
+            seed=stability_seed,
+        )
+        # Lower-confidence-bound calibration: retain F2's full-support
+        # alignment score, subtract only its target-support sensitivity.
+        robust_score = full_cosine - stability_lambda * cosine_std
+        a = torch.softmax(temperature * robust_score, dim=0)
+        info.update(sampling)
+        info.update({
+            "gradient_dimensions": int(ds.shape[-1]),
+            "prediction_horizon_split": False,
+            "stability_lambda": float(stability_lambda),
+            "full_cos_mean": float(full_cosine.mean()),
+            "full_cos_std": float(full_cosine.std(unbiased=False)),
+            "bootstrap_cos_std_mean": float(cosine_std.mean()),
+            "bootstrap_cos_std_median": float(cosine_std.median()),
+            "bootstrap_cos_std_p90": float(torch.quantile(
+                cosine_std, torch.tensor(0.90, device=cosine_std.device)
+            )),
+            "uncertainty_penalty_mean": float(
+                (stability_lambda * cosine_std).mean()
+            ),
+            "robust_score_mean": float(robust_score.mean()),
+            "robust_score_std": float(robust_score.std(unbiased=False)),
+            "raw_source_ess_frac": float(
+                1.0 / a0.square().sum().clamp_min(1e-15) / a0.numel()
+            ),
+            "unstable_sample_frac": float(
+                (cosine_std > cosine_std.median()).float().mean()
+            ),
+        })
     a = a.clamp_min(0)
     b = b.clamp_min(0)
     a /= a.sum().clamp_min(1e-15)
