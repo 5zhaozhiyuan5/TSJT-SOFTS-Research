@@ -31,7 +31,8 @@ from prediction_reliability import (
 )
 from task_need_skill_ot import dynamics_and_quality, calibrate_bilateral
 from dpm_pattern_attention_ot import (
-    SourceEvolutionPatternBank, build_pattern_attention_cost
+    SourceEvolutionPatternBank, build_pattern_attention_cost,
+    build_dynamic_pattern_attention_cost
 )
 from f2_ot_schedule import validate_schedule, effective_ot_scale, phase as f2_ot_phase
 from f2_four_extensions import METHODS as F2_METHODS, compute_f2_extension
@@ -315,13 +316,27 @@ class STRep(nn.Module):
         self.dpm_per_city = int(os.environ.get("PMME_DPM_BANK_PER_CITY", "128"))
         self.dpm_block_size = int(os.environ.get("PMME_DPM_COST_BLOCK", "128"))
         self.dpm_mode = os.environ.get("PMME_DPM_MODE", "full").strip().lower()
+        self.dpm_v2_ema = float(os.environ.get("PMME_DPM_V2_EMA", "0.08"))
+        self.dpm_v2_source_sample = int(os.environ.get("PMME_DPM_V2_SOURCE_SAMPLE", "256"))
+        self.dpm_v2_target_anchors = int(os.environ.get("PMME_DPM_V2_TARGET_ANCHORS", "128"))
+        self.dpm_v2_candidates = int(os.environ.get("PMME_DPM_V2_CANDIDATES", "12"))
+        self.dpm_v2_skill_mix = float(os.environ.get("PMME_DPM_V2_SKILL_MIX", "0.5"))
+        self.dpm_v2_rho_temp = float(os.environ.get("PMME_DPM_V2_RHO_TEMP", "2.0"))
+        self.dpm_v2_log_interval = int(os.environ.get("PMME_DPM_V2_LOG_INTERVAL", "25"))
+        self.dpm_v2_diag = os.environ.get("PMME_DPM_V2_PLAN_DIAG", "1") == "1"
+        if (not 0 < self.dpm_v2_ema <= 1 or
+            self.dpm_v2_source_sample < 2 or self.dpm_v2_target_anchors < 2 or
+            self.dpm_v2_candidates < 2 or not 0 <= self.dpm_v2_skill_mix <= 1 or
+            not math.isfinite(self.dpm_v2_rho_temp) or self.dpm_v2_rho_temp <= 0 or
+            self.dpm_v2_log_interval < 1):
+            raise ValueError("Invalid PMME_DPM_V2_* configuration")
         if (not math.isfinite(self.dpm_strength) or
             not 0 <= self.dpm_strength <= 1 or
             self.dpm_k < 2 or
             not math.isfinite(self.dpm_temperature) or
             self.dpm_temperature <= 0 or self.dpm_interval < 1 or
             self.dpm_per_city < 1 or self.dpm_block_size < 1 or
-            self.dpm_mode not in ("full", "pattern")):
+            self.dpm_mode not in ("full", "pattern", "v2a", "v2b")):
             raise ValueError("Invalid DPM pattern library / attention OT settings")
         self.dpm_bank = None
         if self.dpm_strength > 0:
@@ -465,6 +480,18 @@ class STRep(nn.Module):
               "cost_block", self.dpm_block_size,
               "active", self.dpm_strength > 0,
               "f2_marginals_unchanged", True, flush=True)
+        print("PMME_DPM_V2_CONFIG", "enabled", self.dpm_mode in ("v2a","v2b"),
+              "mode", self.dpm_mode, "ema", self.dpm_v2_ema,
+              "source_feedback_sample", self.dpm_v2_source_sample,
+              "target_anchors", self.dpm_v2_target_anchors,
+              "candidate_top_l", self.dpm_v2_candidates,
+              "skill_mix", self.dpm_v2_skill_mix,
+              "rho_temperature", self.dpm_v2_rho_temp,
+              "log_interval", self.dpm_v2_log_interval,
+              "subset_plan_diagnostic", self.dpm_v2_diag,
+              "bank_centers_frozen", True,
+              "update_only_after_optimizer_step", True,
+              flush=True)
 
     def meta_train_revise(self, data, matrix, epoch):
         # Set the actual OT scale ONCE per Stage-I epoch, prior to 3-city OT.
@@ -507,6 +534,7 @@ class STRep(nn.Module):
         # Never retained when TDSM is disabled; no extra autograd graph.
         tdsm_predictions = []
         dpm_predictions = []
+        dpm_v2_feedback = []  # one per source city, apply only AFTER optimizer step
 
         # Only capture the final forecast head when OT is actually active.
         need_transfer = (
@@ -553,12 +581,13 @@ class STRep(nn.Module):
                     epoch % self.dpm_interval == 0):
                 # Only source-city TRAINING labels enter the persistent bank.
                 # Sample the same budget from each city, over many epochs.
-                bank_response, _ = dynamics_and_quality(
+                bank_response, bank_quality = dynamics_and_quality(
                     out.detach(), y.detach(), data[i].x,
                     data[i].means, data[i].stds, role="source"
                 )
                 self.dpm_bank.observe(
-                    bank_response, max_per_city=self.dpm_per_city
+                    bank_response, max_per_city=self.dpm_per_city,
+                    quality=(bank_quality if self.dpm_mode in ("v2a","v2b") else None)
                 )
 
             if epoch%25==0:
@@ -1069,25 +1098,83 @@ class STRep(nn.Module):
                                 target_dpm_x, data[0].means, data[0].stds,
                                 role="target"
                             )
-                            dpm_cost, dpm_stats = build_pattern_attention_cost(
-                                x=x, y=y,
-                                source_response=sr, source_skill=sq,
-                                target_response=tr, target_need=tn,
-                                bank=self.dpm_bank,
-                                strength=self.dpm_strength,
-                                temperature=self.dpm_temperature,
-                                block_size=self.dpm_block_size,
-                                mode=self.dpm_mode
-                            )
+                            if self.dpm_mode in ("v2a", "v2b"):
+                                is_v2_diag = (
+                                    self.dpm_v2_diag and (
+                                        epoch == self.DAepoch_args or
+                                        (epoch-self.DAepoch_args)%self.dpm_v2_log_interval == 0
+                                    )
+                                )
+                                dpm_cost, dpm_stats, dpm_feedback = (
+                                    build_dynamic_pattern_attention_cost(
+                                        x=x, y=y,
+                                        source_response=sr, source_skill=sq,
+                                        target_response=tr, target_need=tn,
+                                        bank=self.dpm_bank,
+                                        alpha=alpha, beta=beta,
+                                        strength=self.dpm_strength,
+                                        temperature=self.dpm_temperature,
+                                        block_size=self.dpm_block_size,
+                                        mode=self.dpm_mode,
+                                        feedback_source=self.dpm_v2_source_sample,
+                                        feedback_target=self.dpm_v2_target_anchors,
+                                        top_l=self.dpm_v2_candidates,
+                                        skill_mix=self.dpm_v2_skill_mix,
+                                        rho_temperature=self.dpm_v2_rho_temp,
+                                        diagnostics=is_v2_diag
+                                    )
+                                )
+                                dpm_feedback["summary"].update({
+                                    "epoch":int(epoch),
+                                    "city":str(data[index + 1].data_name),
+                                    "target_group":int(target_group),
+                                    "alpha_ess_frac":float(
+                                        1/(alpha.detach().float().square().sum()*len(alpha))
+                                    ),
+                                    "beta_ess_frac":float(
+                                        1/(beta.detach().float().square().sum()*len(beta))
+                                    ),
+                                })
+                                dpm_v2_feedback.append(dpm_feedback)
+                                if (epoch == self.DAepoch_args or
+                                    (epoch-self.DAepoch_args)%self.dpm_v2_log_interval == 0 or
+                                    epoch == terminal_epoch):
+                                    record={
+                                        "event":"dpm_v2_attention_cost",
+                                        "epoch":int(epoch),
+                                        "city":str(data[index+1].data_name),
+                                        "target_group":int(target_group),
+                                        **dpm_stats,
+                                    }
+                                    line=json.dumps(record,ensure_ascii=False)
+                                    print("DPM_V2_DIAG",line,flush=True)
+                                    with open(
+                                        os.path.join(str(self.args.save_dir),
+                                                     "dpm_v2_diagnostics.jsonl"),"a",
+                                        encoding="utf-8"
+                                    ) as df:
+                                        df.write(line+"\n")
+                            else:
+                                # Unmodified V1 path for ablation.
+                                dpm_cost, dpm_stats = build_pattern_attention_cost(
+                                    x=x, y=y,
+                                    source_response=sr, source_skill=sq,
+                                    target_response=tr, target_need=tn,
+                                    bank=self.dpm_bank,
+                                    strength=self.dpm_strength,
+                                    temperature=self.dpm_temperature,
+                                    block_size=self.dpm_block_size,
+                                    mode=self.dpm_mode
+                                )
+                                if epoch % 25 == 0 or epoch == self.DAepoch_args:
+                                    print("dpm_pair_cost", "epoch", epoch,
+                                          "city", str(data[index+1].data_name),
+                                          "target_group", target_group,
+                                          dpm_stats, flush=True)
                             ot_operator = SamplesLoss(
                                 loss="sinkhorn", p=1, backend="tensorized",
                                 debias=False, blur=0.001, cost=dpm_cost
                             )
-                            if epoch % 25 == 0 or epoch == self.DAepoch_args:
-                                print("dpm_pair_cost", "epoch", epoch,
-                                      "city", str(data[index + 1].data_name),
-                                      "target_group", target_group,
-                                      dpm_stats, flush=True)
                         if (self.pair_variant in ("p1", "p2", "p3") and
                                 self.pair_strength > 0):
                             pair_args = {}
@@ -1359,6 +1446,31 @@ class STRep(nn.Module):
             self.current_epoch += 1
         
             
+        if self.dpm_strength > 0 and self.dpm_mode in ("v2a", "v2b") and need_transfer:
+            if len(dpm_v2_feedback) != len(rep_source):
+                raise RuntimeError(
+                    "Dynamic bank must receive exactly one feedback record "
+                    "from EACH source city after completing OT training"
+                )
+            update=self.dpm_bank.update_reliability(
+                dpm_v2_feedback,momentum=self.dpm_v2_ema
+            )
+            if (epoch == self.DAepoch_args or
+                (epoch-self.DAepoch_args)%self.dpm_v2_log_interval == 0 or
+                epoch == terminal_epoch):
+                record={"event":"dpm_v2_bank_update","epoch":int(epoch),
+                        "after_optimizer_step":True,**update}
+                line=json.dumps(record,ensure_ascii=False)
+                print("DPM_V2_BANK_UPDATE",line,flush=True)
+                with open(os.path.join(str(self.args.save_dir),
+                                       "dpm_v2_diagnostics.jsonl"),"a",
+                          encoding="utf-8") as df:
+                    df.write(line+"\n")
+                torch.save(
+                    self.dpm_bank.state_dict(),
+                    os.path.join(str(self.args.save_dir),
+                                 "dpm_source_evolution_bank.pt")
+                )
         self._transfer_records = []
         self._feedback_inputs = []
         return model_loss.detach().cpu().numpy(),np.mean(total_mse), np.mean(total_rmse), np.mean(total_mae),np.mean(total_mape)
