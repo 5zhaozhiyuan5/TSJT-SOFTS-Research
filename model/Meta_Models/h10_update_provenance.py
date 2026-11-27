@@ -36,7 +36,7 @@ POLICIES=(
     "t3_target_only",
     "t4_source_pcgrad",
     "t5_official_f2",
-    "t6_full_pcgrad",
+    "t6_no_pcgrad",
     "t7_project_ot_half",
 )
 UPDATE_POLICIES=POLICIES[2:]
@@ -78,7 +78,7 @@ def h10_direction(bank,policy):
         # Original projection=1 flatten_and_pad_grads + write_back_flat_grads
         # sets a tensor grad on EVERY parameter, even if unused.
         mask=[True]*len(source)
-    elif policy=="t6_full_pcgrad":
+    elif policy=="t6_no_pcgrad":
         # Historical name retained as an ablation ID: this control REMOVES
         # PCGrad, unlike original checkpoint's projection=1.
         direction=_sum(source,raw_ot)
