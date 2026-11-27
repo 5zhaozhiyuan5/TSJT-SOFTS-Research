@@ -111,8 +111,10 @@ def _rankone_metric_utility(source_features, source_delta, target_grad,
 @torch.no_grad()
 def _robust_tanh_standardize(values, eps=1e-8):
     """Median/MAD standardization along the last axis, then bounded tanh."""
-    median = values.median(dim=-1, keepdim=True).values
-    mad = (values - median).abs().median(dim=-1, keepdim=True).values
+    median = torch.quantile(values, 0.5, dim=-1, keepdim=True)
+    mad = torch.quantile(
+        (values - median).abs(), 0.5, dim=-1, keepdim=True
+    )
     robust_scale = 1.4826 * mad
     fallback_scale = values.std(dim=-1, keepdim=True, unbiased=False)
     scale = torch.where(
