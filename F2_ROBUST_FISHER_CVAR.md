@@ -24,22 +24,10 @@ Zuo et al., *Byzantine-resilient Federated Learning With Adaptivity to Data
 Heterogeneity*, 2024, also applies geometric-median aggregation under
 heterogeneous data.
 
-For each target time window (b), first aggregate the sensor-level
-projection2 readout gradients while retaining the whole window:
-[
-G_b^t=\sum_{n=1}^{N_t}\delta_{bn}^t(z_{bn}^t)^\top
-\in\mathbb R^{36\times D}.
-]
-Flatten each (G_b^t) and compute a Weiszfeld approximation to the geometric
-median:
-[
-G_{GM}=\arg\min_G\sum_b\|G-G_b^t\|_F.
-]
-Then score a source sample (g_i^s=\delta_i^s(z_i^s)^\top) with
-[
-s_i^{GM}=\cos(g_i^s,G_{GM}).
-]
-This reduces sensitivity to a small number of unusually large target-window
+For each target time window \(b\), first aggregate the sensor-level
+projection2 readout gradients while retaining the whole window:\n\[\nG_b^t=\sum_{n=1}^{N_t}\delta_{bn}^t(z_{bn}^t)^\top
+\in\mathbb R^{36\times D}.\n\]\nFlatten each \(G_b^t\) and compute a Weiszfeld approximation to the geometric
+median:\n\[\nG_{GM}=\arg\min_G\sum_b\|G-G_b^t\|_F.\n\]\nThen score a source sample (g_i^s=\delta_i^s(z_i^s)^\top) with\n\[\ns_i^{GM}=\cos(g_i^s,G_{GM}).\n\]\nThis reduces sensitivity to a small number of unusually large target-window
 gradients. It does not imply that rare but legitimate traffic regimes are
 outliers; this must be checked in diagnostics.
 
@@ -53,13 +41,9 @@ stationarity assumptions; a survey of training-data influence methods notes
 that these assumptions are often violated in deep networks.
 
 To keep the F2 extension lightweight, use the target-window gradients to
-estimate a diagonal empirical-Fisher proxy:
-[
-F_{hd}=\frac{1}{B_t}\sum_b (G_{b,hd}^t)^2,
+estimate a diagonal empirical-Fisher proxy:\n\[\nF_{hd}=\frac{1}{B_t}\sum_b (G_{b,hd}^t)^2,
 \qquad
-P_{hd}=\frac{1}{F_{hd}+\lambda_F\,\operatorname{mean}(F)+\epsilon}.
-]
-For a virtual preconditioned source step
+P_{hd}=\frac{1}{F_{hd}+\lambda_F\,\operatorname{mean}(F)+\epsilon}.\n\]\nFor a virtual preconditioned source step
 \[
 \theta_i'=\theta-\eta P\odot g_i^s,
 \]
@@ -91,7 +75,7 @@ Mhammedi et al., *PAC-Bayesian Bound for the Conditional Value at Risk*,
 NeurIPS 2020, study CVaR as a coherent risk measure in learning.
 
 Preserve target-window order and split each source city's assigned target
-support group into (K) contiguous, balanced temporal blocks. For block (k),
+support group into \(K\) contiguous, balanced temporal blocks. For block \(k\),
 form its mean target readout gradient \(G_k^t\), compute the Fisher-preconditioned
 utility \(U_{ik}^{IF}=\langle G_k^t,P\odot g_i^s\rangle_F\), and robustly
 standardize it across source samples to obtain \(\widehat U_{ik}^{IF}\).
@@ -110,18 +94,10 @@ future regime is covered.
 ## Combined method (method=triple)
 
 The combined score retains original F2 as an anchor and adds the three
-selected ideas:
-[
-s_i^{triple}=0.20s_i^{F2}
+selected ideas:\n\[\ns_i^{triple}=0.20s_i^{F2}
 +0.40\widehat U_i^{GM-IF}
-+0.40\operatorname{CVaR}^{lower}_q(\widehat U_i^{IF,block}).
-]
-Then:
-[
-\alpha_i^{triple}=\operatorname{Softmax}_i(\tau s_i^{triple}),
-\qquad \beta^{triple}=\beta^{F2}.
-]
-The combined score is only a hypothesis to test. It is not assumed to
++0.40\operatorname{CVaR}^{lower}_q(\widehat U_i^{IF,block}).\n\]\nThen:\n\[\n\alpha_i^{triple}=\operatorname{Softmax}_i(\tau s_i^{triple}),
+\qquad \beta^{triple}=\beta^{F2}.\n\]\nThe combined score is only a hypothesis to test. It is not assumed to
 outperform any single component.
 
 ## Ablation methods
