@@ -13,6 +13,8 @@ from f2_four_extensions import (
     compute_f2_extension,
     _geometric_median,
     _lower_tail_mean,
+    _rankone_metric_utility,
+    _robust_tanh_standardize,
     _temporal_block_gradients,
 )
 
@@ -80,6 +82,24 @@ class RobustF2Tests(unittest.TestCase):
         self.assertTrue(torch.equal(beta, beta0))
         self.assertAlmostEqual(float(alpha.sum()), 1.0, places=6)
         self.assertEqual(info["fisher_damping"], 0.1)
+
+    def test_influence_utility_sign_matches_virtual_target_loss_change(self):
+        # P=I, source gradient is +1 or -1 in one coordinate, target gradient +1.
+        source_features = torch.tensor([[1.0, 0.0], [1.0, 0.0]])
+        source_delta = torch.zeros(2, 36)
+        source_delta[0, 0] = 1.0
+        source_delta[1, 0] = -1.0
+        target_grad = torch.zeros(36, 2)
+        target_grad[0, 0] = 1.0
+        precision = torch.ones_like(target_grad)
+        utility = _rankone_metric_utility(
+            source_features, source_delta, target_grad, precision
+        )
+        self.assertGreater(float(utility[0]), 0.0)
+        self.assertLess(float(utility[1]), 0.0)
+        standardized = _robust_tanh_standardize(utility)
+        self.assertTrue(torch.isfinite(standardized).all())
+        self.assertTrue(bool((standardized.abs() <= 1.0).all()))
 
     def test_cvar_uses_lower_tail_not_mean(self):
         scores = torch.tensor([
