@@ -1128,6 +1128,7 @@ class STRep(nn.Module):
                         OT_loss = x1.new_zeros(())
                     elif (ratio1>0.00 and ratio2>0.00):
                         ot_operator = criterion
+                        dpm_city_weight = 1.0
                         if self.dpm_strength > 0:
                             # Original F2 alpha/beta from compute_weights()
                             # remain EXACTLY unchanged. DPM only changes the
@@ -1159,7 +1160,6 @@ class STRep(nn.Module):
                                 target_dpm_x, data[0].means, data[0].stds,
                                 role="target"
                             )
-                            dpm_city_weight = 1.0
                             if self.dpm_cprc_strength > 0:
                                 alpha, dpm_city_weight, cprc_stats = (
                                     self.dpm_city_pattern_constraint.constrain(
