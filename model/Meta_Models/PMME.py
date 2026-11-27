@@ -26,6 +26,10 @@ from iTransformer.iTransformer_new import Model as iTransformer
 
 from DA_tools import *
 from transfer_utility import VARIANTS, compute_weights
+from shared_pattern_value_ot import (
+    SharedTrafficPatternValueBank, extract_pattern_response,
+    build_pattern_value_ot,
+)
 from f2_four_extensions import METHODS as F2_METHODS, compute_f2_extension
 from f2_gradient_utility_audit import (probe_window_masks, audit_f2_source_utility)
 from feedback_utility import (
@@ -278,6 +282,76 @@ class STRep(nn.Module):
         ):
             raise ValueError("F2 extensions need gradient F2, no P1-P4, feedback g0")
         self.f2_state = {}
+        # SPV-OT is one compact add-on directly on original F2.
+        # It uses ONE shared source-trained pattern Key/Value bank across cities.
+        self.spv_cost_strength = float(os.environ.get(
+            "PMME_SPV_COST_STRENGTH", "0.0"
+        ))
+        self.spv_mass_strength = float(os.environ.get(
+            "PMME_SPV_MASS_STRENGTH", "0.0"
+        ))
+        self.spv_patterns = int(os.environ.get("PMME_SPV_PATTERNS", "32"))
+        self.spv_temperature = float(os.environ.get(
+            "PMME_SPV_TEMPERATURE", "0.75"
+        ))
+        self.spv_bank_interval = int(os.environ.get(
+            "PMME_SPV_BANK_INTERVAL", "50"
+        ))
+        self.spv_bank_per_city = int(os.environ.get(
+            "PMME_SPV_BANK_PER_CITY", "128"
+        ))
+        self.spv_value_ema = float(os.environ.get(
+            "PMME_SPV_VALUE_EMA", "0.08"
+        ))
+        self.spv_block_size = int(os.environ.get(
+            "PMME_SPV_BLOCK_SIZE", "128"
+        ))
+        self.spv_log_interval = int(os.environ.get(
+            "PMME_SPV_LOG_INTERVAL", "25"
+        ))
+        self.spv_enabled = (
+            self.spv_cost_strength > 0 or self.spv_mass_strength > 0
+        )
+        if (not math.isfinite(self.spv_cost_strength) or
+                not 0 <= self.spv_cost_strength <= 1 or
+                not math.isfinite(self.spv_mass_strength) or
+                not 0 <= self.spv_mass_strength <= 1 or
+                self.spv_patterns < 2 or
+                not math.isfinite(self.spv_temperature) or
+                self.spv_temperature <= 0 or
+                self.spv_bank_interval < 1 or
+                self.spv_bank_per_city < 1 or
+                not math.isfinite(self.spv_value_ema) or
+                not 0 < self.spv_value_ema <= 1 or
+                self.spv_block_size < 1 or self.spv_log_interval < 1):
+            raise ValueError("Invalid PMME_SPV_* configuration")
+        if self.spv_enabled and (
+                self.transfer_variant != "gradient" or
+                self.pair_variant != "f2" or
+                self.f2_method != "original" or
+                self.feedback_mode != "g0" or
+                self.DA != "OT"):
+            raise ValueError(
+                "SPV-OT is an isolated add-on to original F2 only: "
+                "gradient/F2/original/g0/OT are required"
+            )
+        self.spv_bank = (
+            SharedTrafficPatternValueBank(patterns=self.spv_patterns)
+            if self.spv_enabled else None
+        )
+        print(
+            "PMME_SPV_CONFIG",
+            "cost_strength", self.spv_cost_strength,
+            "mass_strength", self.spv_mass_strength,
+            "patterns", self.spv_patterns,
+            "temperature", self.spv_temperature,
+            "bank_interval", self.spv_bank_interval,
+            "bank_per_city", self.spv_bank_per_city,
+            "value_ema", self.spv_value_ema,
+            "block_size", self.spv_block_size,
+            "active", self.spv_enabled,
+            flush=True
+        )
         # D1/D2 are DIAGNOSTIC ONLY. Actual F2 marginals and optimizer
         # updates remain unchanged; probe labels never enter audit OT.
         self.f2_audit = os.environ.get("PMME_F2_DIAGNOSTIC", "off").lower().strip()
@@ -335,6 +409,8 @@ class STRep(nn.Module):
         rep_target = []
         y_source = []
         y_target = []
+        spv_predictions = []
+        spv_feedback = []
 
         # Only capture the final forecast head when OT is actually active.
         need_transfer = (
@@ -371,7 +447,21 @@ class STRep(nn.Module):
             task_loss = 0
             batch_size, node_num, seq_len, _ = data[i].x.shape
             
-            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train') 
+            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train')
+            if self.spv_enabled and need_transfer:
+                # Keep detached training-support forecasts for this epoch only.
+                spv_predictions.append((out.detach(), y.detach()))
+            elif (self.spv_enabled and i > 0 and
+                  epoch < self.DAepoch_args and
+                  epoch % self.spv_bank_interval == 0):
+                # Shared Keys are fitted exclusively from source-city train data.
+                source_response, _, _ = extract_pattern_response(
+                    out.detach(), y.detach(), data[i].x,
+                    data[i].means, data[i].stds
+                )
+                self.spv_bank.observe(
+                    source_response, max_per_city=self.spv_bank_per_city
+                )
             
             if epoch%25==0:
                 print(out.shape, rep.shape)
@@ -438,6 +528,38 @@ class STRep(nn.Module):
             
         self._capture_transfer = False
         self._capture_feedback = False
+        if self.spv_enabled and need_transfer and not self.spv_bank.fitted:
+            if len(spv_predictions) != len(data):
+                raise RuntimeError(
+                    "SPV needs one detached training forecast per source/target city"
+                )
+            # Fallback for DAepoch=0 or runs with no pre-OT snapshots.
+            if not self.spv_bank._snapshots:
+                for source_id in range(1, len(data)):
+                    response, _, _ = extract_pattern_response(
+                        spv_predictions[source_id][0],
+                        spv_predictions[source_id][1],
+                        data[source_id].x,
+                        data[source_id].means,
+                        data[source_id].stds
+                    )
+                    self.spv_bank.observe(
+                        response, max_per_city=self.spv_bank_per_city
+                    )
+            bank_stats = self.spv_bank.fit()
+            os.makedirs(str(self.args.save_dir), exist_ok=True)
+            bank_path = os.path.join(
+                str(self.args.save_dir), "shared_pattern_value_bank.pt"
+            )
+            torch.save(self.spv_bank.state_dict(), bank_path)
+            print(
+                "SPV_BANK_FITTED",
+                json.dumps(
+                    {"epoch": int(epoch), "path": bank_path, **bank_stats},
+                    ensure_ascii=False, allow_nan=False
+                ),
+                flush=True
+            )
         if need_feedback and not h2_active and len(self._feedback_inputs) != len(data):
             raise RuntimeError(
                 "Expected one pre-projection1 record per city, got %d" %
@@ -777,6 +899,85 @@ class STRep(nn.Module):
                         OT_loss = x1.new_zeros(())
                     elif (ratio1>0.00 and ratio2>0.00):
                         ot_operator = criterion
+                        if self.spv_enabled:
+                            if len(spv_predictions) != len(data):
+                                raise RuntimeError(
+                                    "SPV predictions are incomplete for this F2 update"
+                                )
+                            spv_target_split = [
+                                15, 15, spv_predictions[0][0].shape[0] - 30
+                            ]
+                            target_spv_prediction = torch.split(
+                                spv_predictions[0][0], spv_target_split, dim=0
+                            )[target_group]
+                            target_spv_truth = torch.split(
+                                spv_predictions[0][1], spv_target_split, dim=0
+                            )[target_group]
+                            target_spv_history = torch.split(
+                                data[0].x, spv_target_split, dim=0
+                            )[target_group]
+                            source_spv_prediction = spv_predictions[index + 1][0]
+                            source_spv_truth = spv_predictions[index + 1][1]
+
+                            source_response, source_skill, _ = extract_pattern_response(
+                                source_spv_prediction, source_spv_truth,
+                                data[index + 1].x,
+                                data[index + 1].means, data[index + 1].stds
+                            )
+                            target_response, _, target_need = extract_pattern_response(
+                                target_spv_prediction, target_spv_truth,
+                                target_spv_history,
+                                data[0].means, data[0].stds
+                            )
+                            spv_cost, alpha, spv_stats, spv_record = (
+                                build_pattern_value_ot(
+                                    x=x, y=y,
+                                    source_response=source_response,
+                                    source_skill=source_skill,
+                                    target_response=target_response,
+                                    target_need=target_need,
+                                    alpha=alpha,
+                                    bank=self.spv_bank,
+                                    temperature=self.spv_temperature,
+                                    mass_strength=self.spv_mass_strength,
+                                    cost_strength=self.spv_cost_strength,
+                                    block_size=self.spv_block_size,
+                                    diagnostics=(
+                                        epoch == self.DAepoch_args or
+                                        (epoch - self.DAepoch_args) %
+                                        self.spv_log_interval == 0
+                                    )
+                                )
+                            )
+                            spv_record["summary"].update({
+                                "epoch": int(epoch),
+                                "city": str(data[index + 1].data_name),
+                                "target_group": int(target_group),
+                            })
+                            spv_feedback.append(spv_record)
+                            if spv_cost is not None:
+                                ot_operator = SamplesLoss(
+                                    loss="sinkhorn", p=1, backend="tensorized",
+                                    debias=False, blur=0.001, cost=spv_cost
+                                )
+                            if (epoch == self.DAepoch_args or
+                                    (epoch - self.DAepoch_args) %
+                                    self.spv_log_interval == 0):
+                                spv_stats.update({
+                                    "epoch": int(epoch),
+                                    "city": str(data[index + 1].data_name),
+                                    "target_group": int(target_group),
+                                    "f2_beta_unchanged": True,
+                                })
+                                line = json.dumps(
+                                    spv_stats, ensure_ascii=False, allow_nan=False
+                                )
+                                print("SPV_OT_DIAG", line, flush=True)
+                                with open(os.path.join(
+                                    str(self.args.save_dir),
+                                    "spv_ot_diagnostics.jsonl"
+                                ), "a", encoding="utf-8") as spv_file:
+                                    spv_file.write(line + "\n")
                         if (self.pair_variant in ("p1", "p2", "p3") and
                                 self.pair_strength > 0):
                             pair_args = {}
@@ -1047,6 +1248,35 @@ class STRep(nn.Module):
             self.current_epoch += 1
         
             
+        if self.spv_enabled and need_transfer:
+            if len(spv_feedback) != len(rep_source):
+                raise RuntimeError(
+                    "SPV must receive one post-OT Value feedback record per source city"
+                )
+            # Update pattern Values once, only AFTER the real optimizer step.
+            value_update = self.spv_bank.update_values(
+                spv_feedback, momentum=self.spv_value_ema
+            )
+            if (epoch == self.DAepoch_args or
+                    (epoch - self.DAepoch_args) % self.spv_log_interval == 0):
+                record = {
+                    "event": "shared_pattern_value_update",
+                    "epoch": int(epoch),
+                    "after_optimizer_step": True,
+                    **value_update,
+                }
+                line = json.dumps(record, ensure_ascii=False, allow_nan=False)
+                print("SPV_BANK_UPDATE", line, flush=True)
+                with open(os.path.join(
+                    str(self.args.save_dir), "spv_bank_updates.jsonl"
+                ), "a", encoding="utf-8") as spv_file:
+                    spv_file.write(line + "\n")
+                torch.save(
+                    self.spv_bank.state_dict(),
+                    os.path.join(
+                        str(self.args.save_dir), "shared_pattern_value_bank.pt"
+                    )
+                )
         self._transfer_records = []
         self._feedback_inputs = []
         return model_loss.detach().cpu().numpy(),np.mean(total_mse), np.mean(total_rmse), np.mean(total_mae),np.mean(total_mape)
