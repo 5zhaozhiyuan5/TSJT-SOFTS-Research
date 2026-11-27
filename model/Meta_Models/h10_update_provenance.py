@@ -1,8 +1,9 @@
 """H10 source/target/OT/optimizer effect ablations.
 
-Unlike H9, the faithful original F2 Stage-I branch is the direct gradient
-source + ORIGINAL 46-support OT without whole-update PCGrad. T6 explicitly
-adds the H9 one-sided PCGrad. All updates are applied only to fresh clones.
+The ORIGINAL checkpoint training log states projection=1.0. Therefore the
+faithful original F2 Stage-I branch has one-sided whole-update PCGrad of
+(source + OT) against all 46 target support windows. T6 explicitly removes
+PCGrad, isolating its actual impact. H9 used 36 target FIT windows. All updates are applied only to fresh clones.
 """
 from __future__ import annotations
 
@@ -73,15 +74,17 @@ def h10_direction(bank,policy):
         direction=projected_directions(source,target,_zero(source))[0]
         mask=source_mask
     elif policy=="t5_official_f2":
-        direction=_sum(source,raw_ot)
+        direction=projected_directions(source,target,raw_ot)[1]
         mask=union_mask
     elif policy=="t6_full_pcgrad":
-        direction=projected_directions(source,target,raw_ot)[1]
+        # Historical name retained as an ablation ID: this control REMOVES
+        # PCGrad, unlike original checkpoint's projection=1.
+        direction=_sum(source,raw_ot)
         mask=union_mask
     elif policy=="t7_project_ot_half":
         projected,_=project_conflicting_ot(raw_ot,target)
         half=gradient_tuple_scaled(projected,.5)
-        direction=_sum(source,half)
+        direction=projected_directions(source,target,half)[1]
         mask=union_mask
     else:
         raise ValueError(policy)
@@ -150,8 +153,8 @@ def clone_official_wrapper(wrapper):
     if (len(cloned_parameters)!=len(optimizer_parameters) or
         any(id(a)!=id(b) for a,b in zip(cloned_parameters,optimizer_parameters))):
         raise RuntimeError("Official cloned optimizer does not own clone weights")
-    if official.projection_args!=0:
-        raise RuntimeError("H10 official parity requires projection=0")
+    if float(official.projection_args)!=1.0:
+        raise RuntimeError("Pinned checkpoint log uses projection=1.0; refusing alternate official branch")
     return official
 
 
