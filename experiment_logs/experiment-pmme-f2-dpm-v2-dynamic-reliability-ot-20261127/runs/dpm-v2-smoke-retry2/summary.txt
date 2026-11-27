@@ -1,0 +1,5 @@
+DPM v2b seed 1 stage stage1 best_support_epoch 0 mean36MAE 5.027645277777777 mean36RMSE 8.301779166666668 MAE10/60/120/180 4.16505 4.66415 6.02099 5.12122
+HISTORICAL-REFERENCE-ONLY: original F2/T0 seed1 Stage-II mean36MAE=2.372713333333333, from a DIFFERENT commit.
+HISTORICAL-REFERENCE-ONLY: F2+TDSM seed1 Stage-II mean36MAE=2.395861111111111, from a DIFFERENT commit.
+DPM is a NEW code path. Cross-commit comparisons are not paired.
+Saved: /home/zhaozhiyuan/experiment-pmme-f2-dpm-v2-dynamic-reliability-ot-20261127/runs/dpm-v2-smoke-retry2/selected_checkpoint_metrics.csv

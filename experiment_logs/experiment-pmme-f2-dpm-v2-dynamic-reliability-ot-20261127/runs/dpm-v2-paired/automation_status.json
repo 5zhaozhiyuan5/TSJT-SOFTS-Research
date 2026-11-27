@@ -1,0 +1,9 @@
+{
+  "branch": "experiment/pmme-f2-dpm-v2-dynamic-reliability-ot-20261127",
+  "exit_code": 0,
+  "finished_utc": "2026-11-27T08:24:59.565439+00:00",
+  "pid": 3934034,
+  "runner": "run_f2_dpm_v2_ab.sh",
+  "started_utc": "2026-11-27T07:55:57.181591+00:00",
+  "status": "completed"
+}

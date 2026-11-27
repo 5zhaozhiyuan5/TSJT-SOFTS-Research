@@ -1,0 +1,2 @@
+mode,seed,git_commit,stage,best_support_epoch,mean_36_horizon_mae,mean_36_horizon_rmse,sum_mae_at_18_even_horizons,mae_10min,rmse_10min,mae_60min,rmse_60min,mae_120min,rmse_120min,mae_180min,rmse_180min
+v2b,1,bc2ab8624044f71cdd7531eff0c70a443497ec87,stage1,0,5.027645277777777,8.301779166666668,90.24712,4.16505,6.92177,4.66415,8.30859,6.02099,9.26463,5.12122,8.45234

@@ -1,0 +1,113 @@
+{
+  "runs": [
+    {
+      "run": "v2a/seed1",
+      "code_commit": "bc2ab8624044f71cdd7531eff0c70a443497ec87",
+      "mode": "v2a",
+      "cost_strength": "0.02",
+      "pair_cost_records": 183,
+      "bank_update_records": 61,
+      "first_bank_step": 1,
+      "last_logged_bank_step": 1500,
+      "last_logged_pattern_q": [
+        0.12181118130683899,
+        0.12747302651405334,
+        0.1348557323217392
+      ],
+      "last_logged_pattern_r": [
+        0.6357575058937073,
+        0.641240656375885,
+        0.6167373061180115
+      ],
+      "completed": true
+    },
+    {
+      "run": "v2b/seed1",
+      "code_commit": "bc2ab8624044f71cdd7531eff0c70a443497ec87",
+      "mode": "v2b",
+      "cost_strength": "0.35",
+      "pair_cost_records": 183,
+      "bank_update_records": 61,
+      "first_bank_step": 1,
+      "last_logged_bank_step": 1500,
+      "last_logged_pattern_q": [
+        0.12190677225589752,
+        0.12720879912376404,
+        0.13512814044952393
+      ],
+      "last_logged_pattern_r": [
+        0.6358433961868286,
+        0.6412768363952637,
+        0.61677485704422
+      ],
+      "completed": true
+    }
+  ],
+  "by_source_city": [
+    {
+      "run": "v2a/seed1",
+      "city": "chengdu_m",
+      "records": 61,
+      "cost_add_mean": 1.4429782414045491,
+      "benefit_std_mean": 0.028384434975317268,
+      "small_pair_rank_change_mean": 0.0010245901639344263,
+      "subset_pi_l1_change_mean": 0.0003339128365041688,
+      "subset_pi_log_count": 60
+    },
+    {
+      "run": "v2a/seed1",
+      "city": "metr-la",
+      "records": 61,
+      "cost_add_mean": 1.5389441564434865,
+      "benefit_std_mean": 0.030400827710257202,
+      "small_pair_rank_change_mean": 0.003586065573770492,
+      "subset_pi_l1_change_mean": 0.00025379159706062637,
+      "subset_pi_log_count": 60
+    },
+    {
+      "run": "v2a/seed1",
+      "city": "shenzhen",
+      "records": 61,
+      "cost_add_mean": 1.465295383187591,
+      "benefit_std_mean": 0.029000512736498334,
+      "small_pair_rank_change_mean": 0.004098360655737705,
+      "subset_pi_l1_change_mean": 0.0002973177579406183,
+      "subset_pi_log_count": 60
+    },
+    {
+      "run": "v2b/seed1",
+      "city": "chengdu_m",
+      "records": 61,
+      "cost_add_mean": 0.42860528240438367,
+      "benefit_std_mean": 0.027965576739096252,
+      "small_pair_rank_change_mean": 0.007684426229508197,
+      "subset_pi_l1_change_mean": 0.00427961033807757,
+      "subset_pi_log_count": 60
+    },
+    {
+      "run": "v2b/seed1",
+      "city": "metr-la",
+      "records": 61,
+      "cost_add_mean": 0.3617265898673261,
+      "benefit_std_mean": 0.030238192406345586,
+      "small_pair_rank_change_mean": 0.01331967213114754,
+      "subset_pi_l1_change_mean": 0.0029610626380114505,
+      "subset_pi_log_count": 60
+    },
+    {
+      "run": "v2b/seed1",
+      "city": "shenzhen",
+      "records": 61,
+      "cost_add_mean": 0.40452338242139974,
+      "benefit_std_mean": 0.028651280878264396,
+      "small_pair_rank_change_mean": 0.01331967213114754,
+      "subset_pi_l1_change_mean": 0.0040975156802839285,
+      "subset_pi_log_count": 60
+    }
+  ],
+  "caveats": [
+    "64x64 subset Sinkhorn uses an explicit diagnostic epsilon; it is NOT the full GeomLoss Pi.",
+    "Training rows contain target three-day SUPPORT labels only; no target validation/test labels.",
+    "Improvements require matched-code F2 control, full Stage-I+official Stage-II and repeated seeds."
+  ]
+}
