@@ -169,7 +169,7 @@ class TestDynamicPatternOT(unittest.TestCase):
 
     def test_with_actual_geomloss_custom_cost_if_available(self):
         try:
-            from geomloss.samples_loss import SamplesLoss
+            from geomloss import SamplesLoss
         except ImportError:
             self.skipTest("Optional GeomLoss not installed")
         cost,_,_=self.run_cost(mode="v2b",diagnostics=False)
