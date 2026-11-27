@@ -1,0 +1,9 @@
+{
+  "branch": "experiment/pmme-f2-dpm-pattern-attention-ot-20261127",
+  "exit_code": 0,
+  "finished_utc": "2026-11-27T05:05:49.378036+00:00",
+  "pid": 3912507,
+  "runner": "run_f2_dpm_pattern_attention_ot.sh",
+  "started_utc": "2026-11-27T04:42:43.958332+00:00",
+  "status": "completed"
+}
