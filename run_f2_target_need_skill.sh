@@ -93,8 +93,14 @@ if (
     touch "$WORK/FAILED";exit 1
   fi
   touch "$WORK/COMPLETED"
-  python "$ROOT/summarize_f2_tdsm.py" --run-root "$RUN_ROOT" \
-    >"$RUN_ROOT/summary.txt" 2>"$RUN_ROOT/summary.err"
+  if ! python "$ROOT/summarize_f2_tdsm.py" --run-root "$RUN_ROOT" \
+      >"$RUN_ROOT/summary.txt" 2>"$RUN_ROOT/summary.err";then
+    rm -f "$WORK/COMPLETED"
+    touch "$WORK/FAILED"
+    echo "[ERROR] TDSM checkpoint metric summary failed" >&2
+    tail -n 40 "$RUN_ROOT/summary.err" >&2
+    exit 1
+  fi
   echo "[DONE] F2+TDSM Stage-I and Stage-II; see $RUN_ROOT/summary.txt"
   cat "$RUN_ROOT/summary.txt"
 else
