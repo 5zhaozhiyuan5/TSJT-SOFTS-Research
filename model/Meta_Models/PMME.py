@@ -34,6 +34,7 @@ from dpm_pattern_attention_ot import (
     SourceEvolutionPatternBank, build_pattern_attention_cost,
     build_dynamic_pattern_attention_cost
 )
+from city_pattern_reliability_constraint import CityPatternReliabilityConstraint
 from f2_ot_schedule import validate_schedule, effective_ot_scale, phase as f2_ot_phase
 from f2_four_extensions import METHODS as F2_METHODS, compute_f2_extension
 from f2_gradient_utility_audit import (probe_window_masks, audit_f2_source_utility)
@@ -338,6 +339,42 @@ class STRep(nn.Module):
             self.dpm_per_city < 1 or self.dpm_block_size < 1 or
             self.dpm_mode not in ("full", "pattern", "v2a", "v2b")):
             raise ValueError("Invalid DPM pattern library / attention OT settings")
+        # CPRC is an optional city-conditioned source-pattern mass constraint.
+        # It does NOT alter F2's compute_weights() or DPM-V2's pairwise cost.
+        self.dpm_cprc_strength = float(os.environ.get(
+            "PMME_DPM_CPRC_STRENGTH", "0.0"
+        ))
+        self.dpm_cprc_ema = float(os.environ.get(
+            "PMME_DPM_CPRC_EMA", "0.05"
+        ))
+        self.dpm_cprc_shrinkage = float(os.environ.get(
+            "PMME_DPM_CPRC_SHRINKAGE", "8.0"
+        ))
+        self.dpm_cprc_power = float(os.environ.get(
+            "PMME_DPM_CPRC_POWER", "1.0"
+        ))
+        if (not math.isfinite(self.dpm_cprc_strength) or
+                not 0 <= self.dpm_cprc_strength <= 1 or
+                not math.isfinite(self.dpm_cprc_ema) or
+                not 0 < self.dpm_cprc_ema <= 1 or
+                not math.isfinite(self.dpm_cprc_shrinkage) or
+                self.dpm_cprc_shrinkage <= 0 or
+                not math.isfinite(self.dpm_cprc_power) or
+                self.dpm_cprc_power <= 0):
+            raise ValueError("Invalid PMME_DPM_CPRC_* configuration")
+        if self.dpm_cprc_strength > 0 and not (
+                self.dpm_strength > 0 and self.dpm_mode in ("v2a", "v2b")):
+            raise ValueError(
+                "CPRC requires active DPM-V2 (v2a/v2b); it is not an F2 edit"
+            )
+        self.dpm_city_pattern_constraint = (
+            CityPatternReliabilityConstraint(
+                shrinkage=self.dpm_cprc_shrinkage,
+                ema=self.dpm_cprc_ema,
+                sample_power=self.dpm_cprc_power,
+                city_power=self.dpm_cprc_power,
+            ) if self.dpm_cprc_strength > 0 else None
+        )
         self.dpm_bank = None
         if self.dpm_strength > 0:
             self.dpm_bank = SourceEvolutionPatternBank(
@@ -346,6 +383,11 @@ class STRep(nn.Module):
                     6, 3 * math.ceil(max(1, self.DAepoch_args) / self.dpm_interval)
                 )
             )
+        print("PMME_DPM_CPRC_CONFIG",
+              "strength", self.dpm_cprc_strength,
+              "ema", self.dpm_cprc_ema,
+              "shrinkage", self.dpm_cprc_shrinkage,
+              "power", self.dpm_cprc_power, flush=True)
         # TDSM is a NEW training-time F2 module. Unlike source-only PRC,
         # it changes BOTH alpha/beta using target support prediction need,
         # source forecast skill and history-to-future trajectory matching.
@@ -589,6 +631,12 @@ class STRep(nn.Module):
                     bank_response, max_per_city=self.dpm_per_city,
                     quality=(bank_quality if self.dpm_mode in ("v2a","v2b") else None)
                 )
+                if self.dpm_cprc_strength > 0:
+                    self.dpm_city_pattern_constraint.observe(
+                        bank_response, bank_quality,
+                        city_name=str(data[i].data_name),
+                        max_per_city=self.dpm_per_city
+                    )
 
             if epoch%25==0:
                 print(out.shape, rep.shape)
@@ -676,6 +724,19 @@ class STRep(nn.Module):
             torch.save(self.dpm_bank.state_dict(), bank_path)
             print("dpm_bank_fitted", "epoch", epoch,
                   "path", bank_path, bank_stats, flush=True)
+            if self.dpm_cprc_strength > 0:
+                cprc_fit = self.dpm_city_pattern_constraint.fit(
+                    self.dpm_bank, temperature=self.dpm_temperature
+                )
+                cprc_path = os.path.join(
+                    str(self.args.save_dir),
+                    "dpm_city_pattern_reliability_state.pt"
+                )
+                torch.save(
+                    self.dpm_city_pattern_constraint.state_dict(), cprc_path
+                )
+                print("DPM_CITY_PATTERN_CONSTRAINT_FIT",
+                      "epoch", epoch, "path", cprc_path, cprc_fit, flush=True)
         if need_feedback and not h2_active and len(self._feedback_inputs) != len(data):
             raise RuntimeError(
                 "Expected one pre-projection1 record per city, got %d" %
@@ -1098,6 +1159,39 @@ class STRep(nn.Module):
                                 target_dpm_x, data[0].means, data[0].stds,
                                 role="target"
                             )
+                            dpm_city_weight = 1.0
+                            if self.dpm_cprc_strength > 0:
+                                alpha, dpm_city_weight, cprc_stats = (
+                                    self.dpm_city_pattern_constraint.constrain(
+                                        alpha, sr, self.dpm_bank,
+                                        city_name=str(data[index + 1].data_name),
+                                        strength=self.dpm_cprc_strength,
+                                        temperature=self.dpm_temperature
+                                    )
+                                )
+                                cprc_stats.update({
+                                    "epoch": int(epoch),
+                                    "target_group": int(target_group),
+                                })
+                                if (epoch == self.DAepoch_args or
+                                    (epoch-self.DAepoch_args) %
+                                    self.dpm_v2_log_interval == 0 or
+                                    epoch == terminal_epoch):
+                                    record = {
+                                        "event": "dpm_city_pattern_constraint",
+                                        **cprc_stats,
+                                    }
+                                    line = json.dumps(
+                                        record, ensure_ascii=False,
+                                        allow_nan=False
+                                    )
+                                    print("DPM_CITY_PATTERN_CONSTRAINT",
+                                          line, flush=True)
+                                    with open(os.path.join(
+                                        str(self.args.save_dir),
+                                        "dpm_city_pattern_constraint.jsonl"
+                                    ), "a", encoding="utf-8") as cprc_file:
+                                        cprc_file.write(line + "\n")
                             if self.dpm_mode in ("v2a", "v2b"):
                                 is_v2_diag = (
                                     self.dpm_v2_diag and (
@@ -1236,7 +1330,8 @@ class STRep(nn.Module):
                                       "target_group", target_group,
                                       pair_stats, flush=True)
                         OT_loss = (torch.sum(ot_operator(alpha, x, beta, y)) *
-                                   self.DAcoef_args * OT_loss_scale)
+                                   self.DAcoef_args * OT_loss_scale *
+                                   float(dpm_city_weight))
                     else:
                         OT_loss = 0
                     DA_losses.append(OT_loss)
@@ -1471,6 +1566,36 @@ class STRep(nn.Module):
                     os.path.join(str(self.args.save_dir),
                                  "dpm_source_evolution_bank.pt")
                 )
+            if self.dpm_cprc_strength > 0:
+                cprc_update = self.dpm_city_pattern_constraint.update(
+                    dpm_v2_feedback, momentum=self.dpm_cprc_ema
+                )
+                if (epoch == self.DAepoch_args or
+                    (epoch-self.DAepoch_args) % self.dpm_v2_log_interval == 0 or
+                    epoch == terminal_epoch):
+                    record = {
+                        "event": "dpm_city_pattern_constraint_update",
+                        "epoch": int(epoch),
+                        "after_optimizer_step": True,
+                        **cprc_update,
+                    }
+                    line = json.dumps(
+                        record, ensure_ascii=False, allow_nan=False
+                    )
+                    print("DPM_CITY_PATTERN_CONSTRAINT_UPDATE",
+                          line, flush=True)
+                    with open(os.path.join(
+                        str(self.args.save_dir),
+                        "dpm_city_pattern_constraint.jsonl"
+                    ), "a", encoding="utf-8") as cprc_file:
+                        cprc_file.write(line + "\n")
+                    torch.save(
+                        self.dpm_city_pattern_constraint.state_dict(),
+                        os.path.join(
+                            str(self.args.save_dir),
+                            "dpm_city_pattern_reliability_state.pt"
+                        )
+                    )
         self._transfer_records = []
         self._feedback_inputs = []
         return model_loss.detach().cpu().numpy(),np.mean(total_mse), np.mean(total_rmse), np.mean(total_mae),np.mean(total_mape)
