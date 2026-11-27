@@ -278,6 +278,37 @@ class STRep(nn.Module):
         ):
             raise ValueError("F2 extensions need gradient F2, no P1-P4, feedback g0")
         self.f2_state = {}
+        # Three complementary gradient-only F2 refinements:
+        # robust target center, Fisher-metric influence proxy, and CVaR.
+        self.f2_geomed_iters = int(os.environ.get(
+            "PMME_F2_GEOMED_ITERS", "6"
+        ))
+        self.f2_fisher_damping = float(os.environ.get(
+            "PMME_F2_FISHER_DAMPING", "0.1"
+        ))
+        self.f2_cvar_blocks = int(os.environ.get(
+            "PMME_F2_CVAR_BLOCKS", "5"
+        ))
+        self.f2_cvar_tail = float(os.environ.get(
+            "PMME_F2_CVAR_TAIL", "0.4"
+        ))
+        if (self.f2_geomed_iters < 1 or
+                not math.isfinite(self.f2_fisher_damping) or
+                self.f2_fisher_damping <= 0 or
+                self.f2_cvar_blocks < 2 or
+                not math.isfinite(self.f2_cvar_tail) or
+                not 0 < self.f2_cvar_tail <= 1):
+            raise ValueError("Invalid PMME_F2 robust/Fisher/CVaR settings")
+        if self.f2_method in ("geomed", "influence", "cvar", "triple"):
+            print(
+                "PMME_F2_ROBUST_CONFIG",
+                "geomed_iters", self.f2_geomed_iters,
+                "fisher_damping", self.f2_fisher_damping,
+                "cvar_blocks", self.f2_cvar_blocks,
+                "cvar_tail", self.f2_cvar_tail,
+                "prediction_horizon_split", False,
+                flush=True
+            )
         # D1/D2 are DIAGNOSTIC ONLY. Actual F2 marginals and optimizer
         # updates remain unchanged; probe labels never enter audit OT.
         self.f2_audit = os.environ.get("PMME_F2_DIAGNOSTIC", "off").lower().strip()
@@ -621,7 +652,11 @@ class STRep(nn.Module):
                         alpha, beta, self.f2_method,
                         state=self.f2_state,
                         state_key=target_group,
-                        temperature=self.transfer_temperature
+                        temperature=self.transfer_temperature,
+                        geomed_iters=self.f2_geomed_iters,
+                        fisher_damping=self.f2_fisher_damping,
+                        cvar_blocks=self.f2_cvar_blocks,
+                        cvar_tail_fraction=self.f2_cvar_tail
                     )
                     if epoch % 25 == 0 or epoch == self.DAepoch_args:
                         print("f2_extension", "epoch", epoch,
