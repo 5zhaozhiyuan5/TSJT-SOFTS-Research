@@ -40,7 +40,7 @@ def original_f2_full_support_bank(
     if len(samples)!=4 or not (source_points==0 or source_points>=32) or not (
         target_points==0 or target_points>=16
     ):
-        raise ValueError("H9 expected 4 batches, source 0/>=32, target 0/>=16")
+        raise ValueError("H10 requires 4 batches, source 0/>=32, target 0/>=16")
     named=list(model.named_parameters())
     params=[x for _,x in named]
     transfers=[]
@@ -60,7 +60,7 @@ def original_f2_full_support_bank(
         raise RuntimeError("Missing projection2 capture from one or more cities")
     n=forecasts[0].shape[0]
     if n!=46:
-        raise ValueError("Expected fixed 46 target-support windows like H8")
+        raise ValueError("Expected original F2 46 target-support windows")
     fit=torch.ones(n,dtype=torch.bool,device=forecasts[0].device)
     unused_probe=torch.zeros_like(fit)
     t_loss=loss_criterion(forecasts[0],truths[0])
