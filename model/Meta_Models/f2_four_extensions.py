@@ -1,15 +1,13 @@
-"""Four independent F2 marginal estimators (no PFR, gradient surgery or OT-cost edits).
+"""F2 source/target marginal refinements; the original Sinkhorn remains unchanged.
 
-All sample gradients are the per-node outer products of the original SOFTS
-projection2 output loss gradients and its 128-D input representation.
-The original F2 source weights are passed as a prior. This module returns
-detached source and target marginals to the UNMODIFIED original Sinkhorn.
+All per-source sample gradients use the original SOFTS projection2 readout:
+the outer product of each output-loss delta and its 128-D input feature.
+New robust/Fisher/CVaR methods are source-only and preserve target beta.
 
-Inspirations, NOT exact reproductions:
-  mag  : SAM-GS (ECML-PKDD 2025): relative gradient norm mismatch.
-  sign : GradDrop (NeurIPS 2020): coordinate sign-disagreement purity.
-  ema  : GradVac (ICLR 2021): historical target-gradient reference.
-  biot : importance-weighted / unbalanced OT (ICML 2026): two-sided coupling.
+The inspirations are adaptations, NOT exact reproductions:
+  geomed    : robust statistics / geometric-median gradient aggregation.
+  influence : diagonal empirical-Fisher influence proxy, not exact Hessian IF.
+  cvar      : distributionally robust lower-tail compatibility.
 """
 import math
 import torch
@@ -432,4 +430,10 @@ def compute_f2_extension(source_features, source_delta,
     info["target_ess_frac"] = float(1 / b.square().sum() / b.numel())
     info["source_l1_shift"] = float((a - a0).abs().sum())
     info["target_l1_shift"] = float((b - b0).abs().sum())
+    if method in ("geomed", "influence", "cvar", "triple"):
+        top_count = min(5, a.numel())
+        top_values, top_indices = torch.topk(a, k=top_count)
+        info["top_source_indices"] = top_indices.cpu().tolist()
+        info["top_source_weights"] = top_values.cpu().tolist()
+        info["top_source_scores"] = final_score[top_indices].cpu().tolist()
     return a.detach(), b.detach(), info
