@@ -1,0 +1,31 @@
+name: F2 Shared Pattern-Value OT CPU tests
+
+on:
+  push:
+    branches:
+      - experiment/pmme-f2-shared-pattern-value-ot-20261127
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shared-pattern-value-ot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install geomloss numpy
+      - name: Syntax and shell checks
+        run: |
+          python -m compileall -q model/Meta_Models/PMME.py model/Meta_Models/shared_pattern_value_ot.py
+          bash -n run_f2_shared_pattern_value_ot.sh
+      - name: Shared pattern bank and OT unit tests
+        run: |
+          python -m unittest discover -s tests -p 'test_shared_pattern_value_ot.py' -v
