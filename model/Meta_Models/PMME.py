@@ -29,6 +29,7 @@ from transfer_utility import VARIANTS, compute_weights
 from prediction_reliability import (
     source_prediction_quality, calibrate_source_alpha
 )
+from task_need_skill_ot import dynamics_and_quality, calibrate_bilateral
 from f2_ot_schedule import validate_schedule, effective_ot_scale, phase as f2_ot_phase
 from f2_four_extensions import METHODS as F2_METHODS, compute_f2_extension
 from f2_gradient_utility_audit import (probe_window_masks, audit_f2_source_utility)
@@ -302,6 +303,17 @@ class STRep(nn.Module):
         ):
             raise ValueError("F2 extensions need gradient F2, no P1-P4, feedback g0")
         self.f2_state = {}
+        # TDSM is a NEW training-time F2 module. Unlike source-only PRC,
+        # it changes BOTH alpha/beta using target support prediction need,
+        # source forecast skill and history-to-future trajectory matching.
+        self.tdsm_strength = float(os.environ.get("PMME_F2_TDSM_STRENGTH", "0"))
+        self.tdsm_prototypes = int(os.environ.get("PMME_F2_TDSM_PROTOTYPES", "32"))
+        self.tdsm_temperature = float(os.environ.get("PMME_F2_TDSM_TEMPERATURE", "1.0"))
+        if (not math.isfinite(self.tdsm_strength) or
+            not 0 <= self.tdsm_strength <= 1 or
+            self.tdsm_prototypes < 2 or
+            not math.isfinite(self.tdsm_temperature) or self.tdsm_temperature <= 0):
+            raise ValueError("Invalid TDSM OT strength/prototypes/temperature")
         # D1/D2 are DIAGNOSTIC ONLY. Actual F2 marginals and optimizer
         # updates remain unchanged; probe labels never enter audit OT.
         self.f2_audit = os.environ.get("PMME_F2_DIAGNOSTIC", "off").lower().strip()
@@ -380,6 +392,27 @@ class STRep(nn.Module):
               "reference", "persistence_last_speed",
               "uses_labels", "source_training_only",
               flush=True)
+        if self.tdsm_strength > 0 and (
+            self.transfer_variant != "gradient" or
+            self.f2_method != "original" or
+            self.pair_variant != "f2" or
+            self.feedback_mode != "g0" or
+            self.accuracy_strength != 0 or
+            self.ot_schedule != "t0" or
+            self.f2_audit != "off" or
+            self.DA != "OT" or self.projection_args != 1
+        ):
+            raise ValueError(
+                "TDSM must run alone on original F2: gradient alpha, full "
+                "Sinkhorn cost, no PRC/P1-P4/BIOT/feedback/OT-decay/audit, "
+                "original one-sided PCGrad and Stage-II unchanged"
+            )
+        print("PMME_F2_TDSM_CONFIG", "strength", self.tdsm_strength,
+              "prototypes", self.tdsm_prototypes,
+              "temperature", self.tdsm_temperature,
+              "active", self.tdsm_strength > 0,
+              "input", "training_source_and_target_support_forecasts",
+              flush=True)
 
     def meta_train_revise(self, data, matrix, epoch):
         # Set the actual OT scale ONCE per Stage-I epoch, prior to 3-city OT.
@@ -418,6 +451,9 @@ class STRep(nn.Module):
         y_source = []
         y_target = []
         source_prediction_quality_records = []
+        # Detached forward outputs are used ONLY to calibrate Stage-I OT.
+        # Never retained when TDSM is disabled; no extra autograd graph.
+        tdsm_predictions = []
 
         # Only capture the final forecast head when OT is actually active.
         need_transfer = (
@@ -454,8 +490,10 @@ class STRep(nn.Module):
             task_loss = 0
             batch_size, node_num, seq_len, _ = data[i].x.shape
             
-            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train') 
-            
+            out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train')
+            if need_transfer and self.tdsm_strength > 0:
+                tdsm_predictions.append((out.detach(), y.detach()))
+
             if epoch%25==0:
                 print(out.shape, rep.shape)
             
@@ -720,6 +758,44 @@ class STRep(nn.Module):
                             "alpha_calibration", accuracy_weight_stats,
                             flush=True
                         )
+                if self.tdsm_strength > 0:
+                    # Compare each source sample against error-needing TARGET
+                    # support dynamics and vice versa, horizon by horizon.
+                    # Target support: 46 windows split into 15/15/16 blocks.
+                    split_tdsm = [15, 15, tdsm_predictions[0][0].shape[0] - 30]
+                    tgt_pred_group = torch.split(
+                        tdsm_predictions[0][0], split_tdsm, dim=0
+                    )[target_group]
+                    tgt_truth_group = torch.split(
+                        tdsm_predictions[0][1], split_tdsm, dim=0
+                    )[target_group]
+                    tgt_hist_group = torch.split(
+                        data[0].x, split_tdsm, dim=0
+                    )[target_group]
+                    source_response, source_skill = dynamics_and_quality(
+                        tdsm_predictions[index+1][0],
+                        tdsm_predictions[index+1][1],
+                        data[index+1].x,
+                        data[index+1].means, data[index+1].stds,
+                        role="source"
+                    )
+                    target_response, target_need = dynamics_and_quality(
+                        tgt_pred_group, tgt_truth_group, tgt_hist_group,
+                        data[0].means, data[0].stds, role="target"
+                    )
+                    alpha, beta, match_stats = calibrate_bilateral(
+                        alpha, beta,
+                        source_response, source_skill,
+                        target_response, target_need,
+                        strength=self.tdsm_strength,
+                        prototypes=self.tdsm_prototypes,
+                        temperature=self.tdsm_temperature
+                    )
+                    if epoch % 25 == 0 or epoch == self.DAepoch_args:
+                        print("f2_tdsm_matching", "epoch", epoch,
+                              "city", str(data[index + 1].data_name),
+                              "target_group", target_group,
+                              match_stats, flush=True)
                 if self.f2_method != "original":
                     alpha, beta, extended_stats = compute_f2_extension(
                         source_features.detach(), source_deltas,
