@@ -30,6 +30,9 @@ from prediction_reliability import (
     source_prediction_quality, calibrate_source_alpha
 )
 from task_need_skill_ot import dynamics_and_quality, calibrate_bilateral
+from dpm_pattern_attention_ot import (
+    SourceEvolutionPatternBank, build_pattern_attention_cost
+)
 from f2_ot_schedule import validate_schedule, effective_ot_scale, phase as f2_ot_phase
 from f2_four_extensions import METHODS as F2_METHODS, compute_f2_extension
 from f2_gradient_utility_audit import (probe_window_masks, audit_f2_source_utility)
@@ -303,6 +306,31 @@ class STRep(nn.Module):
         ):
             raise ValueError("F2 extensions need gradient F2, no P1-P4, feedback g0")
         self.f2_state = {}
+        # DPM-OT: separate pattern-memory attention COST experiment on top of F2.
+        # Original F2 alpha, uniform beta, SOFTS, PCGrad and Stage-II stay intact.
+        self.dpm_strength = float(os.environ.get("PMME_DPM_COST_STRENGTH", "0"))
+        self.dpm_k = int(os.environ.get("PMME_DPM_BANK_K", "32"))
+        self.dpm_temperature = float(os.environ.get("PMME_DPM_ATTENTION_TEMP", "0.75"))
+        self.dpm_interval = int(os.environ.get("PMME_DPM_BANK_INTERVAL", "50"))
+        self.dpm_per_city = int(os.environ.get("PMME_DPM_BANK_PER_CITY", "128"))
+        self.dpm_block_size = int(os.environ.get("PMME_DPM_COST_BLOCK", "128"))
+        self.dpm_mode = os.environ.get("PMME_DPM_MODE", "full").strip().lower()
+        if (not math.isfinite(self.dpm_strength) or
+            not 0 <= self.dpm_strength <= 1 or
+            self.dpm_k < 2 or
+            not math.isfinite(self.dpm_temperature) or
+            self.dpm_temperature <= 0 or self.dpm_interval < 1 or
+            self.dpm_per_city < 1 or self.dpm_block_size < 1 or
+            self.dpm_mode not in ("full", "pattern")):
+            raise ValueError("Invalid DPM pattern library / attention OT settings")
+        self.dpm_bank = None
+        if self.dpm_strength > 0:
+            self.dpm_bank = SourceEvolutionPatternBank(
+                patterns=self.dpm_k,
+                max_snapshots=max(
+                    6, 3 * math.ceil(max(1, self.DAepoch_args) / self.dpm_interval)
+                )
+            )
         # TDSM is a NEW training-time F2 module. Unlike source-only PRC,
         # it changes BOTH alpha/beta using target support prediction need,
         # source forecast skill and history-to-future trajectory matching.
@@ -413,6 +441,30 @@ class STRep(nn.Module):
               "active", self.tdsm_strength > 0,
               "input", "training_source_and_target_support_forecasts",
               flush=True)
+        if self.dpm_strength > 0 and (
+            self.transfer_variant != "gradient" or
+            self.f2_method != "original" or
+            self.pair_variant != "f2" or
+            self.feedback_mode != "g0" or
+            self.accuracy_strength != 0 or self.tdsm_strength != 0 or
+            self.ot_schedule != "t0" or self.f2_audit != "off" or
+            self.DA != "OT" or self.projection_args != 1 or
+            self.DAepoch_args < 1
+        ):
+            raise ValueError(
+                "DPM-OT requires original F2 and cost-only attention: "
+                "no PRC/TDSM/BIOT/P1-P4/feedback/decay/audit; "
+                "DAepoch>=1 and original PCGrad/Stage-II"
+            )
+        print("PMME_DPM_CONFIG", "strength", self.dpm_strength,
+              "mode", self.dpm_mode,
+              "bank_K", self.dpm_k,
+              "attention_temp", self.dpm_temperature,
+              "bank_interval", self.dpm_interval,
+              "bank_per_city", self.dpm_per_city,
+              "cost_block", self.dpm_block_size,
+              "active", self.dpm_strength > 0,
+              "f2_marginals_unchanged", True, flush=True)
 
     def meta_train_revise(self, data, matrix, epoch):
         # Set the actual OT scale ONCE per Stage-I epoch, prior to 3-city OT.
@@ -454,6 +506,7 @@ class STRep(nn.Module):
         # Detached forward outputs are used ONLY to calibrate Stage-I OT.
         # Never retained when TDSM is disabled; no extra autograd graph.
         tdsm_predictions = []
+        dpm_predictions = []
 
         # Only capture the final forecast head when OT is actually active.
         need_transfer = (
@@ -493,6 +546,20 @@ class STRep(nn.Module):
             out, y, rep, y_unscale, normed_memory = self.model(data[i], stage='train')
             if need_transfer and self.tdsm_strength > 0:
                 tdsm_predictions.append((out.detach(), y.detach()))
+            if need_transfer and self.dpm_strength > 0:
+                dpm_predictions.append((out.detach(), y.detach()))
+            if (self.dpm_strength > 0 and i > 0 and
+                    epoch < self.DAepoch_args and
+                    epoch % self.dpm_interval == 0):
+                # Only source-city TRAINING labels enter the persistent bank.
+                # Sample the same budget from each city, over many epochs.
+                bank_response, _ = dynamics_and_quality(
+                    out.detach(), y.detach(), data[i].x,
+                    data[i].means, data[i].stds, role="source"
+                )
+                self.dpm_bank.observe(
+                    bank_response, max_per_city=self.dpm_per_city
+                )
 
             if epoch%25==0:
                 print(out.shape, rep.shape)
@@ -569,6 +636,17 @@ class STRep(nn.Module):
             
         self._capture_transfer = False
         self._capture_feedback = False
+        if need_transfer and self.dpm_strength > 0 and not self.dpm_bank.fitted:
+            # Freeze the memory once, BEFORE the first active OT update;
+            # no target support or evaluation labels enter fitting.
+            bank_stats = self.dpm_bank.fit()
+            bank_path = os.path.join(
+                str(self.args.save_dir), "dpm_source_evolution_bank.pt"
+            )
+            os.makedirs(str(self.args.save_dir), exist_ok=True)
+            torch.save(self.dpm_bank.state_dict(), bank_path)
+            print("dpm_bank_fitted", "epoch", epoch,
+                  "path", bank_path, bank_stats, flush=True)
         if need_feedback and not h2_active and len(self._feedback_inputs) != len(data):
             raise RuntimeError(
                 "Expected one pre-projection1 record per city, got %d" %
@@ -960,6 +1038,56 @@ class STRep(nn.Module):
                         OT_loss = x1.new_zeros(())
                     elif (ratio1>0.00 and ratio2>0.00):
                         ot_operator = criterion
+                        if self.dpm_strength > 0:
+                            # Original F2 alpha/beta from compute_weights()
+                            # remain EXACTLY unchanged. DPM only changes the
+                            # pair-dependent OT ground cost using a SOURCE-
+                            # trained, frozen short/mid/long pattern bank.
+                            target_dpm_split = [
+                                15, 15, dpm_predictions[0][0].shape[0] - 30
+                            ]
+                            target_dpm_out = torch.split(
+                                dpm_predictions[0][0],
+                                target_dpm_split, dim=0
+                            )[target_group]
+                            target_dpm_y = torch.split(
+                                dpm_predictions[0][1],
+                                target_dpm_split, dim=0
+                            )[target_group]
+                            target_dpm_x = torch.split(
+                                data[0].x, target_dpm_split, dim=0
+                            )[target_group]
+                            sr, sq = dynamics_and_quality(
+                                dpm_predictions[index + 1][0],
+                                dpm_predictions[index + 1][1],
+                                data[index + 1].x,
+                                data[index + 1].means, data[index + 1].stds,
+                                role="source"
+                            )
+                            tr, tn = dynamics_and_quality(
+                                target_dpm_out, target_dpm_y,
+                                target_dpm_x, data[0].means, data[0].stds,
+                                role="target"
+                            )
+                            dpm_cost, dpm_stats = build_pattern_attention_cost(
+                                x=x, y=y,
+                                source_response=sr, source_skill=sq,
+                                target_response=tr, target_need=tn,
+                                bank=self.dpm_bank,
+                                strength=self.dpm_strength,
+                                temperature=self.dpm_temperature,
+                                block_size=self.dpm_block_size,
+                                mode=self.dpm_mode
+                            )
+                            ot_operator = SamplesLoss(
+                                loss="sinkhorn", p=1, backend="tensorized",
+                                debias=False, blur=0.001, cost=dpm_cost
+                            )
+                            if epoch % 25 == 0 or epoch == self.DAepoch_args:
+                                print("dpm_pair_cost", "epoch", epoch,
+                                      "city", str(data[index + 1].data_name),
+                                      "target_group", target_group,
+                                      dpm_stats, flush=True)
                         if (self.pair_variant in ("p1", "p2", "p3") and
                                 self.pair_strength > 0):
                             pair_args = {}
