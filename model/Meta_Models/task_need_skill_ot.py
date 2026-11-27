@@ -173,6 +173,14 @@ def calibrate_bilateral(alpha_prior,beta_prior,source_response,source_skill,
         "target_ess_frac":float(1/(adjusted_b.square().sum()*len(b))),
         "source_relative_min":float((adjusted_a/a.clamp_min(1e-30)).min()),
         "target_relative_min":float((adjusted_b/b.clamp_min(1e-30)).min()),
+        # Flattened sample IDs preserve exact correspondence to the original
+        # Sinkhorn point order; GeomLoss still does not expose full Pi or C.
+        "source_top_ids":adjusted_a.topk(min(8,len(a))).indices.cpu().tolist(),
+        "source_top_weights":adjusted_a.topk(min(8,len(a))).values.cpu().tolist(),
+        "target_top_ids":adjusted_b.topk(min(8,len(b))).indices.cpu().tolist(),
+        "target_top_weights":adjusted_b.topk(min(8,len(b))).values.cpu().tolist(),
+        "source_proto_flat_ids":src_idx.cpu().tolist(),
+        "target_proto_flat_ids":tgt_idx.cpu().tolist(),
         "support_labels_only":True,
     }
     return (adjusted_a.to(dtype=alpha_prior.dtype).detach(),
