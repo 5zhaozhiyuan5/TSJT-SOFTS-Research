@@ -10,6 +10,8 @@ Inspirations, NOT exact reproductions:
   sign : GradDrop (NeurIPS 2020): coordinate sign-disagreement purity.
   ema  : GradVac (ICLR 2021): historical target-gradient reference.
   biot : importance-weighted / unbalanced OT (ICML 2026): two-sided coupling.
+  stability : sample-gradient similarity (TSMC 2024) and gradient-variance
+              calibration (CVPR 2026 Findings): target-support sensitivity.
 """
 import math
 import torch
@@ -65,11 +67,11 @@ def _target_subsample_cosine_dispersion(
             source_features.shape[0], dtype=torch.float32
         )
         return zeros, zeros, {
-            "bootstrap_active": False,
-            "bootstrap_reason": "fewer_than_3_target_windows",
-            "bootstrap_windows": int(n_windows),
-            "bootstrap_subset_windows": int(n_windows),
-            "bootstrap_subsamples": 0,
+            "target_subsample_active": False,
+            "target_subsample_reason": "fewer_than_3_target_windows",
+            "target_windows": int(n_windows),
+            "target_subset_windows": int(n_windows),
+            "target_subsamples": 0,
         }
 
     subset_windows = max(
@@ -93,12 +95,12 @@ def _target_subsample_cosine_dispersion(
 
     score_matrix = torch.stack(scores, dim=0)
     return score_matrix.mean(dim=0), score_matrix.std(dim=0, unbiased=False), {
-        "bootstrap_active": True,
-        "bootstrap_windows": int(n_windows),
-        "bootstrap_subset_windows": int(subset_windows),
-        "bootstrap_subsamples": int(n_subsamples),
-        "bootstrap_sample_ratio": float(sample_ratio),
-        "bootstrap_seed": int(seed),
+        "target_subsample_active": True,
+        "target_windows": int(n_windows),
+        "target_subset_windows": int(subset_windows),
+        "target_subsamples": int(n_subsamples),
+        "target_sample_ratio": float(sample_ratio),
+        "target_subsample_seed": int(seed),
     }
 
 
@@ -311,9 +313,9 @@ def compute_f2_extension(source_features, source_delta,
             "stability_lambda": float(stability_lambda),
             "full_cos_mean": float(full_cosine.mean()),
             "full_cos_std": float(full_cosine.std(unbiased=False)),
-            "bootstrap_cos_std_mean": float(cosine_std.mean()),
-            "bootstrap_cos_std_median": float(cosine_std.median()),
-            "bootstrap_cos_std_p90": float(torch.quantile(
+            "target_cosine_dispersion_mean": float(cosine_std.mean()),
+            "target_cosine_dispersion_median": float(cosine_std.median()),
+            "target_cosine_dispersion_p90": float(torch.quantile(
                 cosine_std, torch.tensor(0.90, device=cosine_std.device)
             )),
             "uncertainty_penalty_mean": float(
@@ -323,9 +325,6 @@ def compute_f2_extension(source_features, source_delta,
             "robust_score_std": float(robust_score.std(unbiased=False)),
             "raw_source_ess_frac": float(
                 1.0 / a0.square().sum().clamp_min(1e-15) / a0.numel()
-            ),
-            "unstable_sample_frac": float(
-                (cosine_std > cosine_std.median()).float().mean()
             ),
         })
     a = a.clamp_min(0)
