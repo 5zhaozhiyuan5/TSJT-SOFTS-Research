@@ -278,6 +278,31 @@ class STRep(nn.Module):
         ):
             raise ValueError("F2 extensions need gradient F2, no P1-P4, feedback g0")
         self.f2_state = {}
+        # F2 gradient-stability calibration: one full 36-D head, no horizon bands.
+        self.f2_stability_lambda = float(os.environ.get(
+            "PMME_F2_STABILITY_LAMBDA", "0.5"
+        ))
+        self.f2_stability_subsamples = int(os.environ.get(
+            "PMME_F2_STABILITY_SUBSAMPLES", "6"
+        ))
+        self.f2_stability_sample_ratio = float(os.environ.get(
+            "PMME_F2_STABILITY_SAMPLE_RATIO", "0.8"
+        ))
+        if (not math.isfinite(self.f2_stability_lambda) or
+                self.f2_stability_lambda < 0 or
+                self.f2_stability_subsamples < 2 or
+                not math.isfinite(self.f2_stability_sample_ratio) or
+                not 0.5 <= self.f2_stability_sample_ratio <= 1.0):
+            raise ValueError("Invalid PMME_F2_STABILITY_* configuration")
+        if self.f2_method == "stability":
+            print(
+                "PMME_F2_STABILITY_CONFIG",
+                "lambda", self.f2_stability_lambda,
+                "subsamples", self.f2_stability_subsamples,
+                "sample_ratio", self.f2_stability_sample_ratio,
+                "prediction_horizon_split", False,
+                flush=True
+            )
         # D1/D2 are DIAGNOSTIC ONLY. Actual F2 marginals and optimizer
         # updates remain unchanged; probe labels never enter audit OT.
         self.f2_audit = os.environ.get("PMME_F2_DIAGNOSTIC", "off").lower().strip()
@@ -621,7 +646,14 @@ class STRep(nn.Module):
                         alpha, beta, self.f2_method,
                         state=self.f2_state,
                         state_key=target_group,
-                        temperature=self.transfer_temperature
+                        temperature=self.transfer_temperature,
+                        stability_lambda=self.f2_stability_lambda,
+                        stability_subsamples=self.f2_stability_subsamples,
+                        stability_sample_ratio=self.f2_stability_sample_ratio,
+                        stability_seed=(
+                            20261128 + int(epoch) * 1000003 +
+                            int(target_group) * 9176
+                        )
                     )
                     if epoch % 25 == 0 or epoch == self.DAepoch_args:
                         print("f2_extension", "epoch", epoch,
