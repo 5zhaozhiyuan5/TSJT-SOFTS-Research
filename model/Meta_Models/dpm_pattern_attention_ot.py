@@ -37,6 +37,12 @@ class SourceEvolutionPatternBank:
         self.max_snapshots = int(max_snapshots)
         self.kmeans_iters = int(kmeans_iters)
         self._snapshots = []
+        self._quality_snapshots = []
+        self.quality = None     # [3,K] CPU EMA of source forecast skill
+        self.reliability = None # [3,K] CPU EMA of cross-city compatibility
+        self.feedback_steps = 0
+        self.cumulative_q_mass = None
+        self.cumulative_r_mass = None
         self.centers = None   # CPU tensor [3, K, 3] in normalized descriptor space
         self.location = None  # CPU tensor [3, 3]
         self.spread = None    # CPU tensor [3, 3]
@@ -47,7 +53,7 @@ class SourceEvolutionPatternBank:
         return self.centers is not None
 
     @torch.no_grad()
-    def observe(self, source_response, max_per_city=128):
+    def observe(self, source_response, max_per_city=128, quality=None):
         if self.fitted:
             raise RuntimeError("Pattern bank is frozen; cannot observe more data")
         if source_response.ndim != 3 or source_response.shape[1:] != (3, 3):
@@ -59,11 +65,21 @@ class SourceEvolutionPatternBank:
         n = len(source_response)
         if n < 1 or not torch.isfinite(source_response).all():
             raise ValueError("Invalid source response samples")
+        if quality is not None:
+            if (quality.shape != (n, 3) or not torch.isfinite(quality).all()
+                    or bool((quality < 0).any()) or bool((quality > 1).any())):
+                raise ValueError("Quality must be [N,3] finite values in [0,1]")
         take = min(n, max_per_city)
         # Sample indices across windows/sensors with deterministic spacing.
         idx = torch.linspace(0, n-1, steps=take, device=source_response.device)
+        selected = idx.round().long()
         self._snapshots.append(
-            source_response.detach().index_select(0, idx.round().long())
+            source_response.detach().index_select(0, selected)
+            .to(device="cpu", dtype=torch.float32).contiguous()
+        )
+        self._quality_snapshots.append(
+            None if quality is None else
+            quality.detach().index_select(0, selected)
             .to(device="cpu", dtype=torch.float32).contiguous()
         )
 
@@ -113,7 +129,23 @@ class SourceEvolutionPatternBank:
         self.fit_counts = torch.stack(counts, dim=0)
         self.n_training_patterns = len(X)
         self.n_snapshots = len(self._snapshots)
-        self._snapshots.clear()  # no extra memory retained after freezing
+        # Initialize Q from SOURCE-only pre-OT prediction quality. R starts
+        # neutral at 1, until actual source/target-support comparisons occur.
+        if all(q is not None for q in self._quality_snapshots):
+            q_all = torch.cat(self._quality_snapshots, dim=0)
+            a_all = self.attention(X, temperature=0.75)
+            self.quality = torch.stack([
+                (a_all[:, h].T @ q_all[:, h]) /
+                a_all[:, h].sum(0).clamp_min(1e-8)
+                for h in range(3)
+            ], dim=0).clamp(0, 1).cpu()
+        else:
+            self.quality = torch.full((3, self.patterns), 0.5)
+        self.reliability = torch.ones((3, self.patterns))
+        self.cumulative_q_mass = torch.zeros((3, self.patterns))
+        self.cumulative_r_mass = torch.zeros((3, self.patterns))
+        self._snapshots.clear()
+        self._quality_snapshots.clear()
         return self.report()
 
     def report(self):
@@ -129,6 +161,16 @@ class SourceEvolutionPatternBank:
             ],
             "source_only": True,
             "frozen": self.fitted,
+            "center_frozen": self.fitted,
+            "feedback_steps": self.feedback_steps,
+            "quality_band_mean": (
+                [float(x) for x in self.quality.mean(-1)]
+                if self.quality is not None else None
+            ),
+            "reliability_band_mean": (
+                [float(x) for x in self.reliability.mean(-1)]
+                if self.reliability is not None else None
+            ),
         }
 
     def state_dict(self):
@@ -142,6 +184,82 @@ class SourceEvolutionPatternBank:
             "n_training_patterns": self.n_training_patterns,
             "n_snapshots": self.n_snapshots,
             "patterns": self.patterns,
+            "quality": self.quality.clone(),
+            "reliability": self.reliability.clone(),
+            "feedback_steps": self.feedback_steps,
+            "cumulative_q_mass": self.cumulative_q_mass.clone(),
+            "cumulative_r_mass": self.cumulative_r_mass.clone(),
+        }
+
+
+    @torch.no_grad()
+    def update_reliability(self, records, momentum=0.08):
+        """ONE update per optimizer step, after *all three* source cities.
+
+        Each city contributes equally (not proportional to node count).
+        Low-occupancy prototypes use a smaller effective EMA rate.
+        This operation is forbidden inside the GeomLoss cost callback.
+        """
+        if not self.fitted or self.quality is None:
+            raise RuntimeError("Source bank must be fitted before online feedback")
+        if not records or not 0 < momentum <= 1:
+            raise ValueError("Require feedback from source cities and valid EMA rate")
+        old_q = self.quality.clone()
+        old_r = self.reliability.clone()
+        q_num = torch.zeros_like(old_q)
+        q_den = torch.zeros_like(old_q)
+        r_num = torch.zeros_like(old_r)
+        r_den = torch.zeros_like(old_r)
+        city_summaries = []
+        for record in records:
+            if set(("q_num","q_den","r_num","r_den")) - set(record):
+                raise ValueError("Incomplete bank feedback record")
+            qn = record["q_num"].detach().float().cpu()
+            qd = record["q_den"].detach().float().cpu()
+            rn = record["r_num"].detach().float().cpu()
+            rd = record["r_den"].detach().float().cpu()
+            if any(t.shape != old_q.shape for t in (qn, qd, rn, rd)):
+                raise ValueError("Bad pattern bank feedback shape")
+            if any(not torch.isfinite(t).all() for t in (qn, qd, rn, rd)):
+                raise ValueError("Nonfinite Q/R feedback")
+            if any(bool((t < 0).any()) for t in (qn, qd, rn, rd)):
+                raise ValueError("Negative Q/R feedback")
+            # Normalize by total membership per city and horizon.
+            # This avoids large-node cities dominating small-node cities.
+            for numerator, denominator, total_num, total_den in (
+                    (qn,qd,q_num,q_den),(rn,rd,r_num,r_den)):
+                size = denominator.sum(-1,keepdim=True).clamp_min(1e-9)
+                total_num.add_(numerator/size)
+                total_den.add_(denominator/size)
+            city_summaries.append(record.get("summary",{}))
+        q_mean = (q_num / q_den.clamp_min(1e-9)).clamp(0,1)
+        r_mean = (r_num / r_den.clamp_min(1e-9)).clamp(0,1)
+        # At average assignment mass 1/K, update with full EMA;
+        # rare patterns contribute proportionally less to prevent drift.
+        q_eta = momentum * (q_den * self.patterns / len(records)).clamp(0,1)
+        r_eta = momentum * (r_den * self.patterns / len(records)).clamp(0,1)
+        self.quality = ((1-q_eta)*old_q + q_eta*q_mean).clamp(0,1)
+        self.reliability = ((1-r_eta)*old_r + r_eta*r_mean).clamp(0,1)
+        self.cumulative_q_mass += q_den
+        self.cumulative_r_mass += r_den
+        self.feedback_steps += 1
+        return {
+            "step": self.feedback_steps,
+            "cities": len(records),
+            "momentum": momentum,
+            "q_band_before": old_q.mean(-1).tolist(),
+            "q_band_observed": q_mean.mean(-1).tolist(),
+            "q_band_after": self.quality.mean(-1).tolist(),
+            "r_band_before": old_r.mean(-1).tolist(),
+            "r_band_observed": r_mean.mean(-1).tolist(),
+            "r_band_after": self.reliability.mean(-1).tolist(),
+            "q_band_delta_l1": (self.quality-old_q).abs().sum(-1).tolist(),
+            "r_band_delta_l1": (self.reliability-old_r).abs().sum(-1).tolist(),
+            "q_min": float(self.quality.min()), "q_max": float(self.quality.max()),
+            "r_min": float(self.reliability.min()), "r_max": float(self.reliability.max()),
+            "q_active_prototypes": int((q_den>0).sum()),
+            "r_active_prototypes": int((r_den>0).sum()),
+            "city_summaries": city_summaries,
         }
 
     @torch.no_grad()
