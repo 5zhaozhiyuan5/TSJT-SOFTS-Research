@@ -94,6 +94,35 @@ def _rankone_metric_cos(source_features, source_delta, target_grad,
 
 
 @torch.no_grad()
+def _rankone_metric_utility(source_features, source_delta, target_grad,
+                            precision):
+    """First-order target-loss improvement proxy for a preconditioned step.
+
+    If theta' = theta - eta * P * g_source, then
+    L_target(theta) - L_target(theta') ~= eta * <g_target, P*g_source>.
+    """
+    return torch.einsum(
+        "nh,hd,nd->n", source_delta.float(),
+        precision.float() * target_grad.float(),
+        source_features.float()
+    )
+
+
+@torch.no_grad()
+def _robust_tanh_standardize(values, eps=1e-8):
+    """Median/MAD standardization along the last axis, then bounded tanh."""
+    median = values.median(dim=-1, keepdim=True).values
+    mad = (values - median).abs().median(dim=-1, keepdim=True).values
+    robust_scale = 1.4826 * mad
+    fallback_scale = values.std(dim=-1, keepdim=True, unbiased=False)
+    scale = torch.where(
+        robust_scale > eps, robust_scale, fallback_scale.clamp_min(eps)
+    )
+    z = ((values - median) / scale).clamp(-4.0, 4.0)
+    return torch.tanh(z)
+
+
+@torch.no_grad()
 def _temporal_block_gradients(window_gradients, requested_blocks=5):
     """Chronologically split target windows into contiguous, balanced blocks."""
     n_windows = int(window_gradients.shape[0])
@@ -325,46 +354,57 @@ def compute_f2_extension(source_features, source_delta,
         # Robust-statistics score: geometric median suppresses outlying
         # target windows before measuring source/target compatibility.
         geomed_score = _rankone_cos(fs, ds, robust_target_grad)
-        # Influence-inspired score: a damped diagonal empirical-Fisher
-        # inverse supplies a parameter-sensitive metric. This is NOT an
-        # exact Hessian influence function and needs no second derivatives.
+        # A damped diagonal empirical-Fisher inverse gives a lightweight
+        # preconditioner. The raw utility estimates target-loss reduction
+        # under a virtual natural-gradient step; this is influence-inspired,
+        # NOT an exact Hessian influence function.
         fisher_score = _rankone_metric_cos(
             fs, ds, mean_target_grad, precision
         )
-        robust_fisher_score = _rankone_metric_cos(
+        influence_raw = _rankone_metric_utility(
+            fs, ds, mean_target_grad, precision
+        )
+        influence_score = _robust_tanh_standardize(influence_raw)
+        robust_influence_raw = _rankone_metric_utility(
             fs, ds, robust_target_grad, precision
+        )
+        robust_influence_score = _robust_tanh_standardize(
+            robust_influence_raw
         )
 
         block_cos_scores = torch.stack([
             _rankone_cos(fs, ds, block_grads[k])
             for k in range(block_grads.shape[0])
         ], dim=0)
-        block_fisher_scores = torch.stack([
-            _rankone_metric_cos(fs, ds, block_grads[k], precision)
+        block_influence_raw = torch.stack([
+            _rankone_metric_utility(fs, ds, block_grads[k], precision)
             for k in range(block_grads.shape[0])
         ], dim=0)
+        block_influence_scores = _robust_tanh_standardize(
+            block_influence_raw
+        )
         cvar_score, tail_count = _lower_tail_mean(
             block_cos_scores, tail_fraction=cvar_tail_fraction
         )
-        fisher_cvar_score, _ = _lower_tail_mean(
-            block_fisher_scores, tail_fraction=cvar_tail_fraction
+        influence_cvar_score, _ = _lower_tail_mean(
+            block_influence_scores, tail_fraction=cvar_tail_fraction
         )
 
         if method == "geomed":
             final_score = geomed_score
         elif method == "influence":
-            final_score = fisher_score
+            final_score = influence_score
         elif method == "cvar":
             # Keep the original F2 score as an anchor and add a lower-tail
             # compatibility term across contiguous target time blocks.
             final_score = 0.5 * f2_score + 0.5 * cvar_score
         else:
-            # Three-way mechanism: robust center + Fisher geometry +
-            # worst-block risk. Original F2 remains as a conservative anchor.
+            # Three-way mechanism: robust center + influence utility +
+            # worst-block risk. Original F2 remains a conservative anchor.
             final_score = (
                 0.20 * f2_score +
-                0.40 * robust_fisher_score +
-                0.40 * fisher_cvar_score
+                0.40 * robust_influence_score +
+                0.40 * influence_cvar_score
             )
 
         a = torch.softmax(temperature * final_score, dim=0)
@@ -396,8 +436,14 @@ def compute_f2_extension(source_features, source_delta,
             ),
             "f2_score_mean": float(f2_score.mean()),
             "geomed_score_mean": float(geomed_score.mean()),
-            "fisher_score_mean": float(fisher_score.mean()),
-            "robust_fisher_score_mean": float(robust_fisher_score.mean()),
+            "fisher_metric_cos_mean": float(fisher_score.mean()),
+            "influence_raw_mean": float(influence_raw.mean()),
+            "influence_raw_p90": float(torch.quantile(
+                influence_raw, torch.tensor(0.90, device=influence_raw.device)
+            )),
+            "influence_score_mean": float(influence_score.mean()),
+            "robust_influence_raw_mean": float(robust_influence_raw.mean()),
+            "robust_influence_score_mean": float(robust_influence_score.mean()),
             "cvar_blocks": int(block_grads.shape[0]),
             "cvar_tail_fraction": float(cvar_tail_fraction),
             "cvar_tail_count": int(tail_count),
@@ -405,7 +451,8 @@ def compute_f2_extension(source_features, source_delta,
             "cvar_score_p10": float(torch.quantile(
                 cvar_score, torch.tensor(0.10, device=cvar_score.device)
             )),
-            "fisher_cvar_score_mean": float(fisher_cvar_score.mean()),
+            "block_influence_raw_mean": float(block_influence_raw.mean()),
+            "influence_cvar_score_mean": float(influence_cvar_score.mean()),
             "block_score_std_mean": float(
                 block_cos_scores.std(dim=0, unbiased=False).mean()
             ),
