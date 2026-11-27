@@ -44,11 +44,11 @@ class F2GradientStabilityTests(unittest.TestCase):
         self.assertTrue(bool((alpha >= 0).all()))
         self.assertAlmostEqual(float(alpha.sum()), 1.0, places=6)
         self.assertTrue(torch.equal(beta, self.beta0))
-        self.assertTrue(info["bootstrap_active"])
+        self.assertTrue(info["target_subsample_active"])
         self.assertEqual(info["gradient_dimensions"], 36)
         self.assertFalse(info["prediction_horizon_split"])
-        self.assertEqual(info["bootstrap_subset_windows"], 10)
-        self.assertIn("bootstrap_cos_std_p90", info)
+        self.assertEqual(info["target_subset_windows"], 10)
+        self.assertIn("target_cosine_dispersion_p90", info)
 
     def test_deterministic_for_same_seed(self):
         a1, _, _ = self.run_stability(stability_seed=99)
@@ -84,7 +84,7 @@ class F2GradientStabilityTests(unittest.TestCase):
         self.assertTrue(torch.allclose(alpha0, torch.tensor([0.5, 0.5])))
         self.assertLess(float(alpha[0]), float(alpha[1]))
         self.assertTrue(torch.equal(beta, beta0))
-        self.assertGreater(info["bootstrap_cos_std_mean"], 0.0)
+        self.assertGreater(info["target_cosine_dispersion_mean"], 0.0)
 
     def test_too_few_target_windows_falls_back_without_nan(self):
         ft = self.ft[:2]
@@ -95,8 +95,8 @@ class F2GradientStabilityTests(unittest.TestCase):
         )
         self.assertTrue(torch.isfinite(alpha).all())
         self.assertTrue(torch.equal(beta, beta0))
-        self.assertFalse(info["bootstrap_active"])
-        self.assertEqual(info["bootstrap_reason"], "fewer_than_3_target_windows")
+        self.assertFalse(info["target_subsample_active"])
+        self.assertEqual(info["target_subsample_reason"], "fewer_than_3_target_windows")
 
 
 if __name__ == "__main__":
