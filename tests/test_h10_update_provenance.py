@@ -64,7 +64,7 @@ class TestH10GradientDirections(unittest.TestCase):
     def test_t6_is_direct_update_without_pcgrad(self):
         bank=tiny_bank()
         with_pcgrad,_,_=h10_direction(bank,"t5_official_f2")
-        without,mask,_=h10_direction(bank,"t6_full_pcgrad")
+        without,mask,_=h10_direction(bank,"t6_no_pcgrad")
         raw=sum((x["f2"][0] for x in bank["city_entries"]))
         self.assertTrue(torch.equal(without[0],bank["source_gradient"][0]+raw))
         self.assertFalse(torch.equal(with_pcgrad[0],without[0]))
