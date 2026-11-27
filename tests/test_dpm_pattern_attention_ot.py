@@ -36,11 +36,12 @@ class TestDpmPatternAttentionOt(unittest.TestCase):
         self.y = torch.randn(4,5).requires_grad_()
 
     def call(self, **kw):
+        settings={"block_size":2}
+        settings.update(kw)
         return build_pattern_attention_cost(
             self.x,self.y,
             self.sr,self.q,self.tr,self.d,
-            self.bank,block_size=2,
-            **kw
+            self.bank,**settings
         )
 
     def test_source_memory_is_built_once_and_frozen(self):
@@ -77,9 +78,13 @@ class TestDpmPatternAttentionOt(unittest.TestCase):
         self.assertEqual(tuple(c.shape),(4,4))
         self.assertTrue(bool((extra>=-1e-6).all()))
         # S0 and T0 share pattern; S0 and T1 have disjoint patterns.
-        self.assertLess(float(extra[0,0]),float(extra[0,1]))
+        self.assertLess(float(extra[0,0].detach()),float(extra[0,1].detach()))
         self.assertGreater(float(extra.std()),0.)
         self.assertTrue(stats["marginals_unchanged_from_original_f2"])
+        self.assertIn("sample_pair_nearest_target_changed_frac",stats)
+        self.assertIn("sample_pair_nearest_source_changed_frac",stats)
+        self.assertTrue(0<=stats["sample_pair_nearest_target_changed_frac"]<=1)
+        self.assertTrue(0<=stats["sample_pair_nearest_source_changed_frac"]<=1)
 
     def test_skill_need_gates_really_alter_pair_costs(self):
         a,_=self.call(strength=.04,temperature=.5,mode="pattern")
