@@ -101,8 +101,16 @@ penalty and fall back to original F2 for that update.
 
 ## Experiment plan
 
-Run one seed first with the same batch size, data, training epochs, OT scale,
-and Stage-II as the F2 baseline. Compare:
+Run the original F2 control and F2-GS on this same commit with the same
+seed, batch size, data, training epochs, OT scale and Stage-II. The runner
+supports both modes:
+
+```bash
+PMME_F2_METHOD=original PMME_F2_RUN_ROOT=./experiments/f2-gs-control bash run_f2_gradient_stability.sh
+PMME_F2_METHOD=stability PMME_F2_RUN_ROOT=./experiments/f2-gs-lambda05 bash run_f2_gradient_stability.sh
+```
+
+Compare:
 1. original F2;
 2. F2-GS with lambda=0.5;
 3. lambda ablation 0.25 and 1.0 (only if the first run is stable).
