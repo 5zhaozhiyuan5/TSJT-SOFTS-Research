@@ -90,9 +90,9 @@ autograd backward pass or trainable parameter is introduced.
 
 ## Diagnostics
 
-Each F2 extension log reports full-support cosine, bootstrap cosine standard
+Each F2 extension log reports full-support cosine, repeated target-window subsampling cosine standard
 deviation (mean/median/p90), uncertainty penalty, robust-score distribution,
-bootstrap sample count/size, source ESS, and L1 shift from original F2 alpha.
+repeated target-window subsampling sample count/size, source ESS, and L1 shift from original F2 alpha.
 Beta is unchanged. Small target groups (<3 windows) disable the variance
 penalty and fall back to original F2 for that update.
 
