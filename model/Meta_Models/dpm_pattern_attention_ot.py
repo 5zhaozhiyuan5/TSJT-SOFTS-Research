@@ -238,6 +238,19 @@ def build_pattern_attention_cost(
 
         sample_b = pair_bonus(0,min(32,len(x)))[:,:min(32,len(y))]
         penalty = 1.0 - sample_b / 4.0
+        # This 32x32 *cost-ranking diagnostic* checks whether DPM changes
+        # actual candidate preferences. It is NOT the full GeomLoss Pi.
+        sampled_base = torch.cdist(
+            x.detach()[:len(sample_b)].float(),
+            y.detach()[:sample_b.shape[1]].float()
+        )
+        sampled_new = sampled_base + coefficient * penalty
+        changed_source_to_target = (
+            sampled_base.argmin(dim=1) != sampled_new.argmin(dim=1)
+        ).float().mean()
+        changed_target_to_source = (
+            sampled_base.argmin(dim=0) != sampled_new.argmin(dim=0)
+        ).float().mean()
         diagnostic = {
             "active": True,
             "strength": float(strength),
@@ -253,6 +266,10 @@ def build_pattern_attention_cost(
             "sample_bonus_std": float(sample_b.std(unbiased=False)),
             "sample_penalty_std": float(penalty.std(unbiased=False)),
             "sample_added_cost_mean": float((penalty*coefficient).mean()),
+            "sample_original_cost_mean": float(sampled_base.mean()),
+            "sample_pair_nearest_target_changed_frac": float(changed_source_to_target),
+            "sample_pair_nearest_source_changed_frac": float(changed_target_to_source),
+            "pair_change_note": "32x32 cost ranking proxy, not full OT plan Pi",
             "source_skill_mean": float(source_skill.float().mean()),
             "target_need_mean": float(target_need.float().mean()),
             "source_attention_top_mass": float(attention_s.square().amax(-1).mean()),
