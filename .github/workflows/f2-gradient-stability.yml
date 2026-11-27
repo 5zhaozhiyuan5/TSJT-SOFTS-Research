@@ -1,0 +1,30 @@
+name: F2 Gradient Stability CPU Tests
+
+on:
+  push:
+    branches:
+      - experiment/pmme-f2-gradient-bootstrap-stability-20261128
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  f2-gradient-stability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU PyTorch
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Syntax checks
+        run: |
+          python -m compileall -q model/Meta_Models/transfer_utility.py model/Meta_Models/f2_four_extensions.py model/Meta_Models/PMME.py
+          bash -n run_f2_gradient_stability.sh
+      - name: Unit tests
+        run: |
+          python -m unittest discover -s tests -p 'test_f2_gradient_stability.py' -v
