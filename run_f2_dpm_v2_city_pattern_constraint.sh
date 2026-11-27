@@ -57,6 +57,14 @@ assert math.isfinite(ema) and 0 < ema <= 1
 assert math.isfinite(shrinkage) and shrinkage > 0
 assert math.isfinite(power) and power > 0
 PY
+(
+  cd "$ROOT"
+  python -m py_compile \
+    model/Meta_Models/city_pattern_reliability_constraint.py \
+    model/Meta_Models/PMME.py \
+    tests/test_city_pattern_reliability_constraint.py
+  python -m unittest discover -s tests -p 'test_city_pattern_reliability_constraint.py'
+)
 WORK="$RUN_ROOT/$MODE/seed$SEED"
 mkdir -p "$WORK"
 for folder in data configs model; do
