@@ -165,4 +165,4 @@ H10 的首要判据不是先追求极小的 MAE 改善，而是能够**以保真
 6. `tests/test_h10_update_provenance.py`：CPU梯度、optimizer、克隆与一致性相关测试。
 7. `H10_UPDATE_PROVENANCE_EXPERIMENT.md`：实验预注册及执行命令。
 
-**提交代码不等于 GPU 已验证。务必等 H10-A 一致性结果合格后再讨论后续实验收益。**
+**实际运行状态（2026-11-27）：** H10-A 全量一致性硬门槛通过；H10-B smoke、全量 OT 单步与 capped OT 五步 pilot 均完成。原检查点未更新且 Stage-II 未运行。结果、差异及评估限制见 [H10_RUN_REPORT.md](H10_RUN_REPORT.md)。

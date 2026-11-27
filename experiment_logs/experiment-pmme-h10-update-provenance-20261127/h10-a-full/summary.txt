@@ -1,0 +1,2 @@
+H10 ORIGINAL PARITY: PASS {"adamw_group_hyperparameters_equal": true, "adamw_state_max_abs_diff": 1.1324882507324219e-06, "atol": 2e-05, "buffer_max_abs_diff": 0.0, "parameter_max_abs_diff": 8.121132850646973e-07, "passed": true}
+H10-A only; run H10-B after parity gate.

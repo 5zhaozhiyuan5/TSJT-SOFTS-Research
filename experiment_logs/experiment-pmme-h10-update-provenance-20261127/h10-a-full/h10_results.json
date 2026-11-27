@@ -1,0 +1,90 @@
+{
+  "metadata": {
+    "audit_version": "h10-v1",
+    "checkpoint_epoch": 2899,
+    "checkpoint_original_train_log": "projection_args 1.0 for all 3000 epochs",
+    "checkpoint_sha256": "f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf",
+    "historical_test_exposure": "Official original training logged post-support test metrics; H10 dev is not a virgin test",
+    "normalization_warning": "Original F2 full-series target scaler inherited",
+    "original_checkpoint_written": false,
+    "original_f2_projection_args": 1.0,
+    "source_batch": 16,
+    "source_cities": [
+      "chengdu_m",
+      "metr-la",
+      "shenzhen",
+      "pems-bay",
+      "pems-bay"
+    ],
+    "stage2_runs": 0,
+    "target_city": "pems-bay",
+    "target_support_windows": 46,
+    "training_input": "original first three days only; same source batches"
+  },
+  "parity": {
+    "audit_version": "h10-a-v1",
+    "full_ot_geometry": true,
+    "manual_clone_updates": 1,
+    "manual_model_update_norm": 0.6045560355501342,
+    "manual_update_trace": {
+      "grad_tensors_missing": 0,
+      "grad_tensors_present": 54,
+      "ot_city_grad_norms": {
+        "chengdu_m": 0.011440704563891025,
+        "metr-la": 0.012506611823471432,
+        "shenzhen": 0.017392900448092632
+      },
+      "ot_grad_norm": 0.03156434791905921,
+      "ot_vs_target": {
+        "cos": -0.2483622700979752,
+        "dot": -0.018106673379833182,
+        "norm_a": 0.03156434791905921,
+        "norm_b": 2.3097034606057556
+      },
+      "source_grad_norm": 6.633931272726911,
+      "source_vs_ot": {
+        "cos": -0.29687598814524163,
+        "dot": -0.06216455973378743,
+        "norm_a": 6.633931272726911,
+        "norm_b": 0.03156434791905921
+      },
+      "source_vs_target": {
+        "cos": 0.4227743436288975,
+        "dot": 6.477923529286272,
+        "norm_a": 6.633931272726911,
+        "norm_b": 2.3097034606057556
+      },
+      "target_grad_norm": 2.3097034606057556,
+      "update_grad_norm": 6.624629253067193,
+      "update_vs_target": {
+        "cos": 0.42218463927426564,
+        "dot": 6.459817237305288,
+        "norm_a": 6.624629253067193,
+        "norm_b": 2.3097034606057556
+      }
+    },
+    "official_clone_updates": 1,
+    "official_module": "STRep.meta_train_revise",
+    "official_train_epoch_replay": 2899,
+    "official_vs_manual": {
+      "adamw_group_hyperparameters_equal": true,
+      "adamw_state_max_abs_diff": 1.1324882507324219e-06,
+      "atol": 2e-05,
+      "buffer_max_abs_diff": 0.0,
+      "parameter_max_abs_diff": 8.121132850646973e-07,
+      "passed": true
+    },
+    "original_checkpoint_epoch": 2899,
+    "original_checkpoint_sha256": "f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf",
+    "original_checkpoint_updates": 0,
+    "original_projection_args": 1.0,
+    "original_unchanged": true,
+    "passed": true,
+    "seed": 1,
+    "shared_source_target_batch_hash": "089c5e3ab05d220e72a2b9a863f5d00242bc883c4be1337790412c0d5e65ebbd",
+    "source_batch_seed": 20272098,
+    "source_points": 0,
+    "target_points": 0,
+    "target_support_windows_in_ot": 46
+  }
+}

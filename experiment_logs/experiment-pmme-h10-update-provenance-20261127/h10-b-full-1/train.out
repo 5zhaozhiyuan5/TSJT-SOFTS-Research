@@ -1,0 +1,89 @@
+[INFO] source dataset: ['chengdu_m', 'metr-la', 'shenzhen', 'pems-bay']
+dataset_name : chengdu_m
+chengdu_m : x shape : torch.Size([2854, 524, 288, 2]), y shape : torch.Size([2854, 524, 36])
+dataset_name : metr-la
+metr-la : x shape : torch.Size([2830, 207, 288, 2]), y shape : torch.Size([2830, 207, 36])
+dataset_name : shenzhen
+shenzhen : x shape : torch.Size([2854, 627, 288, 2]), y shape : torch.Size([2854, 627, 36])
+dataset_name : pems-bay
+pems-bay : x shape : torch.Size([46, 325, 288, 2]), y shape : torch.Size([46, 325, 36])
+[INFO] Dataset init finished!
+[INFO] target_maml dataset: ['pems-bay']
+dataset_name : pems-bay
+pems-bay : x shape : torch.Size([46, 325, 288, 2]), y shape : torch.Size([46, 325, 36])
+[INFO] Dataset init finished!
+forecasting_model.enc_embedding.value_embedding.weight : torch.Size([512, 288]), require_grads : True
+forecasting_model.enc_embedding.value_embedding.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.0.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.0.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.1.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.1.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.weight : torch.Size([512, 1024]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen3.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.weight : torch.Size([512, 512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.attention.gen4.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.weight : torch.Size([512, 512, 1]), require_grads : True
+forecasting_model.encoder.attn_layers.2.conv2.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm1.bias : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.weight : torch.Size([512]), require_grads : True
+forecasting_model.encoder.attn_layers.2.norm2.bias : torch.Size([512]), require_grads : True
+forecasting_model.projection1.weight : torch.Size([128, 512]), require_grads : True
+forecasting_model.projection1.bias : torch.Size([128]), require_grads : True
+forecasting_model.projection2.weight : torch.Size([36, 128]), require_grads : True
+forecasting_model.projection2.bias : torch.Size([36]), require_grads : True
+model params: 5738660
+PMME_F2_DIAGNOSTIC off readonly False interval 100 source_budget 192 target_budget 96
+PMME_F2_METHOD original
+PMME_PAIR_VARIANT f2 strength 0.0 anchors 8 block 256
+PMME_STAGE1_TRANSFER_VARIANT gradient
+PMME_STAGE1_FEEDBACK g0 interval 200 subset 256 128
+PMME_STAGE1_TRANSFER_CONFIG ot_scale 0.01 temperature 8.0 min_ess 0.5
+PMME_F2_OT_SCHEDULE_CONFIG t0 base_scale 0.01 DAepoch 1500 decay_start 2000 decay_end 2999 tail_fraction 0.25
+PMME_F2_ACCURACY_CONFIG strength 0.0 mode f2 reference persistence_last_speed uses_labels source_training_only
+/home/zhaozhiyuan/experiment-pmme-h10-update-provenance-20261127/source/model/Meta_Models/PMME.py:84: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  x, y, means, stds = torch.tensor(x).to(self.PatchFSL_cfg['device']), torch.tensor(y).to(self.PatchFSL_cfg['device']),torch.tensor(means).to(self.PatchFSL_cfg['device']),torch.tensor(stds).to(self.PatchFSL_cfg['device']) #,torch.tensor(A,dtype=torch.float32).to(self.PatchFSL_cfg['device'])
+H10_POLICY_STEP {"dev_mae": 2.1877541139023937, "dev_rmse": 4.44316056288275, "policy": "t0_no_update", "step": 1}
+H10_POLICY_STEP {"dev_mae": 2.1877541139023937, "dev_rmse": 4.44316056288275, "policy": "t0f_train_forward_only", "step": 1}
+H10_POLICY_STEP {"dev_mae": 2.258168816589174, "dev_rmse": 4.470141912037053, "policy": "t1_zero_grad_adamw", "step": 1}
+H10_POLICY_STEP {"dev_mae": 2.214085339167179, "dev_rmse": 4.455802034955935, "policy": "t2_source_only", "step": 1}
+H10_POLICY_STEP {"dev_mae": 2.2298926217791797, "dev_rmse": 4.431727563805441, "policy": "t3_target_only", "step": 1}
+H10_POLICY_STEP {"dev_mae": 2.214085339167179, "dev_rmse": 4.455802034955935, "policy": "t4_source_pcgrad", "step": 1}
+H10_POLICY_STEP {"dev_mae": 2.2139614992194123, "dev_rmse": 4.455422152830253, "policy": "t5_official_f2", "step": 1}
+H10_POLICY_STEP {"dev_mae": 2.2139614992194123, "dev_rmse": 4.455422152830253, "policy": "t6_no_pcgrad", "step": 1}
+H10_POLICY_STEP {"dev_mae": 2.2139834432910503, "dev_rmse": 4.4555666728199395, "policy": "t7_project_ot_half", "step": 1}
+H10_COMPLETED phase b parity_passed True original_f2_updates 0 stage2_runs 0 output /home/zhaozhiyuan/experiment-pmme-h10-update-provenance-20261127/runs/h10-b-full-1/h10_results.json

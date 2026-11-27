@@ -1,0 +1,32 @@
+{
+  "all_final_updates_vs_initial_checkpoint": {
+    "t0_no_update": 0.0,
+    "t0f_train_forward_only": 0.0,
+    "t1_zero_grad_adamw": -0.1036950299704178,
+    "t2_source_only": -0.03191876466967125,
+    "t3_target_only": -0.0718570488232837,
+    "t4_source_pcgrad": -0.03191876466967125,
+    "t5_official_f2": -0.03190732502020355,
+    "t6_no_pcgrad": -0.03190732502020355,
+    "t7_project_ot_half": -0.03185578370196218
+  },
+  "audit_version": "h10-b-v1",
+  "full_ot": false,
+  "last_step_best_development_policy": "t0_no_update",
+  "notes": "Diagnostic only. T5 is the true projection=1 F2, T6 disables PCGrad. Dev is not never-inspected independent paper test; full-series scaler inherited. Capped OT results do not establish full OT multi-step trends.",
+  "original_checkpoint_updates": 0,
+  "parity_verified": true,
+  "stage2_runs": 0,
+  "step1_component_differences_positive_is_better": {
+    "forward_only_vs_no_update": 0.0,
+    "official_F2_vs_no_update": -0.03190732502020355,
+    "ot_value_official_f2_vs_source_pcgrad": 1.1439649467703816e-05,
+    "pcgrad_value_official_f2_vs_no_pcgrad": 0.0,
+    "projected_ot_vs_official_f2": 5.1541318241365985e-05,
+    "source_only_vs_no_update": -0.03191876466967125,
+    "target_only_vs_no_update": -0.0718570488232837,
+    "zero_adamw_vs_no_update": -0.1036950299704178
+  },
+  "update_count": 1,
+  "zero_update_mae": 2.0506763792572875
+}

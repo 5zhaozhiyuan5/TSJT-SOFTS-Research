@@ -1,0 +1,15 @@
+branch=experiment/pmme-h10-update-provenance-20261127
+commit=e6ffa27ef4a57d664f0fcfd0cbb55fdf1d67ca7d
+checkpoint=/home/zhaozhiyuan/experiment-pmme-f2-gradient-utility-diagnostics-20261126/prerequisite_original_f2_stage1/seed1/l1_pems-bay_SOFTS_seed1.pth
+checkpoint_sha=f04c73058382a49204cf454097d41dcf22df3a262b9636484e13e4e8d3346baf
+phase=b
+parity_report=/home/zhaozhiyuan/experiment-pmme-h10-update-provenance-20261127/runs/h10-a-full/h10_results.json
+source_points=0
+target_points=0
+max_updates=1
+validation_days=4
+validation_max_windows=0
+seed=1
+gpu=0
+original_checkpoint_updates=0
+stage2=0
