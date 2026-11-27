@@ -64,7 +64,7 @@ def _target_subsample_cosine_dispersion(
         zeros = source_features.new_zeros(
             source_features.shape[0], dtype=torch.float32
         )
-        return zeros, {
+        return zeros, zeros, {
             "bootstrap_active": False,
             "bootstrap_reason": "fewer_than_3_target_windows",
             "bootstrap_windows": int(n_windows),
