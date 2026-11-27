@@ -62,7 +62,7 @@ A1 对独立复制的 STRep wrapper 调用 `meta_train_revise(...,epoch=2899)`�
 | `t3_target_only` | (g_t)（46 全支持） | 目标适配梯度的单独贡献 |
 | `t4_source_pcgrad` | PCGrad((g_s,g_t)) | 无 OT 时的目标引导投影 |
 | **`t5_official_f2`** | **PCGrad((g_s+g_{OT},g_t))** | **真实训练分支对应的 F2 更新** |
-| `t6_full_pcgrad` | (g_s+g_{OT}) **不经过 PCGrad** | 移除原始 PCGrad 的消融；文件中沿用 ID，含义明确 |
+| `t6_no_pcgrad` | (g_s+g_{OT}) **不经过 PCGrad** | 移除原始 PCGrad 的消融；文件中沿用 ID，含义明确 |
 | `t7_project_ot_half` | PCGrad((g_s+0.5P(g_{OT},g_t),g_t)) | 仅在 OT 分量去冲突，同时保留官方整梯度 PCGrad |
 
 注意 T1 的 zero-gradient 与 None-gradient 不同：原始 AdamW 在零梯度步骤仍然可能通过动量和权重衰减更新参数。官方 `projection=1` 的 `flatten_and_pad_grads`+`write_back_flat_grads` 使**每个参数**拥有显式梯度张量（包括缺失→零）；H10-T5/T4/T7 按此语义复现。T6 则保持直接 backward 时非参与参数为 None 的语义。
