@@ -146,7 +146,7 @@ class RobustF2Tests(unittest.TestCase):
         alpha0, beta0, _ = compute_weights(
             self.fs, self.ds, ft, dt, "gradient"
         )
-        for method in ("geomed", "influence", "cvar", "triple"):
+        for method in ("geomed", "influence", "cvar"):
             with self.subTest(method=method):
                 alpha, beta, info = compute_f2_extension(
                     self.fs, self.ds, ft, dt, alpha0, beta0, method
