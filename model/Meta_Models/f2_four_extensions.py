@@ -451,7 +451,7 @@ def compute_f2_extension(source_features, source_delta,
     info["target_ess_frac"] = float(1 / b.square().sum() / b.numel())
     info["source_l1_shift"] = float((a - a0).abs().sum())
     info["target_l1_shift"] = float((b - b0).abs().sum())
-    if method in ("geomed", "influence", "cvar", "triple"):
+    if method in ("geomed", "influence", "cvar"):
         top_count = min(5, a.numel())
         top_values, top_indices = torch.topk(a, k=top_count)
         info["top_source_indices"] = top_indices.cpu().tolist()
