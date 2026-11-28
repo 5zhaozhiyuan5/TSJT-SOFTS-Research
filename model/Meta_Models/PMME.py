@@ -27,6 +27,7 @@ from iTransformer.iTransformer_new import Model as iTransformer
 from DA_tools import *
 from transfer_utility import VARIANTS, compute_weights
 from f2_four_extensions import METHODS as F2_METHODS, compute_f2_extension
+from f2_prediction_reliability import calibrate_source_reliability
 from f2_gradient_utility_audit import (probe_window_masks, audit_f2_source_utility)
 from feedback_utility import (
     blend_source_weights, evaluate_feedback_candidates, select_feedback_policy
@@ -305,6 +306,57 @@ class STRep(nn.Module):
             raise ValueError(
                 "D1/D2 require original F2, unmodified OT cost, "
                 "no feedback policy and original one-sided PCGrad")
+
+        # PRC adds source-side predictive reliability to ORIGINAL F2 only.
+        # It reads the current source forecast/label pairs and calibrates alpha;
+        # target beta, pairwise cost, Sinkhorn and Stage-II remain untouched.
+        self.f2_prc_enabled = os.environ.get(
+            "PMME_F2_PRC", "0"
+        ).strip().lower() in ("1", "true", "yes", "on")
+        self.f2_prc_blend = float(os.environ.get(
+            "PMME_F2_PRC_BLEND", "0.5"
+        ))
+        self.f2_prc_sensitivity = float(os.environ.get(
+            "PMME_F2_PRC_SENSITIVITY", "0.5"
+        ))
+        self.f2_prc_z_clip = float(os.environ.get(
+            "PMME_F2_PRC_Z_CLIP", "3.0"
+        ))
+        self.f2_prc_multiplier_min = float(os.environ.get(
+            "PMME_F2_PRC_MULTIPLIER_MIN", "0.5"
+        ))
+        self.f2_prc_multiplier_max = float(os.environ.get(
+            "PMME_F2_PRC_MULTIPLIER_MAX", "2.0"
+        ))
+        if (not math.isfinite(self.f2_prc_blend) or
+                not 0.0 <= self.f2_prc_blend <= 1.0 or
+                not math.isfinite(self.f2_prc_sensitivity) or
+                self.f2_prc_sensitivity < 0 or
+                not math.isfinite(self.f2_prc_z_clip) or
+                self.f2_prc_z_clip <= 0 or
+                not math.isfinite(self.f2_prc_multiplier_min) or
+                not math.isfinite(self.f2_prc_multiplier_max) or
+                self.f2_prc_multiplier_min <= 0 or
+                self.f2_prc_multiplier_max < self.f2_prc_multiplier_min):
+            raise ValueError("Invalid PMME_F2_PRC_* configuration")
+        if self.f2_prc_enabled and (
+            self.transfer_variant != "gradient" or
+            self.f2_method != "original" or
+            self.pair_variant != "f2" or
+            self.feedback_mode != "g0" or
+            self.DA != "OT" or
+            self.f2_audit != "off"
+        ):
+            raise ValueError(
+                "F2-PRC requires original gradient F2, pair_variant=f2, "
+                "feedback_mode=g0, DA=OT and diagnostics off"
+            )
+        print("PMME_F2_PRC", self.f2_prc_enabled,
+              "blend", self.f2_prc_blend,
+              "sensitivity", self.f2_prc_sensitivity,
+              "z_clip", self.f2_prc_z_clip,
+              "multiplier_bounds",
+              self.f2_prc_multiplier_min, self.f2_prc_multiplier_max)
         print("PMME_F2_DIAGNOSTIC", self.f2_audit,
               "readonly", self.f2_audit_readonly,
               "interval", self.f2_audit_interval,
@@ -335,6 +387,8 @@ class STRep(nn.Module):
         rep_target = []
         y_source = []
         y_target = []
+        source_predictions = []
+        source_prediction_targets = []
 
         # Only capture the final forecast head when OT is actually active.
         need_transfer = (
@@ -388,6 +442,8 @@ class STRep(nn.Module):
             else:
                 rep_source.append(rep)
                 y_source.append(y_unscale)
+                source_predictions.append(out.detach())
+                source_prediction_targets.append(y.detach())
                 
             
             if i>0:   
@@ -613,6 +669,22 @@ class STRep(nn.Module):
                     temperature=self.transfer_temperature,
                     min_ess_fraction=self.transfer_min_ess
                 )
+                if self.f2_prc_enabled:
+                    alpha, prc_stats = calibrate_source_reliability(
+                        alpha_prior=alpha,
+                        source_prediction=source_predictions[index],
+                        source_target=source_prediction_targets[index],
+                        blend=self.f2_prc_blend,
+                        sensitivity=self.f2_prc_sensitivity,
+                        z_clip=self.f2_prc_z_clip,
+                        multiplier_min=self.f2_prc_multiplier_min,
+                        multiplier_max=self.f2_prc_multiplier_max,
+                    )
+                    if epoch % 25 == 0 or epoch == self.DAepoch_args:
+                        print("f2_prc", "epoch", epoch,
+                              "city", str(data[index + 1].data_name),
+                              "target_group", target_group,
+                              prc_stats, flush=True)
                 if self.f2_method != "original":
                     alpha, beta, extended_stats = compute_f2_extension(
                         source_features.detach(), source_deltas,
