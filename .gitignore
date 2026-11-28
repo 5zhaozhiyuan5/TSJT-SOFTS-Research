@@ -1,0 +1,12 @@
+# STUNet experiment outputs
+runs/
+logs/
+outputs/
+lightning_logs/
+third_party/STUNet/outputs/
+third_party/STUNet/logs/
+third_party/STUNet/.hydra/
+
+# Python
+__pycache__/
+*.py[cod]

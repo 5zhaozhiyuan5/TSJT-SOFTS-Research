@@ -1,0 +1,3 @@
+[submodule "third_party/STUNet"]
+	path = third_party/STUNet
+	url = https://github.com/JimmyChen6/STUNet.git
