@@ -605,6 +605,13 @@ class STRep(nn.Module):
             if epoch % 25 == 0:
                 print("pair_ot_assignment", "epoch", epoch, p4_stats)
 
+        if (self.f2_prc_enabled and need_transfer and
+                len(source_predictions) != len(rep_source)):
+            raise RuntimeError(
+                "PRC source prediction records do not match source-city count: "
+                "%d vs %d" % (len(source_predictions), len(rep_source))
+            )
+
         model_loss = 0 
 
         DA_loss = 0
@@ -671,6 +678,14 @@ class STRep(nn.Module):
                     min_ess_fraction=self.transfer_min_ess
                 )
                 if self.f2_prc_enabled:
+                    if (source_predictions[index].shape[:2] !=
+                            source_features.shape[:2] or
+                            source_prediction_targets[index].shape !=
+                            source_predictions[index].shape):
+                        raise RuntimeError(
+                            "PRC forecasts/labels do not align with "
+                            "projection2 source feature rows"
+                        )
                     alpha, prc_stats = calibrate_source_reliability(
                         alpha_prior=alpha,
                         source_prediction=source_predictions[index],
