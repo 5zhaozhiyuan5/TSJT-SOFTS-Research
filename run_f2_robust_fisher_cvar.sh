@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# F2 ablation: original + geometric median + Fisher influence proxy + CVaR + triple.
+# Three independent F2+method experiments. Original F2 is a pre-existing control and is NOT rerun.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXPECTED_BRANCH="experiment/pmme-f2-robust-fisher-cvar-20261128"
@@ -11,7 +11,7 @@ fi
 [[ -d "$ROOT/data" ]] || { echo "[ERROR] Missing dataset directory $ROOT/data" >&2; exit 2; }
 
 RUN_ROOT="${PMME_F2_RUN_ROOT:-$ROOT/experiments/f2-robust-fisher-cvar-20261128}"
-read -r -a METHODS <<< "${PMME_F2_METHODS:-triple}"
+read -r -a METHODS <<< "${PMME_F2_METHODS:-geomed influence cvar}"
 read -r -a SEEDS <<< "${PMME_F2_SEEDS:-1}"
 GPU="${PMME_GPU:-0}"
 THREADS="${PMME_THREADS:-4}"
@@ -36,8 +36,9 @@ assert blocks >= 2 and math.isfinite(tail) and 0 < tail <= 1
 PY
 
 for method in "${METHODS[@]}"; do
-  case "$method" in original|geomed|influence|cvar|triple) ;; *)
-    echo "[ERROR] Method must be original/geomed/influence/cvar/triple: $method" >&2
+  case "$method" in geomed|influence|cvar) ;;
+    *)
+    echo "[ERROR] Only independent additions to F2 are allowed: geomed/influence/cvar; got $method" >&2
     exit 2 ;; esac
 done
 mkdir -p "$RUN_ROOT"
@@ -103,12 +104,10 @@ for method in "${METHODS[@]}"; do
           touch "$WORK/FAILED"; exit 1
         }
       fi
-      if [[ "$method" != "original" ]]; then
-        grep -q "f2_extension.*'method': '$method'" "$WORK/train.out" || {
-          echo "[ERROR] F2 method did not activate: $method" >&2
-          touch "$WORK/FAILED"; exit 1
-        }
-      fi
+      grep -q "f2_extension.*'method': '$method'" "$WORK/train.out" || {
+        echo "[ERROR] F2 method did not activate: $method" >&2
+        touch "$WORK/FAILED"; exit 1
+      }
       touch "$WORK/COMPLETED"
       echo "[DONE] $WORK"
     else
@@ -119,4 +118,4 @@ for method in "${METHODS[@]}"; do
     fi
   done
 done
-echo "Completed requested F2 robust/Fisher/CVaR experiments."
+echo "Completed three independent experiments: F2+geomed, F2+influence, F2+cvar. Original F2 was not rerun."
