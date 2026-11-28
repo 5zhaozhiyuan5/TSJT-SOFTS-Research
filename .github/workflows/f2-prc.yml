@@ -1,0 +1,34 @@
+name: F2 PRC CPU Tests
+
+on:
+  push:
+    branches:
+      - experiment/pmme-f2-prc-reliability-20261128
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  f2-prc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU PyTorch
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Syntax checks
+        run: |
+          python -m compileall -q model/Meta_Models/PMME.py model/Meta_Models/f2_prediction_reliability.py
+          bash -n run_f2_prc.sh
+      - name: PRC unit tests
+        run: |
+          python -m unittest discover -s tests -p 'test_f2_prediction_reliability.py' -v
+      - name: Original F2 utility regression tests
+        run: |
+          python -m unittest discover -s tests -p 'test_transfer_utility.py' -v
+          python -m unittest discover -s tests -p 'test_f2_four_extensions.py' -v
