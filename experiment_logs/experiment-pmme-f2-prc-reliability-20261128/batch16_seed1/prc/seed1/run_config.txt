@@ -1,0 +1,17 @@
+branch=experiment/pmme-f2-prc-reliability-20261128
+git_commit=b93d0a1234e43cb6fdb8fd85e110fb2f5312c23d
+seed=1
+f2_method=original
+f2_prc=1
+transfer_variant=gradient
+pair_variant=f2
+feedback_mode=g0
+ot_scale=0.01
+stage1_epochs=3000
+stage2_epochs=6000
+daepoch=1500
+prc_blend=0.5
+prc_sensitivity=0.5
+prc_z_clip=3.0
+prc_multiplier_min=0.5
+prc_multiplier_max=2.0

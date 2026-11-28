@@ -1,0 +1,9 @@
+{
+  "branch": "experiment/pmme-f2-prc-reliability-20261128",
+  "exit_code": 0,
+  "finished_utc": "2026-11-28T07:37:26.441997+00:00",
+  "pid": 4066509,
+  "runner": "run_f2_prc.sh",
+  "started_utc": "2026-11-28T07:12:01.552267+00:00",
+  "status": "completed"
+}
