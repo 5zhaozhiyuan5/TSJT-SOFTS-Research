@@ -442,8 +442,9 @@ class STRep(nn.Module):
             else:
                 rep_source.append(rep)
                 y_source.append(y_unscale)
-                source_predictions.append(out.detach())
-                source_prediction_targets.append(y.detach())
+                if self.f2_prc_enabled and need_transfer:
+                    source_predictions.append(out.detach())
+                    source_prediction_targets.append(y.detach())
                 
             
             if i>0:   
