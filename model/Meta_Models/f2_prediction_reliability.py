@@ -92,10 +92,6 @@ def calibrate_source_reliability(
             "Source prediction/target shape mismatch: "
             f"{tuple(prediction.shape)} vs {tuple(target.shape)}"
         )
-    if prediction.numel() != alpha.numel() * (
-        prediction.numel() // max(alpha.numel(), 1)
-    ):
-        raise ValueError("Invalid source prediction item count")
     if prediction.numel() % alpha.numel() != 0:
         raise ValueError(
             "Source prediction rows do not align with F2 alpha: "
