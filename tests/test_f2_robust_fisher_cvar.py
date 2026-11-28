@@ -41,7 +41,7 @@ class RobustF2Tests(unittest.TestCase):
         )
 
     def test_all_new_methods_return_valid_source_marginals(self):
-        for method in ("geomed", "influence", "cvar", "triple"):
+        for method in ("geomed", "influence", "cvar"):
             with self.subTest(method=method):
                 alpha, beta, info = self.run_method(method)
                 self.assertEqual(alpha.shape, self.alpha0.shape)
@@ -126,17 +126,19 @@ class RobustF2Tests(unittest.TestCase):
         ])
         self.assertTrue(torch.equal(blocks, expected))
 
-    def test_triple_is_deterministic_and_changes_original_f2_weights(self):
-        alpha1, beta1, info1 = self.run_method("triple")
-        alpha2, beta2, info2 = self.run_method("triple")
-        self.assertTrue(torch.equal(alpha1, alpha2))
-        self.assertTrue(torch.equal(beta1, beta2))
-        self.assertGreater(float(info1["source_l1_shift"]), 0.0)
-        self.assertEqual(info1["cvar_blocks"], 3)
-        self.assertEqual(info1["cvar_tail_count"], 2)
-        self.assertAlmostEqual(
-            info1["final_score_mean"], info2["final_score_mean"], places=7
-        )
+    def test_three_variants_use_separate_scoring_paths(self):
+        expected_keys = {
+            "geomed": "geomed_score_mean",
+            "influence": "influence_score_mean",
+            "cvar": "cvar_score_mean",
+        }
+        for method, expected_key in expected_keys.items():
+            with self.subTest(method=method):
+                alpha, beta, info = self.run_method(method)
+                self.assertIn(expected_key, info)
+                self.assertGreater(float(info["source_l1_shift"]), 0.0)
+                self.assertTrue(torch.isfinite(alpha).all())
+                self.assertTrue(torch.equal(beta, self.beta0))
 
     def test_small_target_group_falls_back_to_one_block_without_nan(self):
         ft = self.ft[:1]
@@ -151,7 +153,10 @@ class RobustF2Tests(unittest.TestCase):
                 )
                 self.assertTrue(torch.isfinite(alpha).all())
                 self.assertTrue(torch.equal(beta, beta0))
-                self.assertEqual(info["cvar_blocks"], 1)
+                if method == "cvar":
+                    self.assertEqual(info["cvar_blocks"], 1)
+                else:
+                    self.assertNotIn("cvar_blocks", info)
 
 
 if __name__ == "__main__":
