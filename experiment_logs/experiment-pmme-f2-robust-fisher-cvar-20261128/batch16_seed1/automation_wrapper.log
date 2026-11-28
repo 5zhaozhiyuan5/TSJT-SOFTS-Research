@@ -1,0 +1,15 @@
+fatal: detected dubious ownership in repository at '/home/zhaozhiyuan/experiment-pmme-f2-robust-fisher-cvar-20261128/source'
+To add an exception for this directory, call:
+
+	git config --global --add safe.directory /home/zhaozhiyuan/experiment-pmme-f2-robust-fisher-cvar-20261128/source
+[START] F2 method=original seed=1
+[DONE] /home/zhaozhiyuan/experiment-pmme-f2-robust-fisher-cvar-20261128/runs/f2-robust-fisher-cvar-seed1/original/seed1
+[START] F2 method=geomed seed=1
+[DONE] /home/zhaozhiyuan/experiment-pmme-f2-robust-fisher-cvar-20261128/runs/f2-robust-fisher-cvar-seed1/geomed/seed1
+[START] F2 method=influence seed=1
+[DONE] /home/zhaozhiyuan/experiment-pmme-f2-robust-fisher-cvar-20261128/runs/f2-robust-fisher-cvar-seed1/influence/seed1
+[START] F2 method=cvar seed=1
+[DONE] /home/zhaozhiyuan/experiment-pmme-f2-robust-fisher-cvar-20261128/runs/f2-robust-fisher-cvar-seed1/cvar/seed1
+[START] F2 method=triple seed=1
+[DONE] /home/zhaozhiyuan/experiment-pmme-f2-robust-fisher-cvar-20261128/runs/f2-robust-fisher-cvar-seed1/triple/seed1
+Completed requested F2 robust/Fisher/CVaR experiments.

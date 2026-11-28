@@ -1,0 +1,15 @@
+branch=experiment/pmme-f2-robust-fisher-cvar-20261128
+git_commit=e640c78063710810c12310a9642b3203aeb375d1
+seed=1
+f2_method=cvar
+transfer_variant=gradient
+pair_variant=f2
+feedback_mode=g0
+ot_scale=0.01
+stage1_epochs=3000
+stage2_epochs=6000
+daepoch=1500
+geomed_iters=6
+fisher_damping=0.1
+cvar_blocks=5
+cvar_tail=0.4

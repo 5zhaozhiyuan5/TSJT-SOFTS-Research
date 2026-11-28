@@ -1,0 +1,9 @@
+{
+  "branch": "experiment/pmme-f2-robust-fisher-cvar-20261128",
+  "exit_code": 0,
+  "finished_utc": "2026-11-28T04:25:37.291945+00:00",
+  "pid": 3940786,
+  "runner": "run_f2_robust_fisher_cvar.sh",
+  "started_utc": "2026-11-28T02:18:03.834852+00:00",
+  "status": "completed"
+}
