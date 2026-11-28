@@ -13,7 +13,7 @@ import math
 import torch
 import torch.nn.functional as F
 
-METHODS = ("original", "mag", "sign", "ema", "biot", "geomed", "influence", "cvar", "triple")
+METHODS = ("original", "mag", "sign", "ema", "biot", "geomed", "influence", "cvar")
 
 
 @torch.no_grad()
@@ -334,139 +334,111 @@ def compute_f2_extension(source_features, source_delta,
             fs, ds, ft, dt, a0, b0, blend=biot_blend
         )
         info.update(grouped)
-    elif method in ("geomed", "influence", "cvar", "triple"):
-        # Keep [target windows, sensors, ...] until after target-window
-        # gradients are formed; do not treat sensors as independent windows.
+    elif method in ("geomed", "influence", "cvar"):
+        # Keep target windows intact while constructing one gradient per window.
+        # Each experiment activates exactly ONE method; no combined score exists.
         target_window_grad = _target_window_gradients(
             target_features, target_delta
         )
         mean_target_grad = target_window_grad.mean(dim=0)
-        robust_target_grad = _geometric_median(
-            target_window_grad, iterations=geomed_iters
-        )
-        block_grads = _temporal_block_gradients(
-            target_window_grad, requested_blocks=cvar_blocks
-        )
-        precision, fisher_diag = _diagonal_fisher_precision(
-            target_window_grad, damping=fisher_damping
-        )
-
-        # Original F2 reference score (mean target gradient).
-        f2_score = _rankone_cos(fs, ds, mean_target_grad)
-        # Robust-statistics score: geometric median suppresses outlying
-        # target windows before measuring source/target compatibility.
-        geomed_score = _rankone_cos(fs, ds, robust_target_grad)
-        # A damped diagonal empirical-Fisher inverse gives a lightweight
-        # preconditioner. The raw utility estimates target-loss reduction
-        # under a virtual natural-gradient step; this is influence-inspired,
-        # NOT an exact Hessian influence function.
-        fisher_score = _rankone_metric_cos(
-            fs, ds, mean_target_grad, precision
-        )
-        influence_raw = _rankone_metric_utility(
-            fs, ds, mean_target_grad, precision
-        )
-        influence_score = _robust_tanh_standardize(influence_raw)
-        robust_influence_raw = _rankone_metric_utility(
-            fs, ds, robust_target_grad, precision
-        )
-        robust_influence_score = _robust_tanh_standardize(
-            robust_influence_raw
-        )
-
-        block_cos_scores = torch.stack([
-            _rankone_cos(fs, ds, block_grads[k])
-            for k in range(block_grads.shape[0])
-        ], dim=0)
-        block_influence_raw = torch.stack([
-            _rankone_metric_utility(fs, ds, block_grads[k], precision)
-            for k in range(block_grads.shape[0])
-        ], dim=0)
-        block_influence_scores = _robust_tanh_standardize(
-            block_influence_raw
-        )
-        cvar_score, tail_count = _lower_tail_mean(
-            block_cos_scores, tail_fraction=cvar_tail_fraction
-        )
-        influence_cvar_score, _ = _lower_tail_mean(
-            block_influence_scores, tail_fraction=cvar_tail_fraction
-        )
-
-        if method == "geomed":
-            final_score = geomed_score
-        elif method == "influence":
-            final_score = influence_score
-        elif method == "cvar":
-            # Keep the original F2 score as an anchor and add a lower-tail
-            # compatibility term across contiguous target time blocks.
-            final_score = 0.5 * f2_score + 0.5 * cvar_score
-        else:
-            # Three-way mechanism: robust center + influence utility +
-            # worst-block risk. Original F2 remains a conservative anchor.
-            final_score = (
-                0.20 * f2_score +
-                0.40 * robust_influence_score +
-                0.40 * influence_cvar_score
-            )
-
-        a = torch.softmax(temperature * final_score, dim=0)
         mean_grad_norm = mean_target_grad.norm().clamp_min(1e-12)
         info.update({
             "target_windows": int(target_window_grad.shape[0]),
             "target_sensors_per_window": int(target_features.shape[1]),
-            "geomed_iterations": int(geomed_iters),
-            "geomed_shift_rel": float(
-                (robust_target_grad - mean_target_grad).norm() / mean_grad_norm
-            ),
-            "geomed_vs_mean_cos": float(F.cosine_similarity(
-                robust_target_grad.reshape(1, -1),
-                mean_target_grad.reshape(1, -1), dim=1
-            )[0]),
-            "fisher_damping": float(fisher_damping),
-            "fisher_diag_mean": float(fisher_diag.mean()),
-            "fisher_diag_p90": float(torch.quantile(
-                fisher_diag.reshape(-1),
-                torch.tensor(0.90, device=fisher_diag.device)
-            )),
-            "fisher_precision_p90_p10": float(
-                torch.quantile(precision.reshape(-1), torch.tensor(
-                    0.90, device=precision.device
-                )) /
-                torch.quantile(precision.reshape(-1), torch.tensor(
-                    0.10, device=precision.device
-                )).clamp_min(1e-12)
-            ),
-            "f2_score_mean": float(f2_score.mean()),
-            "geomed_score_mean": float(geomed_score.mean()),
-            "fisher_metric_cos_mean": float(fisher_score.mean()),
-            "influence_raw_mean": float(influence_raw.mean()),
-            "influence_raw_p90": float(torch.quantile(
-                influence_raw, torch.tensor(0.90, device=influence_raw.device)
-            )),
-            "influence_score_mean": float(influence_score.mean()),
-            "robust_influence_raw_mean": float(robust_influence_raw.mean()),
-            "robust_influence_score_mean": float(robust_influence_score.mean()),
-            "cvar_blocks": int(block_grads.shape[0]),
-            "cvar_tail_fraction": float(cvar_tail_fraction),
-            "cvar_tail_count": int(tail_count),
-            "cvar_score_mean": float(cvar_score.mean()),
-            "cvar_score_p10": float(torch.quantile(
-                cvar_score, torch.tensor(0.10, device=cvar_score.device)
-            )),
-            "block_influence_raw_mean": float(block_influence_raw.mean()),
-            "influence_cvar_score_mean": float(influence_cvar_score.mean()),
-            "block_score_std_mean": float(
-                block_cos_scores.std(dim=0, unbiased=False).mean()
-            ),
-            "final_score_mean": float(final_score.mean()),
-            "final_score_std": float(final_score.std(unbiased=False)),
             "prediction_horizon_split": False,
             "target_marginal_unchanged": True,
         })
+
+        if method == "geomed":
+            # Experiment 1: replace only the mean target reference with
+            # a geometric-median reference; keep ordinary cosine scoring.
+            robust_target_grad = _geometric_median(
+                target_window_grad, iterations=geomed_iters
+            )
+            final_score = _rankone_cos(fs, ds, robust_target_grad)
+            info.update({
+                "geomed_iterations": int(geomed_iters),
+                "geomed_shift_rel": float(
+                    (robust_target_grad - mean_target_grad).norm() /
+                    mean_grad_norm
+                ),
+                "geomed_vs_mean_cos": float(F.cosine_similarity(
+                    robust_target_grad.reshape(1, -1),
+                    mean_target_grad.reshape(1, -1), dim=1
+                )[0]),
+                "geomed_score_mean": float(final_score.mean()),
+            })
+
+        elif method == "influence":
+            # Experiment 2: replace cosine similarity with a first-order
+            # Fisher-preconditioned target-loss utility proxy.
+            precision, fisher_diag = _diagonal_fisher_precision(
+                target_window_grad, damping=fisher_damping
+            )
+            influence_raw = _rankone_metric_utility(
+                fs, ds, mean_target_grad, precision
+            )
+            final_score = _robust_tanh_standardize(influence_raw)
+            info.update({
+                "fisher_damping": float(fisher_damping),
+                "fisher_diag_mean": float(fisher_diag.mean()),
+                "fisher_diag_p90": float(torch.quantile(
+                    fisher_diag.reshape(-1),
+                    torch.tensor(0.90, device=fisher_diag.device)
+                )),
+                "fisher_precision_p90_p10": float(
+                    torch.quantile(precision.reshape(-1), torch.tensor(
+                        0.90, device=precision.device
+                    )) /
+                    torch.quantile(precision.reshape(-1), torch.tensor(
+                        0.10, device=precision.device
+                    )).clamp_min(1e-12)
+                ),
+                "influence_raw_mean": float(influence_raw.mean()),
+                "influence_raw_p90": float(torch.quantile(
+                    influence_raw,
+                    torch.tensor(0.90, device=influence_raw.device)
+                )),
+                "influence_score_mean": float(final_score.mean()),
+            })
+
+        else:  # method == "cvar"
+            # Experiment 3: keep the original F2 cosine as an anchor and
+            # add ONLY the lower-tail score across contiguous target blocks.
+            block_grads = _temporal_block_gradients(
+                target_window_grad, requested_blocks=cvar_blocks
+            )
+            f2_score = _rankone_cos(fs, ds, mean_target_grad)
+            block_cos_scores = torch.stack([
+                _rankone_cos(fs, ds, block_grads[k])
+                for k in range(block_grads.shape[0])
+            ], dim=0)
+            cvar_score, tail_count = _lower_tail_mean(
+                block_cos_scores, tail_fraction=cvar_tail_fraction
+            )
+            final_score = 0.5 * f2_score + 0.5 * cvar_score
+            info.update({
+                "f2_score_mean": float(f2_score.mean()),
+                "cvar_blocks": int(block_grads.shape[0]),
+                "cvar_tail_fraction": float(cvar_tail_fraction),
+                "cvar_tail_count": int(tail_count),
+                "cvar_score_mean": float(cvar_score.mean()),
+                "cvar_score_p10": float(torch.quantile(
+                    cvar_score,
+                    torch.tensor(0.10, device=cvar_score.device)
+                )),
+                "block_score_std_mean": float(
+                    block_cos_scores.std(dim=0, unbiased=False).mean()
+                ),
+            })
+
+        a = torch.softmax(temperature * final_score, dim=0)
+        info["final_score_mean"] = float(final_score.mean())
+        info["final_score_std"] = float(final_score.std(unbiased=False))
     a = a.clamp_min(0)
     b = b.clamp_min(0)
     a /= a.sum().clamp_min(1e-15)
-    if method in ("geomed", "influence", "cvar", "triple"):
+    if method in ("geomed", "influence", "cvar"):
         # These are source-only F2 refinements; preserve target beta exactly.
         b = beta_prior.detach().float().reshape(-1)
     else:
